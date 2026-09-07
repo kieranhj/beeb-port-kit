@@ -51,7 +51,8 @@ panel and strip appear, Z/X scroll.
 `examples/vscroll/` is a second, self-contained program on the same geometry: **the play strip
 FIRST and smooth-scrolled one scanline at a time under the cursor keys, with the panel below it**
 - Rich Talbot-Watkins's frame shape, which is what a scanline vertical scroll wants and the
-opposite order to the template's. It has its own `build.ps1` and its own buffer oracle, and
+opposite order to the template's. It runs at **50 Hz** (`FRAME_LOCK = 1`, a take every field),
+where the template locks to 25. It has its own `build.ps1` and its own buffer oracle, and
 `docs/vertical-scroll.md` has the frame, the `T1_PHASE` sweep that measured the one
 scanline-exact write, and the numbers (0 of 10,240; 0 of 38,400; 0 wrong of 19,840 pixels fetched
 by the vertical total adjust; 39,936 cycles a field). Read it before designing a frame that

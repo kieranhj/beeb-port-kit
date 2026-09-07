@@ -15,15 +15,16 @@ than replacing it, because a scanline vertical scroll wants the frame the other 
 
 ```
 build\VSCROLL.SSD        SHIFT+BREAK, or *RUN VScroll
-    cursor UP / DOWN     scroll the view one SCANLINE per 25 Hz tick
+    cursor UP / DOWN     scroll the view one SCANLINE a field, at 50 Hz
 ```
 
 | | the template | this example |
 |---|---|---|
-| scroll | horizontal, one CRTC unit (4 px) a tick | **vertical, one scanline a tick** |
+| scroll | horizontal, one CRTC unit (4 px) a tick | **vertical, one scanline a field** |
 | cycle 1 | panel, 4 rows at `&4A00` | **play strip, 15 rows, scrolled** |
 | cycle 2 | play strip, 16 rows, VSync inside | **panel, 4 rows at `&4A00`, VSync inside** |
 | R5 | 0, never written | **`line` and `8 - line`, one per cycle** |
+| rate | `FRAME_LOCK` = 2, 25 Hz | **`FRAME_LOCK` = 1, 50 Hz** - a take every field |
 | R6 | `PLAY_ROWS` = 16 | **`PLAY_VIS_ROWS + 1` = 16: the adjust row displays** |
 | palettes | two, switched at a measured phase | **one** - there is no gap to hide a switch in |
 | T1 fires | 3 | 3 |
@@ -100,6 +101,7 @@ All 2026-09-08, jsbeeb 1.25.0, `B-DFS1.2`, on `build/VSCROLL.SSD` at `T1_PHASE =
 | What | Result |
 |---|---|
 | Field length | **39,936.00 cycles over 100 fields** - 312 lines, unchanged by the scroll |
+| Rate | **50 scanlines in 50 fields** with a key held - `FRAME_LOCK` = 1, one take a field, no dropped ticks |
 | Strip oracle (A) | **0 of 10,240** bytes, every tick |
 | View oracle (B) | **0 of 38,400** pixels, at all eight values of `line` |
 | **The sliver** | **0 wrong of 19,840 pixels fetched by the vertical total adjust** |
@@ -139,8 +141,9 @@ What it does buy, against the panel-first shape:
   anything on it.
 - **Where the picture sits on a tube.** `PANEL_R7 = 14` puts the 152-line picture at line 80,
   near where the OS's MODE 1 sits. Chosen by arithmetic, not by eye on a display.
-- **The scroll's feel.** No emulator can judge smoothness; one scanline per 25 Hz tick is the
-  rate, not a taste call that has been played.
+- **The scroll's feel.** No emulator can judge smoothness; one scanline a field is the fastest a
+  1-scanline scroll goes and it is the rate this runs at, not a taste call that has been played on
+  a display.
 
 ## How to run the checks
 
@@ -157,6 +160,6 @@ that look like a regression. The harness prints one JSON line per scroll positio
 and exits non-zero on any failure.
 
 **Feed it the LIVE position, never `ypos`.** The main loop parks the next position and the VSync
-hook takes it two fields later, so `ypos` runs a game tick ahead of what the CRTC was given. 1942
+hook takes it on the next field, so `ypos` runs a field ahead of what the CRTC was given. 1942
 scored 57,284 of 57,344 pixels wrong on a correct build by feeding an oracle the parked pair
 (kit `docs/verification.md`, procedure 3).

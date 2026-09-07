@@ -7,8 +7,9 @@
 \ *
 \ *	What it is: a MODE 1 screen with a 15-row play strip ABOVE a 4-row
 \ *	static panel, as a two-cycle CRTC rupture driven from our own IRQ1V
-\ *	handler, frame-locked at 25 Hz. Hold the cursor UP/DOWN keys and
-\ *	the strip scrolls ONE SCANLINE a tick. Nothing else: no loader, no
+\ *	handler, frame-locked at 50 Hz. Hold the cursor UP/DOWN keys and
+\ *	the strip scrolls ONE SCANLINE A FIELD - the finest and fastest a
+\ *	1-scanline scroll goes on this machine. Nothing else: no loader, no
 \ *	compression, no palette switch.
 \ *
 \ *	WHY IT IS A SEPARATE EXAMPLE. The template's own rupture scrolls
@@ -148,7 +149,16 @@ T1_I4 = 250 * SL                ; fire 3 -> never: VSync restarts T1 first
 ASSERT T1_I1 > 0
 ASSERT T1_I4 < 65536
 
-FRAME_LOCK = 2                  ; fields per game tick: 25 Hz
+\ ---- the game rate -------------------------------------------------
+\ FRAME_LOCK is fields per game tick, so 1 is 50 Hz: the VSync hook takes
+\ a new position EVERY field. The loop has a whole field (39,936 cycles)
+\ to read two keys and compute four bytes, which is why this example can
+\ afford it; a game that cannot finish a pass in one field should use 2
+\ and run at 25 Hz rather than tear, because the take still happens in
+\ vertical blanking and a slow pass costs whole fields, never half a
+\ position (measured: with 1, ypos advances by exactly 50 in 50 fields
+\ with a key held - ../../docs/vertical-scroll.md).
+FRAME_LOCK = 1                  ; fields per game tick: 50 Hz
 
 \ ---- keys: internal numbers, MEASURED (kit hardware-facts.md 7) -----
 KEY_UP   = 57
@@ -268,7 +278,7 @@ SECTION VScroll, org = CODE_ORG, guard = CODE_TOP, filename = "VScroll", exec = 
     sta frame_ready
     cli
 
-    .wait_take                  ; the 25 Hz lock: the hook takes it, we spin
+    .wait_take                  ; the 50 Hz lock: the hook takes it, we spin
     lda frame_ready
     bne wait_take
 
@@ -482,7 +492,7 @@ ENDSECTION
 SECTION Boot, org = BOOT_STAGE, guard = BOOT_STAGE + 256, filename = "!BOOT"
 .bootfile
     EQUS "REM beeb-port-kit: smooth vertical scroll", 13
-    EQUS "REM cursor UP/DOWN scroll one scanline a tick", 13
+    EQUS "REM cursor UP/DOWN scroll one scanline a field, 50Hz", 13
     EQUS "*RUN VScroll", 13
 .bootfile_end
 ENDSECTION

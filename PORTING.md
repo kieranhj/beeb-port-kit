@@ -234,7 +234,7 @@ then comes out of the scrolling cycle's own adjust, which displays when `R6 = ro
 facts, the measurements and what the shape assumes are in the facts file under *The vertical total
 adjust displays*; the primary source is Rich Talbot-Watkins's write-up and demo disc, and it is
 worth reading before designing the frame. `template/examples/vscroll` is the shape as a working
-program - the play strip first, scrolled a scanline a tick under the cursor keys, with its own
+program - the play strip first, scrolled a scanline a field at 50 Hz under the cursor keys, with its own
 buffer oracle - and `template/docs/vertical-scroll.md` is what it measured.
 
 Paradroid puts its panel above the play area anyway, and its layer-3 doc says why it then needs a

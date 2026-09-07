@@ -38,8 +38,9 @@
 //   node tools/verify_vscroll.mjs DISC CRTC_LIVE LINE_LIVE YPOS [MODEL]
 //
 // THE **LIVE** POSITION, NOT `ypos`. The main loop computes the next position
-// and parks it; the VSync hook takes it FRAME_LOCK fields later, so `ypos` is
-// up to one game tick AHEAD of what is on the screen. An oracle fed the
+// and parks it; the VSync hook takes it FRAME_LOCK fields later (1 here: the
+// example runs at 50 Hz), so `ypos` is up to one game tick AHEAD of what is on
+// the screen. An oracle fed the
 // parked pair scores nearly everything wrong on a correct build (1942, 2026-
 // 09-07: 57,284 of 57,344). crtc_live/line_live are what the CRTC was given.
 //
@@ -69,6 +70,9 @@ const PHYS_RGB = [
 const FB_W = 1024, FB_H = 625;          // jsbeeb's framebuffer: 8 px a CRTC
                                         // character, 2 rows a scanline
 const KEY_DOWN = 40;                    // jsbeeb keymap.js keyCodes.DOWN
+const RING_LINES = 16 * 8;              // BUF_ROWS * 8: what ypos wraps at
+const RATE_FIELDS = 50;                 // FRAME_LOCK = 1, so 50 fields must
+                                        // move the view 50 scanlines
 
 // ---- ORACLE A: what fill_play must have written ---------------------
 //   row = offset / 640, unit = (offset MOD 640) / 8, scan = offset MOD 8
@@ -156,11 +160,11 @@ let worstStrip = -1, worstView = -1, worstSliver = -1, sliverPixels = 0;
 let worstEdge = null, geomBad = 0;
 const seenLine = new Set();
 
-// Hold DOWN: one scanline a game tick, so 20 ticks walk `line` through all
-// eight values twice and step the start address across two row boundaries.
+// Hold DOWN: one scanline a FIELD at 50 Hz, so 20 fields walk `line` through
+// all eight values twice and step the start address across two row boundaries.
 s.keyDown(KEY_DOWN);
 for (let t = 0; t < 20; t++) {
-    await s.runFrames(2);               // one 25 Hz game tick
+    await s.runFrames(1);               // one 50 Hz game tick = one field
     const crtc = s.readMemory(crtcAddr, 2).reduce((v, b, i) => v + (b << (8 * i)), 0);
     const scroll = (crtc * 8 - BUF_BASE + BUF_SIZE) % BUF_SIZE;
     const line = s.readMemory(lineAddr, 1)[0];
@@ -217,12 +221,22 @@ for (let t = 0; t < 20; t++) {
         firstBad,
     }));
 }
+// THE RATE, measured rather than assumed: with FRAME_LOCK = 1 the hook takes a
+// position every field, so 50 fields of a held key move the view 50 scanlines.
+// A loop that overran a field would show up here as a smaller number, not as a
+// tear - the take only ever happens in vertical blanking.
+const rate0 = s.readMemory(yposAddr, 1)[0];
+await s.runFrames(RATE_FIELDS);
+const rate1 = s.readMemory(yposAddr, 1)[0];
+const linesMoved = (rate1 - rate0 + RING_LINES) % RING_LINES;
 s.keyUp(KEY_DOWN);
 
 const pass = worstStrip === 0 && worstView === 0 && seenLine.size === 8 &&
-             fieldCycles === 39936 && geomBad === 0 && worstEdge === null;
+             fieldCycles === 39936 && geomBad === 0 && worstEdge === null &&
+             linesMoved === RATE_FIELDS;
 console.log(JSON.stringify({
     fieldCycles,
+    rate: `${linesMoved} scanlines in ${RATE_FIELDS} fields (want ${RATE_FIELDS}: 50 Hz)`,
     linesSeen: [...seenLine].sort((a, b) => a - b),
     worstStrip: `${worstStrip} of ${BUF_SIZE}`,
     worstView: `${worstView} of ${PLAY_W * PLAY_H}`,
