@@ -1,6 +1,6 @@
 ---
 name: beeb-smoke-test
-description: Build the current BBC Micro port, boot the padded disc image in the jsbeeb MCP on the project's target model, run a few hundred frames and look at one screenshot. Use when a build has just been made, before any other check, or when the user asks whether the build still boots.
+description: Build the current BBC Micro port, boot the shipping disc image in the jsbeeb MCP on the project's target model, run a few hundred frames and look at one screenshot. Use when a build has just been made, before any other check, or when the user asks whether the build still boots.
 ---
 
 # Boot-and-look smoke test
@@ -9,7 +9,7 @@ The first thing after every build and the only check that trusts a screenshot: f
 boot", a screenshot is enough. Everything past that point is verified against the buffer
 (`beeb-buffer-oracle`), never the picture.
 
-**Image to boot:** the post-processed, padded SSD (`build/<NAME>-200K.SSD` in both ports)
+**Image to boot:** the post-processed SSD the project ships (`build/GAME.SSD` in the kit template; `build/<NAME>-200K.SSD` in the two ports, which pad because they publish that file)
 **Never boot:** the assembler's own output (`*-RAW.SSD`, `*-raw.ssd`) - the loader expects the compressed layout the disc tool writes
 **Frames to run:** ~400 (about 8 s of emulated time; enough to clear the loader and reach the title)
 
@@ -19,7 +19,7 @@ boot", a screenshot is enough. Everything past that point is verified against th
    on stderr as `file:line:col:`, so the exit code is the whole story. (A BeebASM project is the
    awkward one: it writes *progress* to stderr, so do not redirect that stream or
    `$ErrorActionPreference = 'Stop'` throws on a successful build.) The build command and
-   the padded image's name come from the project's `CLAUDE.md` ("Build" section), not from
+   the shipping image's name come from the project's `CLAUDE.md` ("Build" section), not from
    memory: `.\build.ps1` in both ports, `tools/build.sh` from bash.
 
    ```powershell
@@ -27,10 +27,12 @@ boot", a screenshot is enough. Everything past that point is verified against th
    if ($LASTEXITCODE -ne 0) { "build failed" }
    ```
 
-2. **Pick the padded image, not the raw one.** The raw image is not bootable in either port.
-   Padding to 200K is convention rather than necessity (KC corrected the "jsbeeb will not boot
-   an unpadded SSD" belief on 2026-09-01), but test and publish the padded one, so that a
-   published size differing from last time is itself a signal.
+2. **Pick the post-processed image, not the raw one.** The raw image is not bootable: the loader
+   expects compressed streams and rewritten catalogue addresses. **Padding is irrelevant to
+   booting** - jsbeeb stopped complaining in 1.9.0, jsbeeb-mcp 3.0.0 guarantees it by
+   dependency, and the kit booted a 2,304-byte image on `B-DFS1.2` and `Master` to check
+   (2026-09-07). Boot whatever the project ships; pad only what you publish, so that a released
+   size differing from last time is itself a signal.
 
 3. **Create a machine of the model the game is built for**, from `CLAUDE.md`'s "Target"
    table. A Master-only game (shadow RAM, ANDY, HAZEL, ROM paging) boots wrongly on a B and the
@@ -47,7 +49,7 @@ boot", a screenshot is enough. Everything past that point is verified against th
    must be absolute.
 
    ```
-   boot_disc    session_id, image_path: "<abs project path>/build/<NAME>-200K.SSD"
+   boot_disc    session_id, image_path: "<abs project path>/build/<the shipping image>"
    run_frames   session_id, count: 400
    screenshot   session_id
    ```

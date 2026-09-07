@@ -345,12 +345,20 @@ times in two days.
 Source: [docs/layer-11f-frontend.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-11f-frontend.md),
 [docs/intro.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/intro.md).
 
-**Pad an SSD to 200K before handing it to an emulator or publishing it.**
+**An absolute that was never true, and stayed in the rules for a month: "pad an SSD to 200K or
+the emulator will not boot it".**
 Instance: Paradroid's Layer 4 notes record jsbeeb hanging in the DFS FDC poll at `&ACAE` loading
 `PARASPR` from an image that ended mid-track; it reproduced from BASIC with `*LOAD`, so it was not
-the game, and it cost an hour. KC later corrected the absolute (2026-09-01): jsbeeb *will* boot an
-unpadded image, so this is robustness and convention. A published size that differs from the last
-publish is a useful signal that the wrong file went out.
+the game, and it cost an hour. The conclusion drawn - pad every image before booting it - became a
+rule in two projects' `CLAUDE.md`. KC corrected it on 2026-09-01 (jsbeeb *will* boot an unpadded
+image), and on 2026-09-07 jsbeeb's author supplied what the rule had been standing in for all
+along: jsbeeb stopped complaining in **1.9.0**, and **jsbeeb-mcp 3.0.0** is the first release
+whose declared dependency guarantees it. The kit stopped padding for emulators that day, having
+booted an unpadded image on both models through the MCP first.
+**Padding survives as a PUBLISHING convention only**: a published size that differs from the last
+publish is a useful signal that the wrong file went out. The shape of the mistake is the thing to
+learn - one debugging session's workaround, promoted to a rule, outliving the bug by a year and
+costing every project a build artefact nobody needed.
 Source: [docs/layer-4-player.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-4-player.md),
 [CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md).
 

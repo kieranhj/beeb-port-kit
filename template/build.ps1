@@ -29,7 +29,6 @@ $build   = Join-Path $root 'build'
 $stem    = 'GAME' + $(if ($Master) { '-MASTER' } else { '' })
 $raw     = Join-Path $build "$stem-RAW.SSD"
 $ssd     = Join-Path $build "$stem.SSD"
-$padded  = Join-Path $build "$stem-200K.SSD"
 $listing = Join-Path $build "$stem.lst"
 
 # Baron: a local bin\ copy wins; else the shared BEEB\Bin. Pin the version -
@@ -74,23 +73,22 @@ try {
 # in boot access order and writes the padded 200K copy for emulators.
 Push-Location $root
 try {
-    & python 'tools\make_disc.py' $raw $ssd $padded
+    & python 'tools\make_disc.py' $raw $ssd
     if ($LASTEXITCODE -ne 0) { throw "make_disc.py failed ($LASTEXITCODE)" }
 } finally { Pop-Location }
 
 if ($Release) { "RELEASE build: every DEBUG_ flag off" }
 if ($Master)  { "MASTER build: the Master 128 path" }
 "Built  $ssd"
-"       $padded   padded, for jsbeeb"
 "       $raw   baron's own output, uncompressed and NOT bootable"
 "       $listing   assembly listing"
 
 if ($Run) {
     if ($Beebjit) {
-        $emuArgs = @('-0', $padded, '-autoboot')
+        $emuArgs = @('-0', $ssd, '-autoboot')
         if ($Master) { $emuArgs += '-master' }
         & $beebjitExe @emuArgs
     } else {
-        & $b2 -0 $padded -b
+        & $b2 -0 $ssd -b
     }
 }

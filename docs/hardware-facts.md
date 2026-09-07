@@ -716,10 +716,19 @@ again.*
   draw returned bank 5's empty space, which read exactly like the player having been wiped. Check
   `&F4` first. Reading shadow RAM from the CPU side likewise follows the X bit.
   Measured: Layer 7 (Paradroid combat, 2026-08), 2026-09-04 (Edge titles). [Paradroid layer-7-combat.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-7-combat.md) [Edge layer-6e-titles.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-6e-titles.md)
-- **jsbeeb WILL boot an unpadded SSD.** An earlier note claimed it would not and blamed a hang in
-  the DFS FDC poll at `&ACAE` on beebasm's image ending mid-track; KC corrected it on 2026-09-01.
-  Padding to 200K (204,800 bytes) is convention and robustness, and a published size that differs
-  from the last publish is a useful signal that the wrong file went out. [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md) [Paradroid layer-4-player.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-4-player.md)
+- **jsbeeb WILL boot an unpadded SSD, and padding is not a build step.** An earlier note claimed
+  it would not and blamed a hang in the DFS FDC poll at `&ACAE` on an image ending mid-track; KC
+  corrected it on 2026-09-01, and the version detail came from jsbeeb's author on 2026-09-07:
+  **jsbeeb stopped complaining in 1.9.0**, and **jsbeeb-mcp 3.0.0** is the first release whose
+  declared dependency guarantees that fix. Anything at or past those boots a 2,304-byte image as
+  happily as a 204,800-byte one.
+  Measured: 2026-09-07, jsbeeb MCP (jsbeeb-mcp 3.3.0, jsbeeb 1.24.1). The kit template's
+  unpadded `GAME.SSD` (2,304 bytes) booted on `B-DFS1.2` and `Master`: `!BOOT` EXECed, `PANEL`
+  unpacked to `&4A00` byte-identical to its source, 100 fields in 100 frames, 50 loop passes in
+  those, `scroll` 0 -> 200 under 50 fields of X.
+  **Padding to 200K (204,800 bytes) remains a PUBLISHING convention**: a published size that
+  differs from the last publish is a useful signal that the wrong file went out. `py/dfs.py`'s
+  `pad()` is there for that, and for nothing else. [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md) [Paradroid layer-4-player.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-4-player.md)
 - **jsbeeb emulates the VideoNuLA palette** (`?&FE23=&78 : ?&FE23=&88` gives mid grey; sixteen
   distinct entries come back under logical mapping). **Its NuLA scrolling and attribute modes are
   NOT emulated.** The belief that a NuLA build could not be tested in jsbeeb is what let a

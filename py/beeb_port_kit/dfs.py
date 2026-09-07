@@ -27,7 +27,7 @@ What the ports' make_disc.py does with this module, in order:
         check_stream(name, stream, packed, dest, raw, top=STREAM_TOP[stream])
         img.files[name].replace(packed, load=stream, exec=stream)
     out = build_image(img.files, LAYOUT, img.title, img.cycle, img.opt)
-    write out; write pad(out) as the 200K copy
+    write out                                  # pad(out) only to publish
 
 The COMPRESSED, STREAM_TOP and LAYOUT tables are the project's - they say
 where main.asm's loader stages each stream and what order !BOOT reads the
@@ -56,7 +56,7 @@ from . import zx0, zx02
 SECTOR = 256
 MAX_FILES = 31                  # a DFS catalogue holds 31 entries
 TOTAL_SECTORS = 800             # 80 tracks x 10 sectors, a full DFS disc
-DISC_200K = 200 * 1024          # the padded size jsbeeb likes
+DISC_200K = 200 * 1024          # a whole 80-track disc; see pad()
 FIRST_SECTOR = 2                # sectors 0 and 1 are the catalogue
 
 
@@ -201,8 +201,14 @@ def build_image(files, layout=(), title=b"", cycle=0, opt=3,
 
 
 def pad(img, size=DISC_200K):
-    """The image zero-filled to a whole disc. Some emulators (jsbeeb) want
-    the full 200K; DFS itself does not care."""
+    """The image zero-filled to a whole disc.
+
+    NOT needed to boot: jsbeeb stopped complaining in 1.9.0 and jsbeeb-mcp
+    3.0.0 is the first release whose dependency guarantees that fix, and DFS
+    itself never cared - the kit's own 2,304-byte image boots on both models
+    (docs/hardware-facts.md, measured 2026-09-07). This is for PUBLISHING: a
+    released size that differs from the last release says the wrong file went
+    out. Build scripts do not need to call it."""
     if len(img) > size:
         raise DiscError(f"image is {len(img)} bytes, more than {size}")
     return bytes(img).ljust(size, b"\0")

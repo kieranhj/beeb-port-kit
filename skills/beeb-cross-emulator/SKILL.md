@@ -31,8 +31,8 @@ these was found by a second emulator or by hardware, after jsbeeb had said it wa
    ```powershell
    .\build.ps1 -Run
    # or directly
-   b2 -0 build\GAME-200K.SSD -b
-   beebjit -0 build\GAME-200K.SSD -autoboot
+   b2 -0 build\GAME.SSD -b
+   beebjit -0 build\GAME.SSD -autoboot
    ```
 
    Look at: the panel and play area at rest, the transition into and out of every rupture shape

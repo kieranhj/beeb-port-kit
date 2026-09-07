@@ -18,4 +18,4 @@ mkdir -p build
 printf 'BUILD_TIME = "%s"\n' "$T" > build/build_time.6502
 "$BARON" -o build/$STEM-RAW.SSD --title "$TITLE" --opt 3 \
     -D RELEASE=$R -D MASTER=$M -v src/main.6502 > build/$STEM.lst
-python tools/make_disc.py build/$STEM-RAW.SSD build/$STEM.SSD build/$STEM-200K.SSD
+python tools/make_disc.py build/$STEM-RAW.SSD build/$STEM.SSD

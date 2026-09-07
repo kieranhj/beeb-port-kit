@@ -6,11 +6,17 @@ beebasm assembles and SAVEs every file uncompressed; this tool rewrites the
 image so that the data file(s) ship ZX02-compressed, with the catalogue load
 address moved to the staging address the loader in src/main.asm expects,
 and lays the files out physically in BOOT ACCESS ORDER so the head never
-seeks backwards during a load. It then pads a copy to 200K for emulators.
+seeks backwards during a load.
 
 THE RAW IMAGE IS NOT BOOTABLE. load_stream / unpack_to run the depacker over
 every file they load, so the loader only works on this tool's output: hand
-build/GAME.SSD (or the padded copy) to an emulator, never build/GAME-RAW.SSD.
+build/GAME.SSD to an emulator, never build/GAME-RAW.SSD.
+
+PADDED.SSD is optional and the build scripts do not ask for it. Emulators do
+not need a full-size image - jsbeeb stopped complaining in 1.9.0, and the kit
+booted this template's 2,304-byte image on both models to check (2026-09-07,
+../../docs/hardware-facts.md). Pad when you PUBLISH, so that a released size
+differing from the last release is a signal.
 
 Modelled on edge-beeb's tools/make_disc.py, on top of the kit's dfs.py
 (forked into this directory beside zx02.py). What is the PROJECT's, and stays

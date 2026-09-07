@@ -69,13 +69,15 @@ microseconds - double them to compare with anything in either `docs/`.
 The first thing after every build, and the only procedure here that trusts a screenshot - for
 "did it boot", a screenshot is enough.
 
-1. Build, then take the **post-processed, padded** image: `build/EDGE-200K.SSD` or
-   `build/PARADROID-200K.SSD`. beebasm's own output (`EDGE-RAW.SSD`, `PARADROID-raw.ssd`) is not
-   bootable in either port - the loader expects the compressed layout that `tools/make_disc.py`
-   writes. Padding to 200K is convention rather than necessity: Paradroid's rules once said jsbeeb
-   would not boot an unpadded image and blamed a hang in the DFS FDC poll; KC corrected that on
-   2026-09-01 (jsbeeb will boot one). Publish the padded one anyway, so a published size that
-   differs from last time is itself a signal.
+1. Build, then take the **post-processed** image - the kit template's `build/GAME.SSD`, or the
+   ports' `build/EDGE-200K.SSD` / `build/PARADROID-200K.SSD`, which are padded because those
+   projects publish that file. The assembler's own output (`EDGE-RAW.SSD`, `PARADROID-raw.ssd`) is
+   not bootable in either port - the loader expects the compressed layout that
+   `tools/make_disc.py` writes. **Padding is a publishing convention, not a boot requirement**:
+   jsbeeb stopped complaining in 1.9.0 and jsbeeb-mcp 3.0.0 is the first release whose dependency
+   guarantees it (`docs/hardware-facts.md`, and the kit booted a 2,304-byte image on both models
+   through the MCP to check). Pad what you publish, so a released size that differs from last time
+   is itself a signal; do not pad to test.
 2. Choose the model the game is built for. Edge Grinder is a **Master 128** - shadow RAM, ANDY,
    HAZEL, ROM paging - and boots wrongly on anything else. Paradroid targets a B with sideways RAM
    and was verified on jsbeeb's `B-DFS1.2` and on a Master
@@ -93,7 +95,7 @@ The first thing after every build, and the only procedure here that trusts a scr
 
 ```
 create_machine  model: "Master"                       # or "B-DFS1.2"
-boot_disc       session_id, image_path: "<abs path>/build/EDGE-200K.SSD"
+boot_disc       session_id, image_path: "<abs path>/build/GAME.SSD"   (whatever the project ships)
 run_frames      count: 400
 screenshot
 ```
@@ -540,8 +542,8 @@ The procedure:
    launched b-em; b-em is no longer used.) From the tools' own help:
 
    ```
-   beebjit -0 build\GAME-200K.SSD -autoboot            # -master for a Master 128, -swram 4 per bank
-   b2 -0 build\GAME-200K.SSD -b                        # -c CONFIG for a saved machine configuration
+   beebjit -0 build\GAME.SSD -autoboot                 # -master for a Master 128, -swram 4 per bank
+   b2 -0 build\GAME.SSD -b                             # -c CONFIG for a saved machine configuration
    ```
 2. For a *phase* question, use **b2** and look at the window. b2's debug build carries an HTTP
    API on port 48075 (documented in

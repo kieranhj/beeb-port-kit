@@ -80,7 +80,7 @@ for name, (stream, dest) in COMPRESSED.items():
     entry.replace(packed, load=stream, exec=stream)   # the catalogue now says where it stages
 out = dfs.build_image(img.files, LAYOUT, img.title, img.cycle, img.opt)
 open("build/GAME.SSD", "wb").write(out)
-open("build/GAME-200K.SSD", "wb").write(dfs.pad(out))  # the padded copy jsbeeb likes
+open("build/GAME-200K.SSD", "wb").write(dfs.pad(out))  # only when publishing: see pad()
 ```
 
 `check_stream` raises `DiscError` if the stream would run past `top` or overlap its own output.
