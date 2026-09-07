@@ -19,7 +19,9 @@ from the System VIA, so the internal matrix number is what the code carries.
 and `row`, and **reports the matrix keys that went down, with name and both numbers** - so a name
 can be measured against its numbers in one call, without the BASIC scan below. Keep the scan for
 what the *machine's own* scan sees, and to confirm the MCP's mapping. `keyboard_state` reports
-what is held; `release_all_keys` clears it (jsbeeb-mcp#33, #34).
+what is held; `release_all_keys` clears it (jsbeeb-mcp#33, #34). Measured 2026-09-07 on 3.4.0:
+`key_down key:"X"` -> `{col: 2, row: 4, name: "X", internal: 66, inkey: -67}`, agreeing with the
+table in `docs/hardware-facts.md` section 7.
 
 ## Steps
 

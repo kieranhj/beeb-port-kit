@@ -710,9 +710,13 @@ again.*
   **Do not step frames with `run_for_cycles`**: a frame is 40,000 cycles with interlace on (the
   MCP default) but 39,936 with it off, so a fixed cycle step drifts against the display. Use
   `run_frames`.
-  Measured: 2026-08-20 (Paradroid), 2026-09-02 (Edge), 2026-09-07 (this kit, on 3.3.0). The
-  3.4.0 behaviour is read from that release's own tool descriptions, over stdio, on 2026-09-07;
-  it has not yet been re-measured by running it. [Paradroid raster-timing.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/raster-timing.md) [Edge layer-2-display.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-2-display.md)
+  Measured: 2026-08-20 (Paradroid), 2026-09-02 (Edge), 2026-09-07 (this kit, on 3.3.0), and
+  **2026-09-07 on jsbeeb-mcp 3.4.0 / jsbeeb 1.25.0 through the MCP**, on this kit's own template
+  on `B-DFS1.2`: with an execute breakpoint at `main_loop` (`&194E`), a request for **600,000
+  cycles returned `cycles_run` 38,948**, `completed` false, `stopped_reason` `breakpoint`, the
+  breakpoint identified, and the registers in the same reply carrying `elapsed_cycles` 10,038,950
+  and `frame_count` 255. `elapsed_cycles` went 10,000,002 -> 10,038,950, a delta of **exactly
+  38,948** - so `cycles_run` is the truth and the second `read_registers` is genuinely redundant. [Paradroid raster-timing.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/raster-timing.md) [Edge layer-2-display.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-2-display.md)
 - **`run_for_cycles` used to overrun its request after a breakpoint stop**, leaving the unspent
   budget on the CPU: a 3,993,600-cycle request once ran 4,553,339 here, and jsbeeb-mcp's author
   measured a 1,000-cycle request running 75,987 straight after a stop. It was a jsbeeb bug
@@ -720,8 +724,11 @@ again.*
   (jsbeeb-mcp#32). Keep counting fields **from `elapsed_cycles` and never from the number
   requested** anyway - the rule cost nothing, this kit had it for a year before it had a cause,
   and it is why the overrun never corrupted a measurement.
-  Measured: 2026-09-06 (this kit, on 3.3.0), 2026-09-07 (jsbeeb-mcp#30's notes); the fix has not
-  yet been re-measured here.
+  Measured: 2026-09-06 (this kit, on 3.3.0), 2026-09-07 (jsbeeb-mcp#30's notes), and **the fix
+  measured 2026-09-07 on 3.4.0 / jsbeeb 1.25.0**: stopped on the breakpoint above, so with the PC
+  sitting on it, a 1,000-cycle request ran **exactly 1,000** (`completed` true) and
+  `elapsed_cycles` went 10,038,950 -> 10,039,950. Both faults gone in one call - it neither
+  returned 0 having advanced nothing (#26) nor overran (#32).
 - **A `run_for_cycles` snapshot can stop the CPU mid-routine**: a buffer dump caught a half-written
   strip and reported 16 differing bytes that were not a bug; an oracle redraw of >500,000 cycles was
   sampled before it finished. Idle a few frames after releasing a key; take both halves of a diff
@@ -743,6 +750,10 @@ again.*
   `type_input`. **`keyboard_state`** reports every key the machine currently sees held, with its
   matrix column and row, its name, and on a BBC its internal and INKEY numbers; check it before
   any test that assumes nothing is held (jsbeeb-mcp#33).
+  Measured: 2026-09-07, jsbeeb-mcp 3.4.0. `key_down key:"X"` reported
+  `{col: 2, row: 4, name: "X", internal: 66, inkey: -67}`; `keyboard_state` then listed exactly
+  that key with `typing_pending: false`; `release_all_keys` reported it released. The internal
+  number agrees with section 7's table, which is a free cross-check of both.
   Measured: 2026-09-07, jsbeeb MCP 3.3.0 / jsbeeb 1.24.1, the kit's template. Save at the idle
   state; hold X; 50 frames -> `scroll` 200, `frame_count` 113. Restore -> `scroll` 0,
   `elapsed_cycles` back to its saved value to the cycle, PC and A/X/Y identical. 50 frames again
@@ -756,6 +767,9 @@ again.*
   `save_memory` report the paging they read under - `romsel`, and `acccon` on a Master - and take
   `bank` or `shadow` to read a particular one whatever is paged in. Prefer that to reading `&F4`
   and hoping.
+  Measured: 2026-09-07, jsbeeb-mcp 3.4.0, the kit's template on `B-DFS1.2`. A plain read of
+  `&8000` came back with `paging: {romsel: 14}`; the same read with `bank: 12` came back
+  `{romsel: 14, bank: 12}` and returned bank 12's contents, not the paged bank's.
   Measured: Layer 7 (Paradroid combat, 2026-08), 2026-09-04 (Edge titles). [Paradroid layer-7-combat.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-7-combat.md) [Edge layer-6e-titles.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-6e-titles.md)
 - **jsbeeb WILL boot an unpadded SSD, and padding is not a build step.** An earlier note claimed
   it would not and blamed a hang in the DFS FDC poll at `&ACAE` on an image ending mid-track; KC
