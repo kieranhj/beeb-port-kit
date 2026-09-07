@@ -9,8 +9,8 @@ palettes came in, later the same day), and the result was measured in jsbeeb (`B
 | Piece | Where | Proof |
 |---|---|---|
 | `boot_stamp.asm` | `!BOOT` at `&7E00` | jsbeeb's screen text: `REM beeb-port-kit template DEV build` / `REM BUILD 07 Sep 2026 03:02:40` / `*RUN Game`; the Master build adds `REM MASTER: Master 128 build`; the RELEASE build's stamp read back from the catalogue carries the version line and no DEV |
-| `loader.asm` + `zx0depack.asm` | `PANEL` staged at `&3000`, unpacked to `&4A00` | `save_memory` of `&4A00`, 2,560 bytes, **`cmp` identical to `src/data/panel.bin`** (md5 `991304905c7b...`); `zxdst` left at `&5400` |
-| `make_disc.py` on `dfs.py` / `zx0.py` | `build/GAME.SSD` | `PANEL` 2,560 -> 54 bytes via `zx0.exe`, round-tripped through `zx0.decompress`; catalogue load/exec rewritten to `&3000`; layout `!BOOT`, `Game`, `PANEL`; 2,304-byte image, 204,800 padded. The overlap check refuses a stream over its output |
+| `loader.asm` + `zx02depack.asm` | `PANEL` staged at `&3000`, unpacked to `&4A00` | `&4A00` read back after boot, 2,560 bytes, **identical to `src/data/panel.bin`** (md5 `480a1d5dda14e04ee9eee9637b9983e1`); `zxdst` left at `&5400`. Both models: `B-DFS1.2` and, with the `MASTER=1` disc, `Master` |
+| `make_disc.py` on `dfs.py` / `zx02.py` | `build/GAME.SSD` | `PANEL` 2,560 -> 79 bytes via `zx02.exe`, round-tripped through `zx02.decompress`; catalogue load/exec rewritten to `&3000`; layout `!BOOT`, `Game`, `PANEL`; 2,304-byte image, 204,800 padded. The overlap check refuses a stream over its output |
 | `irq.asm` | IRQ1V owned, CA1 + T1 | the field counter climbs by exactly 100 in 3,993,600 cycles |
 | `keydown.asm` | `keydown_int`, Z = 97, X = 66 | X held 50 fields: `scroll` 0 -> 200 (25 steps of 8). Z held 60 fields: 200 -> 10,200 (30 steps, wrapped by +10,240) |
 | the rupture | `src/rupture.asm` | screenshot: 4-row panel with its white edge lines over the 16-row strip; T1 sweep below |
@@ -122,8 +122,16 @@ from the request**, the kit's rule again). `scroll` 0 -> 200 in 50 fields of X.
   high water `&1D`. `build.ps1` and `tools/build.sh` both run, both builds.
 - Two names one cannot reuse: beebasm refuses a second `name = P%` assignment, so the scratch
   `ORG` bookkeeping for `PANEL` and `!BOOT` uses `code_p%` and `boot_p%`.
-- `dfs.py` forked with one change, `import zx0` for the package-relative import; its API needed no
+- `dfs.py` forked with two changes: `import zx02` for the package-relative import, and the ZX0
+  codec dropped (this is a ZX02 port; the kit's copy still carries both). Its API needed no
   adapting (`read_image`, `compress`, `check_stream`, `build_image`, `pad`).
+- **The compressor changed on 2026-09-07: ZX0 -> ZX02.** 131 bytes of depacker against 257 and
+  2.14x the decode speed for +0.11% on the packed size (`PANEL` 54 -> 79 bytes here, this file
+  being nearly all one repeated run - the worst case for ZX02's 8-bit gamma, and 25 bytes on a
+  2,304-byte image). Measured over 43 real files from both shipping ports in py65, then end to
+  end by booting this disc; `../../lib/zx02depack.asm` has the numbers. The earlier row's md5
+  (`991304905c7b...`) never matched `panel.bin` on disc; the value above is what both models
+  read back.
 - `run_for_cycles` from a PC already on a breakpoint returns 0 and the next call moves on,
   exactly as the kit's notes say; a three-breakpoint sweep costs two runs a stop.
 

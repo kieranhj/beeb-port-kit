@@ -132,7 +132,7 @@ evening. Its "transfers?" table is the part to copy:
 | Own IRQ1V, keyboard direct from the VIA | Yes |
 | Sprite slot model, save-area geometry, mask from data, deferred-carry `SCANSTEP` | Yes |
 | Tranche split and window scheduling | **No**: it exists only because the old port was single-buffered |
-| ZX0 disc compression, `make_disc.py`, padded SSD, debug flags named at boot | Yes, lift the tools |
+| Disc compression, `make_disc.py`, padded SSD, debug flags named at boot | Yes, lift the tools (compress with ZX02, not ZX0: half the depacker, twice the speed, +0.11% on size) |
 
 Fill this in for your game and you have most of the plan. Section 5 of this document is the
 list of patterns to consider.
@@ -309,8 +309,12 @@ to 7.
 
 ### 5.7 The disc: compress everything, one resident depacker, load in order
 
-Every data file ships ZX0-compressed and the loader unpacks it. Boot time in Paradroid went from
-14.4 s to 10.4 s; the lever is sectors, not file count. There is one depacker and it is resident;
+Every data file ships compressed and the loader unpacks it. Boot time in Paradroid went from
+14.4 s to 10.4 s; the lever is sectors, not file count. Use **ZX02** (`lib/zx02depack.asm`,
+`py/zx02.py`): 131 bytes of depacker against ZX0's 257 and 2.14x the decode speed for +0.11% on
+the packed size, measured 2026-09-07 over both ports' data. The two shipping ports are ZX0 discs
+because they predate the measurement; `lib/zx0depack.asm` and `py/zx0.py` stay for them. Pick one
+format for a project and never mix them - nothing checks that the disc and the depacker agree. There is one depacker and it is resident;
 Paradroid had two copies for a while and loaded one of them twice a session. A stream may not be
 overtaken by its own output, so an in-place unpack needs a measured margin and the build should
 fail if it is violated. On a Master, load the file that takes HAZEL last and touch the disc never

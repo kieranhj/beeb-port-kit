@@ -25,7 +25,8 @@ not on the machine.
 
 | Module | What it is | From |
 |---|---|---|
-| `zx0.py` | Einar Saukas's ZX0 compressor and a decompressor, in Python: the default v2 stream (forwards, inverted new-offset MSB), the one `lib/zx0depack.asm` decodes. `compress()` is byte-identical to the reference `zx0.exe`, and slow; `decompress()` is the oracle both ports run every stream through before writing a disc | `tools/zx0.py`, byte-identical in [paradroid-beeb](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/zx0.py) and [edge-beeb](https://github.com/kieranhj/edge-beeb/blob/master/tools/zx0.py) |
+| `zx02.py` | **What a new port compresses with.** Daniel Serpell's ZX02 - his 6502-tuned fork of ZX0 - and a decompressor, in Python: the default stream (forwards, positive offsets, 8-bit gamma ending on a 0), the one `lib/zx02depack.asm` decodes. `compress()` matches the reference `zx02.exe` (which pads a trailing zero on some inputs); `decompress()` is the oracle every stream is round-tripped through before a disc is written. Why it, and not ZX0: half the depacker, 2.14x the decode speed, +0.11% on the packed size, measured over 43 real files from both ports - the module header has the numbers | new in the kit, from [dmsc/zx02](https://github.com/dmsc/zx02) (MIT) |
+| `zx0.py` | Einar Saukas's ZX0 compressor and a decompressor, in Python: the default v2 stream (forwards, inverted new-offset MSB), the one `lib/zx0depack.asm` decodes. `compress()` is byte-identical to the reference `zx0.exe`, and slow; `decompress()` is the oracle both ports run every stream through before writing a disc. **Kept because the two shipping discs are ZX0 discs**; `dfs.compress(..., codec=zx0)` selects it | `tools/zx0.py`, byte-identical in [paradroid-beeb](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/zx0.py) and [edge-beeb](https://github.com/kieranhj/edge-beeb/blob/master/tools/zx0.py) |
 | `dfs.py` | Acorn DFS `.ssd` images: read the catalogue (`read_image` -> `Image` of `Entry`), lay files out in boot ACCESS order (`build_image`), pad to 200K, and the two checks a compressed disc needs before it is written: `check_stream` (a stream may not overlap its own output, and may not run past the screen it stages under) and `in_place_delta` (the margin a stream that unpacks over itself needs, measured by walking the decode) | the generic half of `tools/make_disc.py` in [paradroid-beeb](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/make_disc.py) (`in_place_delta`) and [edge-beeb](https://github.com/kieranhj/edge-beeb/blob/master/tools/make_disc.py) (the overlap refusal) |
 | `modes.py` | BBC bitmap modes 0/1/2/4/5: `pack_byte`/`unpack_byte` under the one rule (bit k of pixel n at `P*k + (P-1-n)`), the ports' own names `mode1_byte`, `unpack_mode1`, `mode2_byte`, `mode2_unpack`; the eight physical colours and their luma; `dither_pair`, Rich Talbot-Watkins's rule for approximating a richer palette with two MODE 2 colours checkerboarded; `render`/`unrender` between screen memory and a PIL image | [paradroid-beeb `export_bbc.py`](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/export_bbc.py), [`verify_bbc.py`](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/verify_bbc.py); [edge-beeb `bbc.py`](https://github.com/kieranhj/edge-beeb/blob/master/tools/bbc.py) |
 | `c64.py` | The C64 side: Pepto's palette, hires and multicolour byte decoding, 24x21 sprite blocks, 8x8 charsets, flat tables, and two source readers - `parse_c64_table` (the `!byte`/`.byte` operands under a label in an ACME/TASS source, with `$xx + n` sums and named constants) and `parse_listing` (an IDA `.BYTE` listing into a 64K image, with the running offset a continuation line needs) | [edge-beeb `bbc.py`](https://github.com/kieranhj/edge-beeb/blob/master/tools/bbc.py), [`export_waves.py`](https://github.com/kieranhj/edge-beeb/blob/master/tools/export_waves.py); [paradroid-beeb `export_bbc.py`](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/export_bbc.py), [`rip_graphics.py`](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/rip_graphics.py), [`export_title.py`](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/export_title.py) |
@@ -50,9 +51,9 @@ python -m unittest discover -s tests -v
 or, with pytest installed, `python -m pytest -q`. The tests need Pillow. Some of them compare the
 kit against the two ports' own tools (`dither_pair` against Edge's `bbc.py`, `in_place_delta`
 against Paradroid's `make_disc.py`, `unpack_mode1` against its `verify_bbc.py`, `parse_c64_table`
-over Edge's C64 source) and `zx0.compress` against the reference `zx0.exe`; each of those reads
+over Edge's C64 source) and each compressor against its reference exe ([`zx02.exe`](https://github.com/dmsc/zx02/releases), `zx0.exe`); each of those reads
 the other repository by path and **skips** if it is absent. `tests/paths.py` holds the paths;
-override them with the `EDGE_BEEB`, `PARADROID_BEEB` and `ZX0_EXE` environment variables. No test
+override them with the `EDGE_BEEB`, `PARADROID_BEEB`, `ZX0_EXE` and `ZX02_EXE` environment variables. No test
 writes into either port.
 
 ## Driving `dfs.py` from a project's `make_disc.py`
@@ -69,11 +70,11 @@ COMPRESSED = {"BANK0": (DEPK_STREAM, 0x8000),         # name: (stream address, u
 STREAM_TOP = {DEPK_STREAM: 0x8000}                    # what a stream may not run past
 LAYOUT = ["!BOOT", "GAME", "BANK0", "BANK1"]          # boot ACCESS order, so the head never seeks back
 
-zx0_exe = dfs.find_zx0_exe(["bin/zx0.exe"])           # None -> zx0.py does it, slowly
+exe = dfs.find_exe(["bin/zx02.exe"])                  # None -> zx02.py does it, slowly
 img = dfs.read_image("build/GAME-RAW.SSD")            # beebasm's own image
 for name, (stream, dest) in COMPRESSED.items():
     entry = img.files[name]
-    packed = dfs.compress(entry.data, zx0_exe, name)  # round-tripped through zx0.decompress()
+    packed = dfs.compress(entry.data, exe, name)      # ZX02, round-tripped through zx02.decompress()
     dfs.check_stream(name, stream, packed, dest, entry.data, top=STREAM_TOP[stream])
     entry.replace(packed, load=stream, exec=stream)   # the catalogue now says where it stages
 out = dfs.build_image(img.files, LAYOUT, img.title, img.cycle, img.opt)

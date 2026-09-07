@@ -1,7 +1,7 @@
 """
 dfs.py - Acorn DFS single-sided disc images (.ssd): read the catalogue, lay
 files out in a chosen order, write the image, pad it, and the two checks a
-ZX0-compressed disc needs before it is written.
+compressed disc needs before it is written.
 
 beeb-port-kit: the generic half of tools/make_disc.py in both ports.
   https://github.com/kieranhj/paradroid-beeb/blob/main/tools/make_disc.py
@@ -22,7 +22,7 @@ What the ports' make_disc.py does with this module, in order:
     img = read_image(raw_ssd)                  # beebasm's own SSD
     for name, (stream, dest) in COMPRESSED.items():
         raw = img.files[name].data
-        packed = compress(raw, zx0_exe)        # the exe, checked by zx0.py
+        packed = compress(raw, exe)            # the exe, checked by zx02.py
         check_stream(name, stream, packed, dest, raw, top=STREAM_TOP[stream])
         img.files[name].replace(packed, load=stream, exec=stream)
     out = build_image(img.files, LAYOUT, img.title, img.cycle, img.opt)
@@ -33,6 +33,14 @@ where main.asm's loader stages each stream and what order !BOOT reads the
 files in - and stay in the project's make_disc.py. examples/make_disc_example.py
 shows the shape with two files.
 
+WHICH COMPRESSOR. Default ZX02 (py/zx02.py, lib/zx02depack.asm): half the
+depacker and twice the speed of ZX0 for +0.11% on the packed size, measured
+2026-09-07 over both ports' data - zx02.py's header has the numbers. ZX0 is
+still here because the two shipping discs are ZX0 discs: pass codec=zx0 to
+compress() and in_place_delta() for one of those, and pair it with
+lib/zx0depack.asm. The formats are NOT interchangeable and nothing checks
+that the disc and the depacker agree except you.
+
 THE RAW IMAGE IS NOT BOOTABLE once the loader expects compressed streams:
 always hand the image this writer produces to an emulator.
 """
@@ -42,7 +50,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import zx0
+from . import zx0, zx02
 
 SECTOR = 256
 MAX_FILES = 31                  # a DFS catalogue holds 31 entries
@@ -199,9 +207,9 @@ def pad(img, size=DISC_200K):
     return bytes(img).ljust(size, b"\0")
 
 
-# --- ZX0 streams --------------------------------------------------------
+# --- compressed streams -------------------------------------------------
 
-def find_zx0_exe(candidates):
+def find_exe(candidates):
     """The first existing path in `candidates`, or None. The ports look in
     the project's bin/ and then a shared BEEB/Bin/."""
     for c in candidates:
@@ -211,60 +219,91 @@ def find_zx0_exe(candidates):
     return None
 
 
-def compress(raw, zx0_exe=None, name="stream"):
-    """`raw` as a default-mode ZX0 v2 stream. With `zx0_exe`, the reference
-    compressor is run and its output verified by zx0.decompress(); without,
-    zx0.compress() is used (identical output, much slower on 16K)."""
+find_zx0_exe = find_exe          # the name the two shipping ports call it by
+
+
+def compress(raw, exe=None, name="stream", codec=zx02):
+    """`raw` as a default-mode stream of `codec` (zx02, or zx0 for one of the
+    shipping discs). With `exe`, that compressor is run and its output
+    verified by codec.decompress(); without, codec.compress() does it in
+    Python (much slower on 16K, and never worse - see below).
+
+    The exe is the authority on speed, not on the bytes: the released
+    zx02.exe (v2) writes a trailing 0 on some inputs where zx02.py stops one
+    byte earlier. Both decode identically; the round-trip below is the check
+    that matters."""
     raw = bytes(raw)
-    if zx0_exe is None:
-        packed = zx0.compress(raw)
+    if exe is None:
+        packed = codec.compress(raw)
     else:
         with tempfile.TemporaryDirectory() as td:
             src = Path(td) / "in.bin"
-            dst = Path(td) / "out.zx0"
+            dst = Path(td) / "out.packed"
             src.write_bytes(raw)
-            subprocess.run([str(zx0_exe), "-f", str(src), str(dst)],
+            subprocess.run([str(exe), "-f", str(src), str(dst)],
                            check=True, capture_output=True)
             packed = dst.read_bytes()
-    if zx0.decompress(packed) != raw:
-        raise DiscError(f"{name}: ZX0 stream fails the zx0.py round-trip")
+    if codec.decompress(packed) != raw:
+        raise DiscError(f"{name}: stream fails the {codec.__name__} round-trip")
     return packed
 
 
-def in_place_delta(packed, raw=None):
+def in_place_delta(packed, raw=None, codec=zx02):
     """max(write_index - input bytes consumed) over the whole decode, plus 1.
 
-    ZX0 unpacks forwards, so a stream that shares memory with its own
-    output is safe only while the writer stays behind the reader. The
-    margin is a property of THIS stream, not of the compression ratio:
-    a literal run copies 1:1 plus its flag bits, so the gap can grow
-    locally however good the average is. Walk the decode and measure it.
-    The stream's landing address must be >= dest + in_place_delta.
+    Both formats unpack forwards, so a stream that shares memory with its own
+    output is safe only while the writer stays behind the reader. The margin
+    is a property of THIS stream, not of the compression ratio: a literal run
+    copies 1:1 plus its flag bits, so the gap can grow locally however good
+    the average is. Walk the decode and measure it. The stream's landing
+    address must be >= dest + in_place_delta.
+
+    (ZX02's own compressor prints a "delta" too, but counted from the END of
+    the output buffer. This is the kit's convention - from the start - and is
+    what check_stream compares against.)
 
     With `raw` given, the decode is checked against it as well.
     """
-    out = bytearray(); pos = 0; bit_mask = 0; bit_byte = 0
-    backtrack = [None]; worst = -1 << 30
+    walk = _DELTA_WALKS[codec.__name__.rsplit(".", 1)[-1]]
+    out, worst = walk(packed)
+    if raw is not None and bytes(out) != bytes(raw):
+        raise DiscError("in_place_delta: decode disagrees with the source")
+    return worst + 1
+
+
+def _reader(packed):
+    """The bit reader both walks share: MSB first, with the backtrack slot
+    that holds the offset-LSB byte whose bit 0 is the next control bit."""
+    state = {"pos": 0, "mask": 0, "byte": 0, "backtrack": None}
+
+    def bit():
+        if state["backtrack"] is not None:
+            b = state["backtrack"] & 1
+            state["backtrack"] = None
+            return b
+        if not state["mask"]:
+            state["byte"] = packed[state["pos"]]
+            state["pos"] += 1
+            state["mask"] = 128
+        b = 1 if (state["byte"] & state["mask"]) else 0
+        state["mask"] >>= 1
+        return b
+
+    return state, bit
+
+
+def _delta_zx0(packed):
+    """The ZX0 decode, instrumented. Measured against the Paradroid font
+    stream, which unpacks over itself at &3000 from &3700."""
+    out = bytearray()
+    st, bit = _reader(packed)
+    worst = -1 << 30
 
     def note():
         nonlocal worst
-        g = (len(out) - 1) - pos
+        g = (len(out) - 1) - st["pos"]
         if g > worst:
             worst = g
-
-    def bit():
-        nonlocal bit_mask, bit_byte, pos
-        if backtrack[0] is not None:
-            b = backtrack[0] & 1
-            backtrack[0] = None
-            return b
-        if not bit_mask:
-            bit_byte = packed[pos]
-            pos += 1
-            bit_mask = 128
-        b = 1 if (bit_byte & bit_mask) else 0
-        bit_mask >>= 1
-        return b
 
     def gamma(invert):
         v = 1
@@ -280,7 +319,7 @@ def in_place_delta(packed, raw=None):
     while True:
         if state == "literals":
             for _ in range(gamma(False)):
-                out.append(packed[pos]); pos += 1; note()
+                out.append(packed[st["pos"]]); st["pos"] += 1; note()
             state = "new" if bit() else "copy"
         elif state == "copy":
             for _ in range(gamma(False)):
@@ -289,19 +328,66 @@ def in_place_delta(packed, raw=None):
         else:
             msb = gamma(True)
             if msb == 256:
-                break
-            lsb = packed[pos]; pos += 1
+                return out, worst
+            lsb = packed[st["pos"]]; st["pos"] += 1
             last_offset = msb * 128 - (lsb >> 1)
-            backtrack[0] = lsb
+            st["backtrack"] = lsb
             for _ in range(gamma(False) + 1):
                 out.append(out[-last_offset]); note()
             state = "new" if bit() else "literals"
-    if raw is not None and bytes(out) != bytes(raw):
-        raise DiscError("in_place_delta: decode disagrees with the source")
-    return worst + 1
 
 
-def check_stream(name, stream, packed, dest, raw, top=None, in_place=False):
+def _delta_zx02(packed):
+    """The ZX02 decode, instrumented. Same shape as _delta_zx0 with the
+    format's three differences: gamma ends on a 0, offsets are positive, and
+    the gamma value is 8-bit (0 meaning 256, and END in the offset MSB)."""
+    out = bytearray()
+    st, bit = _reader(packed)
+    worst = -1 << 30
+
+    def note():
+        nonlocal worst
+        g = (len(out) - 1) - st["pos"]
+        if g > worst:
+            worst = g
+
+    def gamma():
+        v = 1
+        while bit():
+            v = ((v << 1) | bit()) & 0xFF
+        return v
+
+    def count(v):
+        return v if v else 256
+
+    last_offset = zx02.INITIAL_OFFSET
+    state = "literals"
+    while True:
+        if state == "literals":
+            for _ in range(count(gamma())):
+                out.append(packed[st["pos"]]); st["pos"] += 1; note()
+            state = "new" if bit() else "copy"
+        elif state == "copy":
+            for _ in range(count(gamma())):
+                out.append(out[-last_offset]); note()
+            state = "new" if bit() else "literals"
+        else:
+            msb = gamma()
+            if msb == 0:
+                return out, worst
+            lsb = packed[st["pos"]]; st["pos"] += 1
+            last_offset = (msb - 1) * 128 + (lsb >> 1) + 1
+            st["backtrack"] = lsb
+            for _ in range(count((gamma() + 1) & 0xFF)):
+                out.append(out[-last_offset]); note()
+            state = "new" if bit() else "literals"
+
+
+_DELTA_WALKS = {"zx0": _delta_zx0, "zx02": _delta_zx02}
+
+
+def check_stream(name, stream, packed, dest, raw, top=None, in_place=False,
+                 codec=zx02):
     """Refuse a stream placement the depacker would wreck.
 
     `stream` is where the loader *LOADs the packed bytes, `dest` where it
@@ -321,10 +407,10 @@ def check_stream(name, stream, packed, dest, raw, top=None, in_place=False):
     if overlaps and not in_place:
         raise DiscError(
             f"{name}: the stream at {stream:#06x} overlaps its own output at "
-            f"{dest:#06x} - ZX0 unpacks forwards and would eat itself.")
+            f"{dest:#06x} - it unpacks forwards and would eat itself.")
     margin = None
     if in_place:
-        need = dest + in_place_delta(packed, raw)
+        need = dest + in_place_delta(packed, raw, codec)
         if stream < need:
             raise DiscError(
                 f"{name}: stream at {stream:#06x} would be overtaken by its "

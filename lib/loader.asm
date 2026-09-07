@@ -1,10 +1,10 @@
 \ ******************************************************************
-\ *	loader.asm - OSFILE a ZX0 stream into a staging area, unpack it out
+\ *	loader.asm - OSFILE a packed stream into a staging area, unpack it out
 \ ******************************************************************
 \ *	beeb-port-kit, MIT, Kieran Connell 2026. BeebASM syntax, plain 6502.
 \ *
 \ *	WHAT IT IS. Edge's boot loader, generalised: every data file on the
-\ *	disc ships ZX0-compressed with a catalogue load address the disc
+\ *	disc ships compressed with a catalogue load address the disc
 \ *	builder writes (py/make_disc.py), and none of them could be loaded
 \ *	straight to where it belongs even uncompressed - the filing system
 \ *	has the DFS ROM paged in at &8000 while it works, so a bank's bytes
@@ -56,15 +56,18 @@
 \ *	    Do it FIRST, before anything can be broken into.
 \ *
 \ *	THE INCLUDER DEFINES, before this file is included:
-\ *	  zxsrc, zxdst (ZP)   the depacker's pointers (zx0depack.asm)
-\ *	  zx0_unpack          the depacker's entry
+\ *	  zxsrc, zxdst (ZP)   the depacker's pointers (zx02depack.asm)
+\ *	  zx_unpack           the depacker's entry, whichever depacker that
+\ *	                      is: zx02depack.asm for a new port, zx0depack.asm
+\ *	                      for a ZX0 disc. It was called zx0_unpack before
+\ *	                      2026-09-07 and still is in the two shipping ports.
 \ *	  LOADER_STAGE        the page-aligned address streams stage at for
 \ *	                      load_bank / load_hazel. Edge: DEPK_STREAM =
 \ *	                      &3000, the SHADOW screen, 20K nobody displays
 \ *	                      while the loading picture is up in main.
 \ *	                      Paradroid: DEPK_STREAM = &3200 in the
 \ *	                      framebuffer, blanked. It must not overlap the
-\ *	                      output (the in-place rule, zx0depack.asm).
+\ *	                      output (the in-place rule, zx02depack.asm).
 \ *	  MASTER              0 or 1: assembles load_hazel and unpack_andy.
 \ *	The filenames are the includer's: CR-terminated strings, the
 \ *	address in A/Y.
@@ -112,7 +115,7 @@
 {
     sta zxdst
     stx zxdst+1
-    jmp zx0_unpack
+    jmp zx_unpack
 }
 
 \ ---- load_bank: A/Y = filename, X = the ROMSEL value of the bank ---

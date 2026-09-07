@@ -2,7 +2,7 @@
 """
 make_disc_example.py - the shape of a project's make_disc.py on top of
 beeb_port_kit.dfs: beebasm's SSD in, the shipping SSD out, with the data
-files ZX0-compressed and the catalogue rewritten to where the loader stages
+files ZX02-compressed and the catalogue rewritten to where the loader stages
 each stream.
 
 Both ports' make_disc.py are this with longer tables. What is the PROJECT's,
@@ -36,8 +36,8 @@ COMPRESSED = {                  # name: (stream address, unpack destination)
 STREAM_TOP = {DEPK_STREAM: 0x8000}
 LAYOUT = ["!BOOT", "GAME", "BANK0", "BANK1"]
 
-ZX0_CANDIDATES = [Path(__file__).parent / "bin" / "zx0.exe",
-                  Path(r"C:\Users\khcon\OneDrive\BEEB\Bin\zx0.exe")]
+ZX02_CANDIDATES = [Path(__file__).parent / "bin" / "zx02.exe",
+                   Path(r"C:\Users\khcon\OneDrive\BEEB\Bin\zx02.exe")]
 
 
 def main(argv):
@@ -46,7 +46,7 @@ def main(argv):
     raw_path, out_path = Path(argv[0]), Path(argv[1])
     padded_path = Path(argv[2]) if len(argv) > 2 else None
 
-    zx0_exe = dfs.find_zx0_exe(ZX0_CANDIDATES)      # None -> zx0.py, slower
+    exe = dfs.find_exe(ZX02_CANDIDATES)             # None -> zx02.py, slower
     img = dfs.read_image(raw_path)
     missing = [n for n in LAYOUT if n not in img.files]
     if missing:
@@ -57,7 +57,7 @@ def main(argv):
     for name, (stream, dest) in COMPRESSED.items():
         entry = img.files[name]
         raw = entry.data
-        packed = dfs.compress(raw, zx0_exe, name)
+        packed = dfs.compress(raw, exe, name)
         info = dfs.check_stream(name, stream, packed, dest, raw,
                                 top=STREAM_TOP[stream])
         entry.replace(packed, load=stream, exec=stream)
@@ -68,7 +68,7 @@ def main(argv):
     out_path.write_bytes(out)
     if padded_path:
         padded_path.write_bytes(dfs.pad(out))
-    print("make_disc: ZX0")
+    print("make_disc: ZX02")
     print("\n".join(report))
     print("  image   %6d -> %6d" % (raw_path.stat().st_size, len(out)))
 

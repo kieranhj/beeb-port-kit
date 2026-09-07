@@ -592,9 +592,19 @@ property of the whole IRQ path and drifted ~6 us later than the calibration as t
 
 ---
 
-## 9. ZX0 compression
+## 9. ZX0 / ZX02 compression
 
-- **ZX0 unpacks forwards; a stream may share memory with its output only while the reader stays
+- **ZX02 is the one to use on a 6502, and it is not close.** Daniel Serpell's 6502-tuned fork of
+  ZX0: the depacker is 131 bytes against ZX0's 257 and decodes at 53.9 cycles per output byte
+  against 115.4 - 2.14x - for +0.11% on the packed size. Per file the ratio loss is under 1%
+  except on data that is almost all one repeated run (ZX02's gamma codes are capped at 8 bits),
+  where a near-empty 2,560-byte panel went 67 -> 79 bytes. Both upstream READMEs claim ZX02 wins
+  on ratio as well; over this corpus it does not, it loses slightly.
+  Measured: 2026-09-07, both depackers stepped in py65 over 43 real data files from both ports
+  (242,481 bytes), each decode compared with the source file byte for byte; end to end by booting
+  the kit template's ZX02 disc in jsbeeb (B-DFS1.2 and Master) and reading `&4A00` back.
+  [lib/zx02depack.asm](../lib/zx02depack.asm) [dmsc/zx02](https://github.com/dmsc/zx02)
+- **Both formats unpack forwards; a stream may share memory with its output only while the reader stays
   ahead of the writer.** The rule of thumb "the stream must end where the output ends" is not enough:
   the required gap is a property of THIS stream, because a literal run copies 1:1 plus flag bits and
   the writer can gain locally. Walk the decode and track `max(write_index - bytes_consumed)`; for
@@ -615,6 +625,9 @@ property of the whole IRQ path and drifted ~6 us later than the calibration as t
 - **A size-optimised depacker costs about 40k cycles per 1K** on deck maps, rising on less
   compressible data.
   Measured: 2026-08-21, jsbeeb. [Paradroid loader-compression.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/loader-compression.md)
+  (The 2026-09-07 py65 figures above are higher - 118k per 1K for the same ZX0 depacker - because
+  they count every cycle of the decode alone, not a load's wall clock. Compare them with each
+  other, not across the two methods.)
 
 ---
 

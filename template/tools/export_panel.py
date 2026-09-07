@@ -4,7 +4,7 @@ export_panel.py - the template's one data file: src/data/panel.bin
 
 A 4-row MODE 1 status panel, 2,560 bytes (4 rows x 640), as a generated
 pattern of coloured bars. It stands in for the port's panel image so the
-loader, the ZX0 stream, the catalogue rewrite and the rupture's cycle A all
+loader, the ZX02 stream, the catalogue rewrite and the rupture's cycle A all
 have something real to carry; the port replaces this with its exporter for
 the original's artwork (beeb-port-kit PORTING.md, Layer 1).
 

@@ -1,0 +1,204 @@
+\ ******************************************************************
+\ *	zx02depack.asm - a ZX02 decompressor, as a macro
+\ ******************************************************************
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. BeebASM syntax, plain 6502.
+\ *
+\ *	WHAT IT IS. The depacker for the DEFAULT output of Daniel Serpell's
+\ *	ZX02 (MIT, https://github.com/dmsc/zx02), the 6502-tuned fork of
+\ *	Einar Saukas's ZX0: forwards, interlaced Elias gamma capped at 8
+\ *	bits, POSITIVE offsets, gamma terminated by a 0. 131 bytes, ~54
+\ *	cycles per byte of output. THIS IS WHAT NEW PORTS USE.
+\ *	zx0depack.asm stays beside it because the two shipping ports are
+\ *	ZX0 discs; the formats are not interchangeable, so a project picks
+\ *	one depacker and one compressor and never mixes them.
+\ *
+\ *	WHERE IT CAME FROM. A line-for-line BeebASM transcription of
+\ *	dmsc's zx02-optim.asm (the recommended one of his five decoders),
+\ *	with the ZP names changed to the kit's and the assemble-time init
+\ *	block replaced by code, so that zxsrc/zxdst can be set at run time
+\ *	by loader.asm. No algorithmic change.
+\ *
+\ *	WHAT WAS MEASURED (2026-09-07, this kit, py65 + beebasm). 43 real
+\ *	data files from the two shipping ports - sprites, tiles, chars,
+\ *	music, loading screens, panels, 242,481 bytes in all - compressed
+\ *	with both compressors and both streams stepped through a 6502
+\ *	simulator, the output compared with the source file byte for byte:
+\ *	  - SIZE:  131 bytes, against zx0depack.asm's 257 (both measured
+\ *	           out of beebasm, not counted by eye).
+\ *	  - SPEED: 53.9 cycles/byte against 115.4 - 2.14x, and no file in
+\ *	           the corpus outside 2.04x..2.19x. A 20K loading screen
+\ *	           unpacks in ~1.1M cycles instead of ~2.4M: half a second
+\ *	           of boot time back on a 2MHz Beeb.
+\ *	  - RATIO: +0.11% over the whole corpus (90,891 packed bytes
+\ *	           against 90,793). Per file under 1% except on data that
+\ *	           is nearly all one repeated run, where ZX02's 8-bit
+\ *	           lengths tell - the template's near-empty PANEL went
+\ *	           67 -> 79 bytes. Nothing real lost more than 6 bytes.
+\ *	Half the code and twice the speed for 0.11%. The harness is
+\ *	test/bench/bench_depack.py - rerun it rather than re-arguing this
+\ *	from the upstream READMEs, which claim ZX02 wins on ratio as well;
+\ *	on this corpus it does not, it loses slightly and wins where it
+\ *	matters.
+\ *
+\ *	THE FORMAT, as the stream reader sees it:
+\ *	  - the stream opens in a literal run (no flag bit);
+\ *	  - after literals, flag 0 = copy from the LAST offset, 1 = new offset;
+\ *	  - after any copy,  flag 0 = literals,                1 = new offset;
+\ *	  - a length is interlaced gamma: pairs of (continue=1, payload)
+\ *	    bits, terminated by a 0, building the value MSB-first from an
+\ *	    implicit leading 1. The value is 8-BIT and lives in X: 256 is
+\ *	    written as 0 and read back as 0, which is why every copy loop
+\ *	    is DEX/BNE (X = 0 means 256 bytes);
+\ *	  - a new offset is gamma MSB (payload NOT inverted; the value 256,
+\ *	    read back as 0, is the end marker), then one byte:
+\ *	    ((offset - 1) MOD 128) << 1, whose bit 0 is the FIRST control
+\ *	    bit of the following gamma, which encodes length - 1;
+\ *	  - offset = (MSB - 1) * 128 + (LSB >> 1) + 1.
+\ *	Against ZX0: positive offsets, the gamma ending bit flipped, gamma
+\ *	capped at 8 bits. py/zx02.py encodes exactly this and is the oracle
+\ *	every stream is round-tripped through before a disc is written.
+\ *
+\ *	CALLING CONVENTION. On entry zxsrc points at the stream and zxdst at
+\ *	the output; both are advanced as it goes and the routine returns on
+\ *	the end marker with zxdst one past the last byte written. A, X, Y
+\ *	are clobbered. Everything else it needs it sets up itself, so it may
+\ *	be called any number of times; a stream read twice needs zxsrc
+\ *	pointed at it again each time.
+\ *
+\ *	THE IN-PLACE RULE. ZX02 unpacks FORWARDS, so a stream may share
+\ *	memory with its own output only while the reader stays AHEAD of the
+\ *	writer, which means placing it near the END of the output buffer.
+\ *	The gap needed is a property of THIS stream, not of the ratio: a
+\ *	literal run copies 1:1 plus its flag bits, so the writer can gain
+\ *	locally however good the average is, and the closing matches consume
+\ *	almost no input, so the worst point is usually the very end.
+\ *	py/dfs.py's in_place_delta() walks the decode and measures it
+\ *	(the stream must land at or above dest + delta); check_stream()
+\ *	refuses an image where a stream overlaps its output without that
+\ *	margin. Upstream quotes a blanket 12 bytes per 1024 of output; the
+\ *	measured per-stream number is tighter and is what the kit uses.
+\ *	Do not reason about it by hand.
+\ *
+\ *	THE INCLUDER DEFINES, before this file is included:
+\ *	  zxsrc  (2)  -> the compressed stream
+\ *	  zxdst  (2)  -> the output
+\ *	  zxofs  (1)     high byte of (offset - 1)
+\ *	  zxbit  (1)     the bit reservoir, sentinel-marked
+\ *	  zxwrk  (2)  -> the copy source
+\ *	Eight bytes of ZERO PAGE, borrowed from state that is not live while
+\ *	it runs. ZX0's zxlen is NOT needed: the length accumulator is X.
+\ *	Then, at the address the depacker is to live:
+\ *	  .zx_unpack
+\ *	  ZX02_DEPACKER
+\ *	loader.asm jumps to `zx_unpack`, so use that label unless you are
+\ *	not using the loader.
+\ *
+\ *	THE BEEBASM PASS-1 TRAP (Edge, docs/layer-9-loader.md). The zero-page
+\ *	symbols MUST be defined before the first instruction that uses one -
+\ *	which is the loader's, not this file's, if the loader is included
+\ *	first. beebasm assembles an undefined symbol as an ABSOLUTE address
+\ *	in pass 1 and then errors on the size change in pass 2 ("branch out
+\ *	of range" or a bad ASSERT, never a clear message). Declare them in
+\ *	zero page with the rest of your zero page, and ASSERT they are below
+\ *	&100.
+\ *
+\ *	Fork this into your project; keep this header.
+\ ******************************************************************
+
+MACRO ZX02_DEPACKER
+  LDA #0
+  STA zxofs                     \ high byte of (offset - 1)
+  LDA #&80
+  STA zxbit                     \ empty reservoir: the first ASL refills it
+  LDA #&FF
+  STA zxwrk                     \ low byte of (initial offset - 1) EOR 255
+  LDY #0                        \ Y stays 0 outside the copy loop
+  LDX #0
+
+\ ---- a literal run ------------------------------------------
+.zx_literals
+  INX
+  JSR zx_gamma                  \ X = run length, 0 meaning 256
+.zl_loop
+  LDA (zxsrc),Y
+  INC zxsrc
+  BNE zl_1
+  INC zxsrc+1
+.zl_1
+  STA (zxdst),Y
+  INC zxdst
+  BNE zl_2
+  INC zxdst+1
+.zl_2
+  DEX
+  BNE zl_loop
+
+  ASL zxbit
+  BCS zx_newofs
+
+\ ---- copy from the last offset ------------------------------
+  INX
+  JSR zx_gamma
+.zx_copy
+  LDA zxdst+1
+  SBC zxofs                     \ C = 0 out of zx_gamma, so this is -1 too
+  STA zxwrk+1                   \ zxwrk = zxdst - offset, low byte pre-negated
+.zc_loop
+  LDY zxdst
+  LDA (zxwrk),Y
+  LDY #0
+  STA (zxdst),Y
+  INC zxdst
+  BNE zc_1
+  INC zxdst+1
+  INC zxwrk+1
+.zc_1
+  DEX
+  BNE zc_loop
+
+  ASL zxbit
+  BCC zx_literals
+
+\ ---- a new offset -------------------------------------------
+.zx_newofs
+  INX
+  JSR zx_gamma
+  BEQ zx_done                   \ gamma 256 wraps to 0: the end marker
+  DEX
+  TXA
+  LSR A                         \ (MSB - 1) DIV 2, C = its bottom bit
+  STA zxofs
+  LDA (zxsrc),Y                 \ ((offset - 1) MOD 128) << 1
+  INC zxsrc
+  BNE zn_1
+  INC zxsrc+1
+.zn_1
+  ROR A                         \ C in at the top, its bit 0 out into C
+  EOR #&FF                      \ the low byte, pre-negated for the SBC above
+  STA zxwrk
+  LDX #1                        \ length - 1, first gamma bit already in C
+  JSR zx_gamma_skip1
+  INX
+  BCC zx_copy                   \ always: the gamma ended on a 0
+
+\ ---- interlaced Elias gamma, 8-bit, result in X --------------
+.zx_gamma_bit
+  ASL zxbit
+  ROL A
+  TAX
+.zx_gamma
+  ASL zxbit
+  BNE zx_gamma_skip1
+  LDA (zxsrc),Y                 \ reservoir empty: refill, C=1 marks the end
+  INC zxsrc
+  BNE zg_1
+  INC zxsrc+1
+.zg_1
+  ROL A                         \ C is 1 here, out of the emptied reservoir
+  STA zxbit
+.zx_gamma_skip1
+  TXA
+  BCS zx_gamma_bit
+.zx_done
+  RTS
+ENDMACRO

@@ -53,8 +53,10 @@ seams: loader, titles, game.
 under the hardware wrap, scrolled by the CRTC; a static panel above it by a CRTC rupture, with
 the palette switched per cycle; the game owning the interrupt vector outright, keyboard read
 straight from the VIA; sprites in slots with a save area that mirrors screen geometry, the mask
-taken from the data byte, pre-shifted copies in sideways RAM; every file ZX0-compressed on disc
-with one resident depacker; a release build flag and a boot stamp naming every debug flag.
+taken from the data byte, pre-shifted copies in sideways RAM; every file compressed on disc
+with one resident depacker (both ports used ZX0; a new port uses ZX02 - half the code and twice
+the speed for +0.11% on size, measured); a release build flag and a boot stamp naming every debug
+flag.
 
 **What the person does**: chooses the game and the machine, answers the decisions, plays every
 build on a second emulator and on hardware, reports what looks wrong, and owns taste calls like a
@@ -75,8 +77,8 @@ docs/verification.md    the measuring and checking procedures, by hand or throug
 skills/                 the procedures as Claude Code skills; copy into .claude/skills/
 lib/                    6502 includes that were identical in both ports: depacker, IRQ owner,
                         constants, keyboard read, loader
-py/                     the Python halves that were identical: ZX0, DFS image builder, mode
-                        packers, C64 readers, the art sheet pipeline
+py/                     the Python halves that were identical: ZX02 and ZX0, DFS image builder,
+                        mode packers, C64 readers, the art sheet pipeline
 template/               a starter project that boots to a panel above a play area with a
                         rupture, its own interrupt handler, direct keyboard and a compressed disc
 ```

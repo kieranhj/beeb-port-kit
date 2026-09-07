@@ -10,7 +10,7 @@
 \ *	start address round the 10K hardware wrap; the panel and the strip
 \ *	have a PALETTE each - four physical colours and the other four, all
 \ *	eight MODE 1 colours at once; the panel image ships
-\ *	ZX0-compressed and is loaded and unpacked by the kit's loader;
+\ *	ZX02-compressed and is loaded and unpacked by the kit's loader;
 \ *	!BOOT is stamped with the build time and flags. Nothing else.
 \ *
 \ *	Geometry is Paradroid's (panel &4A00, strip &5800-&7FFF, 10K wrap,
@@ -138,15 +138,14 @@ CODE_TOP   = &3000              ; the screen
 BOOT_STAGE = &7E00              ; where !BOOT is ASSEMBLED, never loaded
 
 \ ******************************************************************
-\ *	Zero page. Wiped at boot. The depacker's six slots come FIRST and
-\ *	before any file that uses them (zx0depack.asm's pass-1 trap).
+\ *	Zero page. Wiped at boot. The depacker's five slots come FIRST and
+\ *	before any file that uses them (zx02depack.asm's pass-1 trap).
 \ ******************************************************************
 ORG &00
 GUARD &90                       ; &90-&FF is the MOS's and the DFS's
 .zxsrc       SKIP 2
 .zxdst       SKIP 2
-.zxofs       SKIP 2
-.zxlen       SKIP 2
+.zxofs       SKIP 1             ; ZX02: high byte of (offset - 1)
 .zxbit       SKIP 1
 .zxwrk       SKIP 2
 ASSERT P% <= &100
@@ -399,11 +398,11 @@ INCLUDE "src/rupture.asm"
 INCLUDE "src/lib/irq.asm"
 INCLUDE "src/lib/keydown.asm"
 INCLUDE "src/lib/loader.asm"
-INCLUDE "src/lib/zx0depack.asm"
+INCLUDE "src/lib/zx02depack.asm"
 INCLUDE "src/lib/boot_stamp.asm"
 
-.zx0_unpack
-    ZX0_DEPACKER
+.zx_unpack
+    ZX02_DEPACKER
 
 .panel_filename EQUS "PANEL", 13
 

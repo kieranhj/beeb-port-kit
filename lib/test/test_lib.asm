@@ -26,8 +26,10 @@ DEBUG_ANY     = 0               ; boot_stamp.asm
 VERSION_LINE  = "beeb-port-kit lib test"
 DEBUG_DUMMY   = 1               ; a flag to see one BOOT_FLAG line emitted
 
-\ The depacker's six zero-page slots, BEFORE anything that uses them -
-\ zx0depack.asm's header says why.
+\ The depackers' zero-page slots, BEFORE anything that uses them -
+\ zx02depack.asm's header says why. ZX02 needs all but zxlen; ZX0 needs
+\ zxlen too and zxofs as two bytes. A real port instantiates ONE depacker
+\ and declares only what that one needs.
 ORG &70
 .zxsrc  SKIP 2
 .zxdst  SKIP 2
@@ -48,17 +50,23 @@ ORG &1900
 .irq_vsync_hook
     rts
 
+INCLUDE "lib/zx02depack.asm"
 INCLUDE "lib/zx0depack.asm"
 INCLUDE "lib/boot_stamp.asm"
 INCLUDE "lib/irq.asm"
 INCLUDE "lib/keydown.asm"
 INCLUDE "lib/loader.asm"
 
-.zx0_unpack
-    ZX0_DEPACKER
+\ zx_unpack is what loader.asm jumps to: the ZX02 depacker, for a new port.
+.zx_unpack
+    ZX02_DEPACKER
 
 \ Paradroid instantiated the depacker twice; prove a second copy is legal.
-.zx0_unpack_again
+.zx_unpack_again
+    ZX02_DEPACKER
+
+\ The ZX0 depacker still assembles beside it, for a port that is a ZX0 disc.
+.zx0_unpack
     ZX0_DEPACKER
 
 INCLUDE "lib/swram_probe.asm"
