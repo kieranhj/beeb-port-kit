@@ -65,7 +65,9 @@ boot", a screenshot is enough. Everything past that point is verified against th
    system, meaning SHIFT was not seen at BREAK. The disc image is fine. **Do not go hunting
    through the catalogue**: `destroy_machine` and make a fresh one. First check that no key
    from an earlier test is still held (`key_up` it), because a held key at BREAK gives the same
-   symptom for a real reason.
+   symptom for a real reason - and a held key survives `restore_state` as well (the keyboard is
+   not in the snapshot; measured 2026-09-07), so a snapshot workflow can carry one along without
+   ever pressing it again.
 
 7. **Report**: the image booted, the model, what the screenshot shows, and the session id so
    the next skill can reuse the machine.

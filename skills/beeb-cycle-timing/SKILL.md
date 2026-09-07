@@ -32,13 +32,19 @@ deterministic, so one sample is exact for that state.
    You want the `JSR` site (or handler entry) and the instruction after it (the return site).
    For code in a sideways bank, the address is only meaningful while that bank is paged in.
 
-2. **Get the game into a repeatable state by poking, not by holding keys.** An injected
+2. **Snapshot the state once you are in it.** `save_state` returns an ID; `restore_state` puts
+   the machine back exactly - memory, registers and `elapsed_cycles` - so every later
+   measurement starts from the same instant instead of being re-reached. Release any key you
+   were holding after the restore: the keyboard is NOT in the snapshot (measured 2026-09-07).
+   Reaching the state the first time still wants the rule below.
+
+3. **Get the game into a repeatable state by poking, not by holding keys.** An injected
    keypress lands a pass earlier or later once code speed changes, and two runs then diverge for
    reasons unrelated to the change. Paradroid poked a speed (`dbgSpdX`) rather than holding a
    direction. Boot with `beeb-smoke-test`, `run_frames` to the state, then `write_memory` the
    inputs. `save_state` here so the same state can be restored for the "after" build.
 
-3. **Set both breakpoints up front, then walk them one per run.** A run that starts with PC
+4. **Set both breakpoints up front, then walk them one per run.** A run that starts with PC
    already on a breakpoint returns immediately with 0 cycles, so the sweep is: read, *clear the
    breakpoint that just fired*, run to the next. Breakpoints fire under `run_for_cycles` (an
    older note said only `run_frames`; both ports carry the correction).
@@ -55,15 +61,15 @@ deterministic, so one sample is exact for that state.
 
    `clear_breakpoint id: 0` clears them all when you are done.
 
-4. **Average about 128 passes for anything a sprite touches.** One busy pass is not a typical
+5. **Average about 128 passes for anything a sprite touches.** One busy pass is not a typical
    one (Paradroid's rotor phase cycles every 8). Re-set the entry breakpoint after each pair
    and repeat; anchor the timeline on something that recurs (a field counter increment) so the
    samples are comparable. Report min, typical and max, and say which pass the max was.
 
-5. **One site at a time if you patch stubs instead of using breakpoints.** Instrumenting two
+6. **One site at a time if you patch stubs instead of using breakpoints.** Instrumenting two
    sites at once reliably hung Paradroid's main loop.
 
-6. **Optional: the zero-byte stub, for "where against the raster does this phase end, over
+7. **Optional: the zero-byte stub, for "where against the raster does this phase end, over
    many passes"** when the build has no room for a debug flag. Find RAM the game never writes
    (Paradroid used `&0130-&017E` after *measuring* it untouched - seed with `&A5`, play, read
    back; see `beeb-bss-bugs`). Hand-assemble per site: `JSR <real routine>`, `LDX <state byte>`,
@@ -82,7 +88,7 @@ deterministic, so one sample is exact for that state.
    read_memory    session_id, address: 0x0100, length: 48
    ```
 
-7. **Record the number with its units and its state** in the layer doc: "6,155 cycles a sprite,
+8. **Record the number with its units and its state** in the layer doc: "6,155 cycles a sprite,
    restore + draw, stationary, DEV build, 2026-09-03". A frame meter in microseconds is half the
    cycle count - say which. An in-guest bracket on the User VIA T1 is
    `cycles = 2 * ((before - after) AND &FFFF) - 46` (the 46 is the bracket's own cost).

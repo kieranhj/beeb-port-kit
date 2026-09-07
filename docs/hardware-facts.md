@@ -712,6 +712,19 @@ again.*
   framebuffer pixels. Judge geometry by poked patterns, and verify against the buffer, not the
   screenshot.
   Measured: Layer 3 (Paradroid), 2026-09-02 (Edge). [Paradroid layer-3-scroll.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-3-scroll.md) [Edge layer-2-display.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-2-display.md)
+- **`save_state` / `restore_state` rewind memory, registers and the cycle count exactly - but
+  not the keyboard.** A restore puts RAM, sideways RAM, video, sound, discs and the CPU back as
+  they were, `elapsed_cycles` with them; jsbeeb's own frame counter carries on climbing, and a
+  state can be restored into ANY session of the same model, including one that never loaded the
+  disc. **A key held with `key_down` stays held across a restore**: restoring a state saved
+  before the key, then running 50 frames, scrolled the play area exactly as if the key were
+  still down - because it was. `key_up` it yourself as part of the restore.
+  Measured: 2026-09-07, jsbeeb MCP 3.3.0 / jsbeeb 1.24.1, the kit's template. Save at the idle
+  state; hold X; 50 frames -> `scroll` 200, `frame_count` 113. Restore -> `scroll` 0,
+  `elapsed_cycles` back to its saved value to the cycle, PC and A/X/Y identical. 50 frames again
+  with the key still latched -> 200 and 113 again, byte for byte. Restore, `key_up X`, 50 frames
+  -> `scroll` 0. The same state restored into a second, disc-less machine and run 50 frames gave
+  the same 113: **one boot can seed any number of machines**.
 - **`read_memory` returns whatever bank is paged at that instant.** A sample taken inside a sprite
   draw returned bank 5's empty space, which read exactly like the player having been wiped. Check
   `&F4` first. Reading shadow RAM from the CPU side likewise follows the X bit.

@@ -24,7 +24,7 @@ so rather than filling the gap from imagination.
 
 ---
 
-## Before you start: two conventions
+## Before you start: three conventions
 
 **Addresses come from the listing, every time.** Builds keep the assembler's `-v` listing in
 `build/`; main-RAM addresses shift on every build, and a breakpoint or a memory read against a
@@ -54,6 +54,18 @@ The BeebASM equivalent, for the two shipping ports:
 
 `-do` is there only to stop beebasm dropping loose `SAVE` files in the project root; Baron writes
 nothing without `-p` or `-o`, so it needs no such guard.
+
+**Snapshot the state you are going to measure from.** `save_state` keeps a whole machine
+server-side under an ID and `restore_state` puts any session of the same model back to it -
+memory, registers and `elapsed_cycles` exactly, so a measurement can be repeated from the same
+instant rather than re-reached. Booting to a game state costs a disc load and a few hundred
+frames; a restore costs one call, and the same state can seed several machines at once. Two
+things to know: jsbeeb's frame counter keeps climbing across a restore (so count frames as
+deltas, never absolutely), and **the keyboard is not in the snapshot** - a key held with
+`key_down` is still held after a restore, and will go on scrolling the game while you wonder
+why. `key_up` as part of restoring. Both measured 2026-09-07; `hardware-facts.md` has the
+numbers. `destroy_machine` when a session is finished, and `delete_state` when a snapshot is:
+states outlive their session and are freed only when deleted.
 
 **Units.** The 6502 runs at 2 MHz; the MCP's `elapsed_cycles` and `run_for_cycles` count 2 MHz
 cycles. Both VIAs' timers count at **1 MHz**, so a T1 or T2 reading is half the CPU cycles, and
@@ -645,7 +657,12 @@ place. Edge Grinder's
 Paradroid's headless differential (memory note; the harness ran from a node script patterned on
 jsbeeb's `src/app-bench.js`).
 
-1. Boot both builds, same disc protocol, same key script or poked inputs.
+1. Boot both builds, same disc protocol, same key script or poked inputs. **A snapshot cannot
+   do this part for you**: it holds the code as well as the state, so an old build's state
+   restored into a new build's machine restores the old build with it. Snapshots are for
+   repeating a measurement *within* one arm - take one at the sampling point and every retry
+   starts from the same instant and the same cycle count, which is what makes step 4's controls
+   cheap enough to actually run.
 2. **Step to an equal game state, not an equal frame number.** The faster build is further
    through the world by the time the sample is taken: Edge Grinder's `scroll_prewind` made the
    init frame shorter (190 fields against 197) and the game was four frames ahead. Step both to
