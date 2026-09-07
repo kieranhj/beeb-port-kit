@@ -20,6 +20,12 @@ break.
 Nothing in here is believed without a measurement. Where a symbol is a name from a reference
 manual that neither port exercised, the header says so (`beeb.h.asm`'s five unused ACCCON bits).
 
+These files are **BeebASM** syntax, as the two shipping ports are. The kit's template assembles
+with [Baron](https://github.com/waitingforvsync/baron) instead, and its forks of these files
+differ by six lines in all - an `ASSERT` macro in `beeb.h`, `BUILD_TIME` in `boot_stamp`, one
+`ASSERT` in `swram_probe`; everything else, macros and all, assembles unchanged under both, to
+byte-identical output (measured 2026-09-07, `../docs/toolchain-baron.md`).
+
 ## The files
 
 | File | What it is | The includer defines |

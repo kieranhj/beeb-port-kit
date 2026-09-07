@@ -116,12 +116,29 @@ from the request**, the kit's rule again). `scroll` 0 -> 200 in 50 fields of X.
 
 ## Build facts
 
-- beebasm 1.11 at `C:\Users\khcon\OneDrive\BEEB\Bin\beebasm.exe`; runs from the project root.
-  `RELEASE` and `MASTER` passed every time. All of RELEASE=0/1 and MASTER=0/1 assemble.
-- Code `&1900-&1DBD` (1,213 bytes; 1,264 under `MASTER=1`), `&1243` free to `&3000`. Zero page
-  high water `&1D`. `build.ps1` and `tools/build.sh` both run, both builds.
-- Two names one cannot reuse: beebasm refuses a second `name = P%` assignment, so the scratch
-  `ORG` bookkeeping for `PANEL` and `!BOOT` uses `code_p%` and `boot_p%`.
+- **The assembler changed on 2026-09-07: BeebASM 1.11 -> Baron 0.3.0** at
+  `C:\Users\khcon\OneDrive\BEEB\Bin\baron.exe`. Gated on byte-identity, both models:
+  `Game` (1,087 bytes DEV, 1,138 MASTER) and `PANEL` came out **identical to the BeebASM
+  build**, `!BOOT` differing only in its timestamp, and both discs boot in jsbeeb with `&4A00`
+  identical to `src/data/panel.bin` and `zxdst` at `&5400`. All of RELEASE=0/1 and MASTER=0/1
+  assemble, from `build.ps1` and `tools/build.sh`. Why, and the whole BeebASM delta:
+  `../../docs/toolchain-baron.md`.
+- `RELEASE` and `MASTER` passed every time (Baron has `DEFINED()`, so this is now a choice, not
+  BeebASM's no-`IFDEF` workaround). The `!BOOT` timestamp comes from the generated
+  `build/build_time.6502`, not `TIME$`: **Windows PowerShell cannot pass a quoted string with
+  spaces to a native exe** - three forms tried, all mangled - so it is a file, not a `-D`.
+  Keeping that file makes a rebuild byte-identical.
+- Baron resolves `INCLUDE`/`INCBIN` **relative to the including file**, where BeebASM used the
+  working directory: every include path in `src/` changed. A wrong path surfaced once as a
+  confusing parse error at the first macro call, not as "could not read".
+- The zero-page slots no longer have to be declared before the file that uses them: a
+  forward-referenced zero-page symbol still assembles as zero page (measured). BeebASM's
+  pass-1 sizing trap is gone with it.
+- Code `&1900-&1D3F` (1,087 bytes; 1,138 under `MASTER=1`), 4,801 free to `&3000`. Zero page
+  high water `&1A`. `build.ps1` and `tools/build.sh` both run, both builds. (Was 1,213 bytes
+  and `&1D` before the ZX0 -> ZX02 change: 126 bytes of depacker and three zero-page slots.)
+- The scratch `ORG` bookkeeping (`code_p%`, `boot_p%`) and the `CLEAR` for `PANEL` are gone:
+  `PANEL` and `!BOOT` are `SECTION`s of their own, and two sections may share an address.
 - `dfs.py` forked with two changes: `import zx02` for the package-relative import, and the ZX0
   codec dropped (this is a ZX02 port; the kit's copy still carries both). Its API needed no
   adapting (`read_image`, `compress`, `check_stream`, `build_image`, `pad`).

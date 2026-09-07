@@ -1,7 +1,7 @@
 \ ******************************************************************
 \ *	main.asm - beeb-port-kit template: the smallest thing that boots
 \ ******************************************************************
-\ *	MIT, Kieran Connell 2026. BeebASM, plain 6502 (CPU 0).
+\ *	MIT, Kieran Connell 2026. Baron, plain 6502 (NMOS by default).
 \ *
 \ *	What it is: a MODE 1 screen with a 4-row static panel above a
 \ *	16-row play strip, as a two-cycle CRTC rupture driven from our own
@@ -17,17 +17,24 @@
 \ *	R1 = 80) because its T1 constants were measured for it; the frame
 \ *	shape is Edge Grinder's two cycles. See src/rupture.asm.
 \ *
-\ *	Build symbols, passed on EVERY beebasm invocation (beebasm has no
-\ *	IFDEF and refuses a symbol defined twice, so no default lives here):
-\ *	  RELEASE  0/1  every DEBUG_ flag off, version line in !BOOT
-\ *	  MASTER   0/1  the Master 128 path: loader.asm's load_hazel and
-\ *	                unpack_andy assemble, and !BOOT says so. The
-\ *	                template itself uses no shadow RAM, ANDY or HAZEL.
+\ *	Build symbols, passed with -D on every invocation. Baron has
+\ *	DEFINED(), so a default could live here; the build scripts pass all
+\ *	three every time anyway, so that a build says what it is:
+\ *	  RELEASE     0/1  every DEBUG_ flag off, version line in !BOOT
+\ *	  MASTER      0/1  the Master 128 path: loader.6502's load_hazel
+\ *	                   and unpack_andy assemble, and !BOOT says so. The
+\ *	                   template uses no shadow RAM, ANDY or HAZEL.
+\ *	Baron has no TIME$, so the build's timestamp comes from a file the
+\ *	build scripts write before assembling, build/build_time.6502, holding
+\ *	one line: BUILD_TIME = "07 Sep 2026 15:47:31". Assembling by hand
+\ *	without a prior build.ps1/build.sh run fails on that missing file -
+\ *	write it yourself, or run a build script. (It is not passed with -D
+\ *	because Windows PowerShell cannot hand a quoted string with spaces to
+\ *	a native exe intact - MEASURED 2026-09-07, three quoting forms tried.)
 \ ******************************************************************
 
-CPU 0
-
-INCLUDE "src/lib/beeb.h.asm"
+INCLUDE "lib/beeb.h.6502"
+INCLUDE "../build/build_time.6502"      ; BUILD_TIME, written by the build script
 
 ASSERT (RELEASE = 0) OR (RELEASE = 1)
 ASSERT (MASTER = 0) OR (MASTER = 1)
@@ -138,18 +145,21 @@ CODE_TOP   = &3000              ; the screen
 BOOT_STAGE = &7E00              ; where !BOOT is ASSEMBLED, never loaded
 
 \ ******************************************************************
-\ *	Zero page. Wiped at boot. The depacker's five slots come FIRST and
-\ *	before any file that uses them (zx02depack.asm's pass-1 trap).
+\ *	Zero page, as a section of its own, guarded at &90: &90-&FF is the
+\ *	MOS's and the DFS's. Wiped at boot.
+\ *
+\ *	BeebASM needed these declared before the first file that used one
+\ *	(its pass-1 sizing trap). Baron assembles to convergence, so a
+\ *	forward-referenced zero-page symbol is still assembled as zero
+\ *	page - MEASURED 2026-09-07. They stay first because it reads
+\ *	better, not because they must.
 \ ******************************************************************
-ORG &00
-GUARD &90                       ; &90-&FF is the MOS's and the DFS's
+SECTION zeropage, org = &00, guard = &90
 .zxsrc       SKIP 2
 .zxdst       SKIP 2
 .zxofs       SKIP 1             ; ZX02: high byte of (offset - 1)
 .zxbit       SKIP 1
 .zxwrk       SKIP 2
-ASSERT P% <= &100
-
 .field_count SKIP 1             ; IRQ: +1 a field
 .flip_field  SKIP 1             ; IRQ: field_count at the last take
 .frame_ready SKIP 1             ; loop -> IRQ: crtc_park is ready
@@ -162,13 +172,14 @@ ASSERT P% <= &100
 .fill_ptr    SKIP 2
 .fill_row    SKIP 1
 .fill_unit   SKIP 1
-ZP_END = P%
+ZP_END = *
+ENDSECTION
 
 \ ******************************************************************
-\ *	The code image
+\ *	The code image. `filename` is the request to save it; `exec` is
+\ *	where *RUN Game enters; `guard` is the screen it must not reach.
 \ ******************************************************************
-ORG CODE_ORG
-GUARD CODE_TOP
+SECTION Game, org = CODE_ORG, guard = CODE_TOP, filename = "Game", exec = main
 .start
 
 .main
@@ -394,12 +405,12 @@ GUARD CODE_TOP
 \ ******************************************************************
 \ *	The rupture and the forked kit files
 \ ******************************************************************
-INCLUDE "src/rupture.asm"
-INCLUDE "src/lib/irq.asm"
-INCLUDE "src/lib/keydown.asm"
-INCLUDE "src/lib/loader.asm"
-INCLUDE "src/lib/zx02depack.asm"
-INCLUDE "src/lib/boot_stamp.asm"
+INCLUDE "rupture.6502"
+INCLUDE "lib/irq.6502"
+INCLUDE "lib/keydown.6502"
+INCLUDE "lib/loader.6502"
+INCLUDE "lib/zx02depack.6502"
+INCLUDE "lib/boot_stamp.6502"
 
 .zx_unpack
     ZX02_DEPACKER
@@ -407,43 +418,37 @@ INCLUDE "src/lib/boot_stamp.asm"
 .panel_filename EQUS "PANEL", 13
 
 .end
-SAVE "Game", start, end, main
+ENDSECTION
 
 \ ******************************************************************
-\ *	The panel as a disc file, from src/data/panel.bin. beebasm SAVEs
-\ *	it raw; tools/make_disc.py compresses it and moves its catalogue
-\ *	load address to LOADER_STAGE. Assembled at PANEL_ADDR because it
-\ *	has to be assembled somewhere that nothing else claims.
+\ *	The panel as a disc file, from src/data/panel.bin. Baron saves it
+\ *	raw; tools/make_disc.py compresses it and moves its catalogue load
+\ *	address to LOADER_STAGE. Its own section at PANEL_ADDR, where it
+\ *	ends up at run time: two sections may share an address, so the
+\ *	CLEAR this needed under BeebASM is gone.
 \ ******************************************************************
-code_p% = P%
-CLEAR PANEL_ADDR, PANEL_ADDR + PANEL_BYTES
-ORG PANEL_ADDR
+SECTION Panel, org = PANEL_ADDR, filename = "PANEL"
 .panel_start
-INCBIN "src/data/panel.bin"
+INCBIN "data/panel.bin"
 .panel_end
 ASSERT panel_end - panel_start = PANEL_BYTES
-SAVE "PANEL", panel_start, panel_end
-ORG code_p%
+ENDSECTION
 
 \ ******************************************************************
 \ *	!BOOT - stamped with what this build is (boot_stamp.asm)
 \ ******************************************************************
-boot_p% = P%
-CLEAR BOOT_STAGE, BOOT_STAGE + 256
-ORG BOOT_STAGE
+SECTION Boot, org = BOOT_STAGE, guard = BOOT_STAGE + 256, filename = "!BOOT"
 .bootfile
     BOOT_STAMP_HEAD "beeb-port-kit template"
     BOOT_FLAG MASTER, "MASTER: Master 128 build"       \ legal under RELEASE
     BOOT_STAMP_TAIL "Game"
 .bootfile_end
-ASSERT bootfile_end < BOOT_STAGE + 256
-SAVE "!BOOT", bootfile, bootfile_end
-ORG boot_p%
+ENDSECTION
 
 PRINT "------"
 PRINT "beeb-port-kit template"
-PRINT "CODE  ", ~start, "-", ~end, " (", end - start, " bytes), FREE to", ~CODE_TOP, "=", ~CODE_TOP - end
-PRINT "ZP    high water", ~ZP_END
+PRINT "CODE  &", ~start, "-&", ~end, " (", end - start, " bytes), FREE to &", ~CODE_TOP, " = ", (CODE_TOP - end)
+PRINT "ZP    high water &", ~ZP_END
 PRINT "T1_I1 =", T1_I1, " T1_I2 =", T1_I2, " T1_I3 =", T1_I3, " T1_I4 =", T1_I4
 PRINT "!BOOT ", bootfile_end - bootfile, " bytes"
 PRINT "------"

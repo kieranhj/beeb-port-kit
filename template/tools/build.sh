@@ -1,17 +1,21 @@
 #!/bin/sh
-# The same build as build.ps1, from bash (Git Bash on Windows, or a Unix
-# host with a beebasm on the path): PowerShell turns beebasm's progress on
-# stderr into a terminating error under some profiles, and this does not.
-# Same names and disc titles as build.ps1. Flags come from the environment:
+# The same build as build.ps1, from bash (Git Bash on Windows, or a Unix host
+# with a baron on the path). Same names and disc titles as build.ps1. Flags
+# come from the environment:
 #   RELEASE=1 MASTER=1 sh tools/build.sh
-# Run from the project root: beebasm resolves INCLUDE/INCBIN from the cwd.
+# BUILD_TIME is stamped into !BOOT (Baron has no TIME$) through the generated
+# build/build_time.6502 that main.6502 includes; set it in the environment to
+# get a byte-identical rebuild. Run from the project root - Baron resolves
+# INCLUDE/INCBIN relative to the including file, but -o/-p are relative to cwd.
 set -e
 R=${RELEASE:-0}; M=${MASTER:-0}
-BEEB=${BEEBASM:-/c/Users/khcon/OneDrive/BEEB/Bin/beebasm.exe}
-[ -x bin/beebasm.exe ] && BEEB=bin/beebasm.exe
+BARON=${BARON:-/c/Users/khcon/OneDrive/BEEB/Bin/baron.exe}
+[ -x bin/baron.exe ] && BARON=bin/baron.exe
+T=${BUILD_TIME:-$(date '+%d %b %Y %H:%M:%S')}
 STEM=GAME; TITLE=GAME
 [ "$M" = 1 ] && { STEM=$STEM-MASTER; TITLE=${TITLE}M; }
 mkdir -p build
-"$BEEB" -i src/main.asm -do build/$STEM-RAW.SSD -opt 3 -title "$TITLE" \
-    -D RELEASE=$R -D MASTER=$M -v > build/$STEM.lst
+printf 'BUILD_TIME = "%s"\n' "$T" > build/build_time.6502
+"$BARON" -o build/$STEM-RAW.SSD --title "$TITLE" --opt 3 \
+    -D RELEASE=$R -D MASTER=$M -v src/main.6502 > build/$STEM.lst
 python tools/make_disc.py build/$STEM-RAW.SSD build/$STEM.SSD build/$STEM-200K.SSD

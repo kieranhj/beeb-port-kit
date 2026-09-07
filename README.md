@@ -80,7 +80,9 @@ lib/                    6502 includes that were identical in both ports: depacke
 py/                     the Python halves that were identical: ZX02 and ZX0, DFS image builder,
                         mode packers, C64 readers, the art sheet pipeline
 template/               a starter project that boots to a panel above a play area with a
-                        rupture, its own interrupt handler, direct keyboard and a compressed disc
+                        rupture, its own interrupt handler, direct keyboard and a compressed
+                        disc. Assembles with Baron (docs/toolchain-baron.md); lib/ is still
+                        BeebASM syntax, which is six lines' difference
 ```
 
 Everything in `lib/` and `py/` is meant to be **forked into your project and hacked**, not

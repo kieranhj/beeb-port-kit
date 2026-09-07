@@ -52,6 +52,18 @@
 \ *	FORKED into beeb-port-kit/template 2026-09-07, unchanged.
 \ ******************************************************************
 
+\ ---- ASSERT, which Baron does not have --------------------------
+\ Baron reports the ERROR at the macro and adds "Note: Expanded from
+\ here" at the call, so an assertion still names its own line. Two
+\ shapes: with a message and without.
+MACRO ASSERT c
+    IF NOT(c) : ERROR "assertion failed" : ENDIF
+ENDMACRO
+
+MACRO ASSERT c, msg
+    IF NOT(c) : ERROR msg : ENDIF
+ENDMACRO
+
 \ ---- MOS entry points ----------------------------------------
 \ Paradroid spells these OSBYTE, OSWRCH, OSCLI, OSASCI.
 osbyte  = &FFF4

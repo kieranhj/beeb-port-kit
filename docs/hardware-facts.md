@@ -633,6 +633,10 @@ property of the whole IRQ path and drifted ~6 us later than the calibration as t
 
 ## 10. beebasm (1.11) gotchas
 
+*The kit's template assembles with Baron now, and four of these do not apply to it -
+`docs/toolchain-baron.md` says which and what replaced them. They stay here because the two
+shipping ports are beebasm projects, and `lib/` is still beebasm syntax.*
+
 - **No `IFDEF`, and a symbol defined twice is an error**, so a source file cannot carry a default
   for a command-line symbol: every invocation must pass `-D RELEASE=0` (and every other such flag)
   or assembly stops with *Symbol not defined*. A build that needs one optional flag therefore needs

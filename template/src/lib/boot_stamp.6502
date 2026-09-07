@@ -37,14 +37,16 @@
 \ *	  RELEASE        0 or 1 (both ports pass it on the command line:
 \ *	                 beebasm has no IFDEF and refuses a symbol defined
 \ *	                 twice, so main.asm cannot carry a default)
+\ *	  BUILD_TIME     the build's timestamp, as a string. Baron has no
+\ *	                 TIME$, so build.ps1/build.sh pass it with -D -
+\ *	                 which also makes a rebuild byte-identical.
 \ *	  DEBUG_ANY      the OR of every DEBUG_ flag; the head macro ASSERTs
 \ *	                 it is 0 under RELEASE
 \ *	  VERSION_LINE   a string, printed under RELEASE (e.g. "v1.0 2026-09-06")
 \ *	and then, at a scratch address:
 \ *
-\ *	  code_p% = P%
-\ *	  CLEAR BOOT_STAGE, BOOT_STAGE + 256
-\ *	  ORG BOOT_STAGE
+\ *	  SECTION Boot, org = BOOT_STAGE,
+\ *	          guard = BOOT_STAGE + 256, filename = "!BOOT"
 \ *	  .bootfile
 \ *	  BOOT_STAMP_HEAD "Edge Grinder"
 \ *	  BOOT_FLAG DEBUG_COLL,   "DEBUG_COLL: collisions do not kill"
@@ -52,9 +54,8 @@
 \ *	  BOOT_FLAG MUSIC_AKL,    "MUSIC_AKL: Arkos replay"    \ legal under RELEASE
 \ *	  BOOT_STAMP_TAIL "Edge"
 \ *	  .bootfile_end
-\ *	  SAVE "!BOOT", bootfile, bootfile_end
-\ *	  ASSERT bootfile_end < BOOT_STAGE + 256
-\ *	  ORG code_p%
+\ *	  ENDSECTION      - the filename IS the request to save it, and
+\ *	                    the section guard is what the ASSERT was
 \ *
 \ *	BOOT_FLAG emits its line whenever the flag is non-zero, so a flag
 \ *	that is legal under RELEASE (a music or artwork variant) is stamped
@@ -87,6 +88,6 @@ ENDMACRO
 
 \ ---- REM BUILD <time>, *RUN <file> --------------------------------
 MACRO BOOT_STAMP_TAIL runfile
-    EQUS "REM BUILD ", TIME$("%d %b %Y %H:%M:%S"), 13
+    EQUS "REM BUILD ", BUILD_TIME, 13
     EQUS "*RUN ", runfile, 13
 ENDMACRO
