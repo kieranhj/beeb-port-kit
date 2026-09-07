@@ -87,6 +87,10 @@
 \ *	  zxwrk  (2)  -> the copy source
 \ *	Eight bytes of ZERO PAGE, borrowed from state that is not live while
 \ *	it runs. ZX0's zxlen is NOT needed: the length accumulator is X.
+\ *	Declare them with Baron's ZA_AUTO2/ZA_AUTO1 and that "not live" is
+\ *	no longer a promise you are making: the allocator proves it, and
+\ *	hands the bytes to whatever else can use them. In the kit's
+\ *	template zxsrc's byte is scroll's for the rest of the run.
 \ *	Then, at the address the depacker is to live:
 \ *	  .zx_unpack
 \ *	  ZX02_DEPACKER

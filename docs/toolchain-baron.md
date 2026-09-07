@@ -54,11 +54,38 @@ So the bytes are the same bytes. What changes is the toolchain around them.
 | `TRUE` is -1 | `TRUE` is 1 (`--beebasm-true` restores it). Nothing in the kit relied on it |
 | `.asm` | `.6502`, which the [VS Code extension](https://marketplace.visualstudio.com/items?itemName=RichTalbot-Watkins.baron-vsc) keys on |
 
-Not yet used here, and the reason to keep watching it: **the zero-page allocator** (`ZA_POOL`,
-`ZA_AUTO`) packs named variables by liveness and proves the packing safe across `JSR`. Our
-depacker headers claim the borrowed zero page is "not live while it runs" - an assertion nothing
-checks. That is the natural next step, and it will change emitted addresses, so it needs its own
-measurement rather than riding along with this one.
+## The zero-page allocator
+
+In use in the template since 2026-09-07. `ZA_POOL &00..&8F`, then `ZA_AUTO1`/`ZA_AUTO2`
+declarations; Baron traces each value's life and packs the ones that never overlap onto the same
+byte. What it bought, measured:
+
+| | Before | After |
+|---|---|---|
+| Zero page for 17 variables | 26 bytes, hand-laid | **16 bytes**, `&00-&0F` |
+| Code | 1,087 bytes | 1,081 - the boot-time zero-page wipe loop is gone, because every variable now has a provable first write |
+| Behaviour (both models) | 100 fields / 100 frames, 50 passes, scroll 0 -> 200 under X, panel identical | **the same, exactly** |
+
+`scroll` lives on `&00` - the byte `zxsrc` used while the panel was unpacking and `fill_ptr`
+used while the strip was being filled. That is the depacker header's "borrowed from state that
+is not live while it runs", checked by the tool instead of asserted by a comment.
+
+Two markers carry the facts the instruction stream does not: `ZA_ENTRY` on `main` (`*RUN` enters
+there; nothing in the program calls it) and `ZA_INTERRUPT` on `irq.6502`'s handler. **Both are
+load-bearing.** Removing the `ZA_INTERRUPT` gets a warning - `ZA_AUTO used in code unreachable
+from any entry` - and then a build that puts `frame_ready` and `crtc_park` on one byte and hangs
+at boot. Measured, deliberately, so the failure mode is on record.
+
+The rules that bite: an address does not exist until the assembly converges, so a `ZA_AUTO` name
+cannot decide the program's shape (`IF v`, `SKIP v`, `FOR n = v..8`, `org = v` are all refused,
+clearly); `(var),Y` needs a `ZA_AUTO2`; an indexed store into the pool proves nothing to the
+analysis, which is why the blanket wipe went. Anything shared with the outside world - BASIC
+pokes, a fixed API - keeps a hand-picked address.
+
+Still unused, and worth a look when a real port needs them: `ZA_DISCARD` for arrays rebuilt
+through `STA arr,X`, `ZA_CANCALL`/`ZA_CANJUMP` for dispatch tables, `BITABS`/`BITZP` for the
+skip trick.
+
 
 Also unused so far: lists and broadcasting (a sine table in one `EQUB`), user `FUNCTION`s,
 `BASIC` ... `ENDBASIC` for a tokenised BASIC loader, and macro overloading.

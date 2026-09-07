@@ -85,6 +85,12 @@
 \ ******************************************************************
 
 .irq_handler
+    ZA_INTERRUPT                \ Baron's zero-page allocator: an interrupt
+                                \ fires between any two instructions, so what
+                                \ this handler touches must be kept clear of
+                                \ everything the main program may be holding.
+                                \ Harmless, and free, if the project does not
+                                \ use ZA_POOL (measured: no pool, no effect).
 {
     txa : pha
     tya : pha

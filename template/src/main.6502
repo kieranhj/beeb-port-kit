@@ -145,35 +145,49 @@ CODE_TOP   = &3000              ; the screen
 BOOT_STAGE = &7E00              ; where !BOOT is ASSEMBLED, never loaded
 
 \ ******************************************************************
-\ *	Zero page, as a section of its own, guarded at &90: &90-&FF is the
-\ *	MOS's and the DFS's. Wiped at boot.
+\ *	Zero page, allocated by Baron. &00-&8F is ours; &90-&FF is the
+\ *	MOS's and the DFS's, so that is the pool and no more.
 \ *
-\ *	BeebASM needed these declared before the first file that used one
-\ *	(its pass-1 sizing trap). Baron assembles to convergence, so a
-\ *	forward-referenced zero-page symbol is still assembled as zero
-\ *	page - MEASURED 2026-09-07. They stay first because it reads
-\ *	better, not because they must.
+\ *	Nothing here picks an address. Baron traces what each variable's
+\ *	value is used for and packs the ones whose lives do not overlap
+\ *	onto the same byte, refusing outright rather than emitting
+\ *	something it cannot prove - `-v` lists every choice as
+\ *	`name = &xx [auto]`. The two facts it cannot read off the
+\ *	instructions are marked in the code: ZA_ENTRY on `main`, because
+\ *	the outside world (*RUN) enters there, and ZA_INTERRUPT on
+\ *	irq.6502's handler, because an interrupt fires between any two
+\ *	instructions and its state must be kept clear of everything the
+\ *	main program might be holding when it does.
+\ *
+\ *	This is what the depacker's header could only assert: its five
+\ *	slots are "borrowed from state that is not live while it runs",
+\ *	and that is now a property Baron checks rather than a comment.
+\ *
+\ *	The cost of the guarantee: an address does not exist until the
+\ *	assembly has converged, so a ZA_AUTO name cannot decide the SHAPE
+\ *	of the program - no `IF v <> w`, no `SKIP v`, no `org = v`. It can
+\ *	be used as a value (`LDA #v`, `EQUW v`) freely.
 \ ******************************************************************
-SECTION zeropage, org = &00, guard = &90
-.zxsrc       SKIP 2
-.zxdst       SKIP 2
-.zxofs       SKIP 1             ; ZX02: high byte of (offset - 1)
-.zxbit       SKIP 1
-.zxwrk       SKIP 2
-.field_count SKIP 1             ; IRQ: +1 a field
-.flip_field  SKIP 1             ; IRQ: field_count at the last take
-.frame_ready SKIP 1             ; loop -> IRQ: crtc_park is ready
-.crtc_park   SKIP 2             ; loop writes: next R12/R13 (lo, hi)
-.crtc_live   SKIP 2             ; IRQ writes: the R12/R13 being shown
-.rupt_state  SKIP 1             ; 0 before fire 1, 1 before fire 2, 2 before fire 3, 3 after
-.scroll      SKIP 2             ; byte offset into the strip, 0..BUF_SIZE-1
-.frame_count SKIP 2             ; loop: +1 a pass (the frame-lock check)
-.tmp         SKIP 2
-.fill_ptr    SKIP 2
-.fill_row    SKIP 1
-.fill_unit   SKIP 1
-ZP_END = *
-ENDSECTION
+ZA_POOL &00..&8F
+
+ZA_AUTO2 zxsrc, zxdst           ; the depacker: stream in, output out
+ZA_AUTO1 zxofs                  ; ZX02: high byte of (offset - 1)
+ZA_AUTO1 zxbit                  ; the bit reservoir
+ZA_AUTO2 zxwrk                  ; -> the copy source
+
+ZA_AUTO1 field_count            ; IRQ: +1 a field
+ZA_AUTO1 flip_field             ; IRQ: field_count at the last take
+ZA_AUTO1 frame_ready            ; loop -> IRQ: crtc_park is ready
+ZA_AUTO2 crtc_park              ; loop writes: next R12/R13 (lo, hi)
+ZA_AUTO2 crtc_live              ; IRQ writes: the R12/R13 being shown
+ZA_AUTO1 rupt_state             ; 0 before fire 1, 1 before 2, 2 before 3, 3 after
+
+ZA_AUTO2 scroll                 ; byte offset into the strip, 0..BUF_SIZE-1
+ZA_AUTO2 frame_count            ; loop: +1 a pass (the frame-lock check)
+ZA_AUTO1 tmp
+ZA_AUTO2 fill_ptr
+ZA_AUTO1 fill_row
+ZA_AUTO1 fill_unit
 
 \ ******************************************************************
 \ *	The code image. `filename` is the request to save it; `exec` is
@@ -184,6 +198,7 @@ SECTION Game, org = CODE_ORG, guard = CODE_TOP, filename = "Game", exec = main
 
 .main
 {
+    ZA_ENTRY                    ; *RUN enters here; nothing in the program calls it
     ldx #&ff
     txs
 
@@ -192,14 +207,6 @@ SECTION Game, org = CODE_ORG, guard = CODE_TOP, filename = "Game", exec = main
     \\ does not. VDU 22 resets both, so they are written again after it.
     CRTC 8, R8_BLANK
     CRTC 10, &20
-
-    ldx #0
-    txa
-    .zp_loop
-    sta &00, x
-    inx
-    cpx #ZP_END
-    bcc zp_loop
 
     lda #22
     jsr oswrch
@@ -335,6 +342,8 @@ SECTION Game, org = CODE_ORG, guard = CODE_TOP, filename = "Game", exec = main
     sta rupt_state
     sta scroll
     sta scroll+1
+    sta frame_count             ; was the boot-time zero-page wipe's job
+    sta frame_count+1
     lda #LO(BUF_BASE / 8)
     sta crtc_live
     sta crtc_park
@@ -448,7 +457,7 @@ ENDSECTION
 PRINT "------"
 PRINT "beeb-port-kit template"
 PRINT "CODE  &", ~start, "-&", ~end, " (", end - start, " bytes), FREE to &", ~CODE_TOP, " = ", (CODE_TOP - end)
-PRINT "ZP    high water &", ~ZP_END
+PRINT "ZP    allocated by Baron from &00-&8F; -v lists each choice"
 PRINT "T1_I1 =", T1_I1, " T1_I2 =", T1_I2, " T1_I3 =", T1_I3, " T1_I4 =", T1_I4
 PRINT "!BOOT ", bootfile_end - bootfile, " bytes"
 PRINT "------"

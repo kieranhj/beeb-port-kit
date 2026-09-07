@@ -109,6 +109,12 @@ renders. The 13-16-cycle margins are for the emulator. A port that needs more ca
 blanking a second scanline, because the four logical-0 writes are 24 of blanking's 48 whatever
 else moves.
 
+**The allocator changed no behaviour** (2026-09-07, `scratchpad`'s `verify_dynamic.mjs` against
+both builds, both models): 100 fields in 100 frames, 50 loop passes in those 100 fields (the
+25 Hz lock), `scroll` unmoved when idle, `scroll` 0 -> 200 under 50 fields of X, and `&4A00`
+still byte-identical to `src/data/panel.bin`. Identical to the hand-allocated build, which is
+the only gate that means anything once the addresses have moved.
+
 The frame lock: `field_count` `&25` -> `&89` and `frame_count` `&0092` -> `&00C4` across exactly
 3,993,600 `elapsed_cycles`: 100 fields, 50 passes, idle; with X held, 115 fields -> 57 passes over
 4,553,339 (`run_for_cycles` overran its request that time - **count from `elapsed_cycles`, not
@@ -134,9 +140,21 @@ from the request**, the kit's rule again). `scroll` 0 -> 200 in 50 fields of X.
 - The zero-page slots no longer have to be declared before the file that uses them: a
   forward-referenced zero-page symbol still assembles as zero page (measured). BeebASM's
   pass-1 sizing trap is gone with it.
-- Code `&1900-&1D3F` (1,087 bytes; 1,138 under `MASTER=1`), 4,801 free to `&3000`. Zero page
-  high water `&1A`. `build.ps1` and `tools/build.sh` both run, both builds. (Was 1,213 bytes
-  and `&1D` before the ZX0 -> ZX02 change: 126 bytes of depacker and three zero-page slots.)
+- Code `&1900-&1D39` (1,081 bytes; 1,132 under `MASTER=1`), 4,807 free to `&3000`.
+  `build.ps1` and `tools/build.sh` both run, both builds. (1,213 bytes before the ZX0 -> ZX02
+  change, 1,087 before the zero-page allocator took the boot-time wipe loop with it.)
+- **Zero page is Baron's to allocate**, from a pool of `&00-&8F`: seventeen variables that took
+  26 bytes hand-laid now take **16** (`&00-&0F`), because the allocator proves whose lives
+  overlap and packs the rest together. `scroll` sits on `&00`, the byte `zxsrc` used while the
+  panel was being unpacked and `fill_ptr` used while the strip was being filled - the depacker's
+  "borrowed slots" claim, machine-checked rather than asserted. `-v` lists every choice as
+  `name = &xx [auto]`.
+- **The markers are load-bearing, measured.** `ZA_ENTRY` on `main` (the outside world enters
+  there) and `ZA_INTERRUPT` on `irq.6502`'s handler. Take the `ZA_INTERRUPT` away and Baron
+  warns - `ZA_AUTO used in code unreachable from any entry` at the handler - and then packs
+  `frame_ready` and `crtc_park` onto the same byte, `field_count` onto `tmp`: the build boots to
+  a hang (fields 0, frames 0, scroll 0 in the harness below). Put it back and the numbers
+  return. The warning is the tool telling you before the disc does.
 - The scratch `ORG` bookkeeping (`code_p%`, `boot_p%`) and the `CLEAR` for `PANEL` are gone:
   `PANEL` and `!BOOT` are `SECTION`s of their own, and two sections may share an address.
 - `dfs.py` forked with two changes: `import zx02` for the package-relative import, and the ZX0

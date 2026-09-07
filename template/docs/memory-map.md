@@ -7,7 +7,7 @@ end). They go stale the moment anything grows: take live numbers from the listin
 
 | Range | Bytes | Contents | Free |
 |---|---|---|---|
-| `&0000-&001C` | 29 | zero page, ours, wiped at boot: the depacker's six slots first (the pass-1 trap), then the rupture's and the loop's state. `GUARD &90` | 115 to `&90` |
+| `&0000-&000F` | 16 | zero page, ours - allocated by Baron from a `&00-&8F` pool, not laid out by hand (`main.6502`, and `../../docs/toolchain-baron.md`). Seventeen variables in sixteen bytes: the depacker's five are reused by the strip fill and then by `scroll`. Read the addresses off the `-v` listing, never assume them | the pass-1 trap), then the rupture's and the loop's state. `GUARD &90` | 115 to `&90` |
 | `&0090-&00FF` | | MOS and DFS zero page | - |
 | `&0100-&01FF` | | stack | - |
 | `&0200-&03FF` | | MOS vectors and workspace; `IRQ1V` (`&0204`) is ours outright | - |

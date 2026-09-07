@@ -134,7 +134,13 @@ Seeded from the template's own Layer 0, jsbeeb `B-DFS1.2` model, 2026-09-07
 
 ## Memory (Layer 0; take live figures from the listing)
 
-`docs/memory-map.md` has the table. In one line: zero page `&00-&1C` ours (guarded at `&90`),
+`docs/memory-map.md` has the table. In one line: zero page `&00-&0F` ours, and **allocated by
+Baron** from a `&00-&8F` pool rather than laid out by hand - declare a variable with `ZA_AUTO1`
+/ `ZA_AUTO2` and read its address off the `-v` listing; never hardcode one, and never let one
+decide the shape of the program (`IF v`, `SKIP v`, `org = v` are all refused). A routine the
+outside world enters needs `ZA_ENTRY`, an interrupt handler `ZA_INTERRUPT` - without it the
+allocator will happily put the handler's state on a byte the main loop is using, and says so
+with a warning first.
 code `&1900-&1DBD` (1,213 bytes; 1,264 with `MASTER=1`) below the screen at `&3000`, `&3000`
 the loader's staging area at boot, panel `&4A00-&53FF`, strip `&5800-&7FFF`. `&0E00-&18FF` is
 DFS's on a Model B and is free once the last load has returned; the template leaves it alone.
