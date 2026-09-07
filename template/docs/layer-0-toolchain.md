@@ -109,8 +109,9 @@ renders. The 13-16-cycle margins are for the emulator. A port that needs more ca
 blanking a second scanline, because the four logical-0 writes are 24 of blanking's 48 whatever
 else moves.
 
-**The allocator changed no behaviour** (2026-09-07, `scratchpad`'s `verify_dynamic.mjs` against
-both builds, both models): 100 fields in 100 frames, 50 loop passes in those 100 fields (the
+**The allocator changed no behaviour** (2026-09-07, `tools/verify_dynamic.mjs` against both
+builds, both models - it takes the addresses as arguments precisely because they move, and
+`tools/listing.py symbols` is where they come from): 100 fields in 100 frames, 50 loop passes in those 100 fields (the
 25 Hz lock), `scroll` unmoved when idle, `scroll` 0 -> 200 under 50 fields of X, and `&4A00`
 still byte-identical to `src/data/panel.bin`. Identical to the hand-allocated build, which is
 the only gate that means anything once the addresses have moved.
