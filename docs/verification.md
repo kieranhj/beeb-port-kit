@@ -258,16 +258,17 @@ How long a routine takes, exactly, with nothing added to the build. Paradroid's
    direction.
 3. Set an execute breakpoint at the start of the routine and one at the return site. Run to the
    first; read the cycle counter; run to the second; read again; subtract.
-4. **Read `elapsed_cycles` from `read_registers`, never `cycles_run`** - on jsbeeb-mcp 3.3.0 and
-   earlier, where `cycles_run` reports the number *requested*, not the number run. Fixed
-   upstream on 2026-09-07 (jsbeeb-mcp#25/#30, unreleased then): with the fix, `cycles_run` is
-   the real delta and the stop's registers carry `elapsed_cycles`, so the second call goes away.
-   `elapsed_cycles` is a free-running exact total with no 16-bit wrap either way, so reading it
-   is never wrong.
-5. **A run that starts with PC already on a breakpoint returns immediately with 0** - same two
-   versions, same fix (#26). Where it applies, the sweep is: read, *clear the breakpoint that
-   just fired*, run to the next. Set every site up front and walk them one per run; it costs two
-   calls a site.
+4. **On jsbeeb-mcp 3.4.0 and later, `cycles_run` is the cycles actually executed**, and the
+   registers reported at a breakpoint stop carry `elapsed_cycles`, so step 3's second call goes
+   away. **On 3.3.0 and earlier, never read `cycles_run`** - it reported the number *requested*,
+   not the number run - and take `elapsed_cycles` from `read_registers` instead. `elapsed_cycles`
+   is a free-running exact total with no 16-bit wrap either way, so it is never wrong on any
+   version, and it stays the safe default.
+5. **On 3.3.0 and earlier, a run that starts with PC already on a breakpoint returns immediately
+   with 0** (jsbeeb-mcp#26, fixed in 3.4.0). Where it applies, the sweep is: read, *clear the
+   breakpoint that just fired*, run to the next. Set every site up front and walk them one per
+   run; it costs two calls a site. On 3.4.0 the run continues from the stop, and a breakpoint hit
+   but not yet reported comes back as `stopped_reason` `pending_breakpoint` with `cycles_run` 0.
 6. **One site at a time** if you are patching stubs in rather than using breakpoints;
    instrumenting two reliably hung Paradroid's main loop.
 7. Emulation is deterministic, so one sample is exact for that state - but **average about 128

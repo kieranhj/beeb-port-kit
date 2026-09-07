@@ -169,8 +169,21 @@ from the request**, the kit's rule again). `scroll` 0 -> 200 in 50 fields of X.
   (`991304905c7b...`) never matched `panel.bin` on disc; the value above is what both models
   read back.
 - `run_for_cycles` from a PC already on a breakpoint returns 0 and the next call moves on
-  (jsbeeb-mcp 3.3.0; fixed upstream the next day, mattgodbolt/jsbeeb-mcp#26),
-  exactly as the kit's notes say; a three-breakpoint sweep costs two runs a stop.
+  (jsbeeb-mcp 3.3.0; fixed in 3.4.0, mattgodbolt/jsbeeb-mcp#26), exactly as the kit's notes
+  say; a three-breakpoint sweep costs two runs a stop. On 3.4.0 the run continues from the stop
+  and the sweep is one run a site.
+
+## jsbeeb-mcp 3.4.0 (2026-09-07)
+
+Upgraded from 3.3.0, which brought jsbeeb 1.24.1 -> 1.25.0 under the harnesses' feet. Re-ran
+`verify_dynamic.mjs` on both models: `{"fields":100,"frames":50,"scrollIdle":0,"scrollAfterX":200}`
+on `GAME.SSD` and `GAME-MASTER.SSD` alike, identical to the figures taken on 1.24.1. **The
+upgrade changed nothing this template can see.**
+
+`tools/jsbeeb_src.mjs` now finds jsbeeb instead of hard-coding an npx cache path, and prints
+`[jsbeeb <version>] <path>` before it imports, so a harness run says which emulator produced it.
+The addresses are hex: `node tools/verify_dynamic.mjs build/GAME.SSD 00 0C 02`. Decimal reads the
+wrong locations and returns zeros, which looks exactly like a regression.
 
 ## Not done
 

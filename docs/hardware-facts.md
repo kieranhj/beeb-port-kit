@@ -695,25 +695,33 @@ again.*
   two days; the test is to seed the byte before a SHIFT+BREAK autoboot, or to run something that
   writes over the area first.
   Measured: 2026-08-28 and 2026-08-30, jsbeeb. [Paradroid intro.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/intro.md)
-- **FIXED UPSTREAM, and true of every jsbeeb-mcp up to and including 3.3.0**: `cycles_run` was
-  the count *requested*, not the count run (a request for 600,000 that a breakpoint stopped
-  after 598 reported 600,000), and a run starting with the PC already on a breakpoint returned
-  `cycles_run` 0 having advanced nothing, the next call moving on. Both were reported from this
-  kit on 2026-09-07 (mattgodbolt/jsbeeb-mcp#25, #26) and fixed the same day in that repo's #30,
-  **unreleased at the time of writing - npm was still 3.3.0**. On a build that has the fix,
-  `cycles_run` is the elapsed delta, `completed` says whether the whole request ran, a stop says
-  why, and the registers at a stop carry `elapsed_cycles` and `frame_count` - so the second
-  `read_registers` this kit's procedures do is no longer needed. **Check your version before
-  trusting either behaviour, and delete this note when the fix is everywhere.**
+- **`run_for_cycles` reports what it actually ran, and runs on from a breakpoint - from
+  jsbeeb-mcp 3.4.0.** On 3.3.0 and earlier `cycles_run` was the count *requested*, not the count
+  run (a request for 600,000 that a breakpoint stopped after 598 reported 600,000), and a run
+  starting with the PC already on a breakpoint returned `cycles_run` 0 having advanced nothing.
+  Both were reported from this kit on 2026-09-07 (mattgodbolt/jsbeeb-mcp#25, #26), fixed in #30
+  and **released in 3.4.0 the same day**. On 3.4.0: `cycles_run` is the cycles actually executed;
+  a breakpoint sets `completed` false with `stopped_reason` `breakpoint`, and the registers at
+  the stop carry `elapsed_cycles`, so the second `read_registers` this kit's procedures used to
+  do is no longer needed; the next call runs on from where it stopped; and a breakpoint hit
+  during an earlier call that did not report it comes back first as `stopped_reason`
+  `pending_breakpoint` with `cycles_run` 0.
   Breakpoints DO fire under `run_for_cycles`; an older note saying otherwise was wrong.
-  Measured: 2026-08-20 (Paradroid), 2026-09-02 (Edge), 2026-09-07 (this kit, on 3.3.0). [Paradroid raster-timing.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/raster-timing.md) [Edge layer-2-display.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-2-display.md)
-- **`run_for_cycles` overruns its request after a breakpoint stop**, leaving the unspent budget
-  on the CPU: a 3,993,600-cycle request once ran 4,553,339 here, and jsbeeb-mcp's author
-  measured a 1,000-cycle request running 75,987 straight after a stop. It is a jsbeeb bug
-  (mattgodbolt/jsbeeb#1092), open at the time of writing, and it is why **fields are counted
-  from `elapsed_cycles` and never from the number requested** - a rule this kit had for a year
-  before it had a cause.
-  Measured: 2026-09-06 (this kit), 2026-09-07 (jsbeeb-mcp#30's notes).
+  **Do not step frames with `run_for_cycles`**: a frame is 40,000 cycles with interlace on (the
+  MCP default) but 39,936 with it off, so a fixed cycle step drifts against the display. Use
+  `run_frames`.
+  Measured: 2026-08-20 (Paradroid), 2026-09-02 (Edge), 2026-09-07 (this kit, on 3.3.0). The
+  3.4.0 behaviour is read from that release's own tool descriptions, over stdio, on 2026-09-07;
+  it has not yet been re-measured by running it. [Paradroid raster-timing.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/raster-timing.md) [Edge layer-2-display.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-2-display.md)
+- **`run_for_cycles` used to overrun its request after a breakpoint stop**, leaving the unspent
+  budget on the CPU: a 3,993,600-cycle request once ran 4,553,339 here, and jsbeeb-mcp's author
+  measured a 1,000-cycle request running 75,987 straight after a stop. It was a jsbeeb bug
+  (mattgodbolt/jsbeeb#1092), **fixed in jsbeeb 1.25.0 and shipped in jsbeeb-mcp 3.4.0**
+  (jsbeeb-mcp#32). Keep counting fields **from `elapsed_cycles` and never from the number
+  requested** anyway - the rule cost nothing, this kit had it for a year before it had a cause,
+  and it is why the overrun never corrupted a measurement.
+  Measured: 2026-09-06 (this kit, on 3.3.0), 2026-09-07 (jsbeeb-mcp#30's notes); the fix has not
+  yet been re-measured here.
 - **A `run_for_cycles` snapshot can stop the CPU mid-routine**: a buffer dump caught a half-written
   strip and reported 16 differing bytes that were not a bug; an oracle redraw of >500,000 cycles was
   sampled before it finished. Idle a few frames after releasing a key; take both halves of a diff
@@ -730,7 +738,11 @@ again.*
   state can be restored into ANY session of the same model, including one that never loaded the
   disc. **A key held with `key_down` stays held across a restore**: restoring a state saved
   before the key, then running 50 frames, scrolled the play area exactly as if the key were
-  still down - because it was. `key_up` it yourself as part of the restore.
+  still down - because it was. `key_up` it yourself as part of the restore - or, **from
+  jsbeeb-mcp 3.4.0, `release_all_keys`**, which also drops typing left pending by an interrupted
+  `type_input`. **`keyboard_state`** reports every key the machine currently sees held, with its
+  matrix column and row, its name, and on a BBC its internal and INKEY numbers; check it before
+  any test that assumes nothing is held (jsbeeb-mcp#33).
   Measured: 2026-09-07, jsbeeb MCP 3.3.0 / jsbeeb 1.24.1, the kit's template. Save at the idle
   state; hold X; 50 frames -> `scroll` 200, `frame_count` 113. Restore -> `scroll` 0,
   `elapsed_cycles` back to its saved value to the cycle, PC and A/X/Y identical. 50 frames again
@@ -740,6 +752,10 @@ again.*
 - **`read_memory` returns whatever bank is paged at that instant.** A sample taken inside a sprite
   draw returned bank 5's empty space, which read exactly like the player having been wiped. Check
   `&F4` first. Reading shadow RAM from the CPU side likewise follows the X bit.
+  **From jsbeeb-mcp 3.4.0 you do not have to guess** (jsbeeb-mcp#35): `read_memory` and
+  `save_memory` report the paging they read under - `romsel`, and `acccon` on a Master - and take
+  `bank` or `shadow` to read a particular one whatever is paged in. Prefer that to reading `&F4`
+  and hoping.
   Measured: Layer 7 (Paradroid combat, 2026-08), 2026-09-04 (Edge titles). [Paradroid layer-7-combat.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-7-combat.md) [Edge layer-6e-titles.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-6e-titles.md)
 - **jsbeeb WILL boot an unpadded SSD, and padding is not a build step.** An earlier note claimed
   it would not and blamed a hang in the DFS FDC poll at `&ACAE` on an image ending mid-track; KC

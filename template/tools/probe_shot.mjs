@@ -23,9 +23,8 @@
 // are seen (BUGS.md #1). Prints scroll, field_count and frame_count.
 import { writeFileSync } from "node:fs";
 
-const DEFAULT_SRC = "C:/Users/khcon/AppData/Local/npm-cache/_npx/e76f2a7d329553db/node_modules/jsbeeb/src";
-const src = (process.env.JSBEEB_SRC || DEFAULT_SRC).split("\\").join("/");
-const { MachineSession } = await import(`file:///${src}/machine-session.js`);
+import { loadMachineSession } from "./jsbeeb_src.mjs";
+const MachineSession = await loadMachineSession();
 
 const [ssd, out, mode] = process.argv.slice(2);
 const PANEL_LAST_LINE = 0x4a00 + 3 * 640 + 7;   // PANEL_ADDR + row 3 + scan 7

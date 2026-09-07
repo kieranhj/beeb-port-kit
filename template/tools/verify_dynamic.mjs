@@ -33,9 +33,8 @@
 //   {"fields":100,"frames":50,"scrollIdle":0,"scrollAfterX":200}
 import { writeFileSync } from "node:fs";
 
-const DEFAULT_SRC = "C:/Users/khcon/AppData/Local/npm-cache/_npx/e76f2a7d329553db/node_modules/jsbeeb/src";
-const src = (process.env.JSBEEB_SRC || DEFAULT_SRC).split("\\").join("/");
-const { MachineSession } = await import(`file:///${src}/machine-session.js`);
+import { loadMachineSession } from "./jsbeeb_src.mjs";
+const MachineSession = await loadMachineSession();
 
 const [ssd, scrollA, fieldA, frameA, model, panelOut] = process.argv.slice(2);
 if (!ssd || !scrollA || !fieldA || !frameA) {

@@ -15,6 +15,11 @@ from the System VIA, so the internal matrix number is what the code carries.
 **Floor:** OSBYTE 121 will not report keys 0-2, so **SHIFT (0) and CTRL (1) go through INKEY**
 **INKEY to internal:** internal = the INKEY index less one (Z is INKEY -98 and internal 97)
 **First:** `*FX229,1`, or BASIC eats ESCAPE before it can be measured
+**Shortcut on jsbeeb-mcp >= 3.4.0:** `key_down` takes `key` (name), `internal`, `inkey`, or `col`
+and `row`, and **reports the matrix keys that went down, with name and both numbers** - so a name
+can be measured against its numbers in one call, without the BASIC scan below. Keep the scan for
+what the *machine's own* scan sees, and to confirm the MCP's mapping. `keyboard_state` reports
+what is held; `release_all_keys` clears it (jsbeeb-mcp#33, #34).
 
 ## Steps
 

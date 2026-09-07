@@ -481,7 +481,11 @@ order of importance:
    instruction that matters most.
 2. **The emulator is connected as an MCP server** (`jsbeeb-mcp`, `.mcp.json` in the repo), so the
    assistant can boot the disc, run frames, read memory, set breakpoints and capture sound without
-   asking. Every measured fact in this kit was taken that way.
+   asking. Every measured fact in this kit was taken that way. **Require 3.4.0 or later**: it is
+   the first release where `cycles_run` reports what it ran, where a run after a breakpoint stop
+   does not overrun, where `read_memory` can be pointed at a bank instead of inferred from `&F4`,
+   and where `release_all_keys` and `keyboard_state` exist. `docs/hardware-facts.md` says which
+   notes apply only below it.
 3. **The owner decides, the assistant builds.** Decisions are asked as numbered questions and
    answered before code; the answers go in `decisions.md`. Taste calls (a speed, a colour, an
    auto-fire rate) are played, not calculated, and the doc says whose number it is.
