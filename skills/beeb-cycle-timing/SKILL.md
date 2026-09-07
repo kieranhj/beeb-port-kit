@@ -11,7 +11,7 @@ deterministic, so one sample is exact for that state.
 
 **Clock:** the MCP counts **2 MHz** CPU cycles. VIA timers count at 1 MHz (half that), a scanline is 128 cycles, a 50 Hz field is **39,936** with interlace off (the MOS default frame is 40,000)
 **Read this:** `elapsed_cycles` from `read_registers`
-**Never read this:** `cycles_run` - when a breakpoint fires it reports the number *requested*, not run
+**Never read this:** `cycles_run` on jsbeeb-mcp <= 3.3.0 - when a breakpoint fires it reports the number *requested*, not run (fixed upstream 2026-09-07, jsbeeb-mcp#25; `elapsed_cycles` is right on every version)
 
 ## Steps
 

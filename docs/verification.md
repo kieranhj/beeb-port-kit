@@ -258,12 +258,16 @@ How long a routine takes, exactly, with nothing added to the build. Paradroid's
    direction.
 3. Set an execute breakpoint at the start of the routine and one at the return site. Run to the
    first; read the cycle counter; run to the second; read again; subtract.
-4. **Read `elapsed_cycles` from `read_registers`, never `cycles_run`.** When a breakpoint fires,
-   `run_for_cycles` reports the number *requested*, not the number run. `elapsed_cycles` is a
-   free-running exact total with no 16-bit wrap.
-5. **A run that starts with PC already on a breakpoint returns immediately with 0.** The sweep is
-   therefore: read, *clear the breakpoint that just fired*, run to the next. Set every site up
-   front and walk them one per run; it costs two calls a site.
+4. **Read `elapsed_cycles` from `read_registers`, never `cycles_run`** - on jsbeeb-mcp 3.3.0 and
+   earlier, where `cycles_run` reports the number *requested*, not the number run. Fixed
+   upstream on 2026-09-07 (jsbeeb-mcp#25/#30, unreleased then): with the fix, `cycles_run` is
+   the real delta and the stop's registers carry `elapsed_cycles`, so the second call goes away.
+   `elapsed_cycles` is a free-running exact total with no 16-bit wrap either way, so reading it
+   is never wrong.
+5. **A run that starts with PC already on a breakpoint returns immediately with 0** - same two
+   versions, same fix (#26). Where it applies, the sweep is: read, *clear the breakpoint that
+   just fired*, run to the next. Set every site up front and walk them one per run; it costs two
+   calls a site.
 6. **One site at a time** if you are patching stubs in rather than using breakpoints;
    instrumenting two reliably hung Paradroid's main loop.
 7. Emulation is deterministic, so one sample is exact for that state - but **average about 128

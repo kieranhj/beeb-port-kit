@@ -695,13 +695,25 @@ again.*
   two days; the test is to seed the byte before a SHIFT+BREAK autoboot, or to run something that
   writes over the area first.
   Measured: 2026-08-28 and 2026-08-30, jsbeeb. [Paradroid intro.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/intro.md)
-- **`cycles_run` is NOT the actual count when a breakpoint fires**: it returns the number
-  requested. Use `elapsed_cycles` from `read_registers`; that one is exact.
-  Measured: 2026-08-20. [Paradroid raster-timing.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/raster-timing.md)
-- **A run that starts with the PC already on a breakpoint returns immediately with `cycles_run` 0**
-  (the next call moves on). Read, clear the breakpoint that just fired, run. Breakpoints DO fire
-  under `run_for_cycles`; an older note saying otherwise was wrong.
-  Measured: 2026-08-20 (Paradroid), 2026-09-02 (Edge). [Paradroid raster-timing.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/raster-timing.md) [Edge layer-2-display.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-2-display.md)
+- **FIXED UPSTREAM, and true of every jsbeeb-mcp up to and including 3.3.0**: `cycles_run` was
+  the count *requested*, not the count run (a request for 600,000 that a breakpoint stopped
+  after 598 reported 600,000), and a run starting with the PC already on a breakpoint returned
+  `cycles_run` 0 having advanced nothing, the next call moving on. Both were reported from this
+  kit on 2026-09-07 (mattgodbolt/jsbeeb-mcp#25, #26) and fixed the same day in that repo's #30,
+  **unreleased at the time of writing - npm was still 3.3.0**. On a build that has the fix,
+  `cycles_run` is the elapsed delta, `completed` says whether the whole request ran, a stop says
+  why, and the registers at a stop carry `elapsed_cycles` and `frame_count` - so the second
+  `read_registers` this kit's procedures do is no longer needed. **Check your version before
+  trusting either behaviour, and delete this note when the fix is everywhere.**
+  Breakpoints DO fire under `run_for_cycles`; an older note saying otherwise was wrong.
+  Measured: 2026-08-20 (Paradroid), 2026-09-02 (Edge), 2026-09-07 (this kit, on 3.3.0). [Paradroid raster-timing.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/raster-timing.md) [Edge layer-2-display.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-2-display.md)
+- **`run_for_cycles` overruns its request after a breakpoint stop**, leaving the unspent budget
+  on the CPU: a 3,993,600-cycle request once ran 4,553,339 here, and jsbeeb-mcp's author
+  measured a 1,000-cycle request running 75,987 straight after a stop. It is a jsbeeb bug
+  (mattgodbolt/jsbeeb#1092), open at the time of writing, and it is why **fields are counted
+  from `elapsed_cycles` and never from the number requested** - a rule this kit had for a year
+  before it had a cause.
+  Measured: 2026-09-06 (this kit), 2026-09-07 (jsbeeb-mcp#30's notes).
 - **A `run_for_cycles` snapshot can stop the CPU mid-routine**: a buffer dump caught a half-written
   strip and reported 16 differing bytes that were not a bug; an oracle redraw of >500,000 cycles was
   sampled before it finished. Idle a few frames after releasing a key; take both halves of a diff

@@ -168,7 +168,8 @@ from the request**, the kit's rule again). `scroll` 0 -> 200 in 50 fields of X.
   end by booting this disc; `../../lib/zx02depack.6502` has the numbers. The earlier row's md5
   (`991304905c7b...`) never matched `panel.bin` on disc; the value above is what both models
   read back.
-- `run_for_cycles` from a PC already on a breakpoint returns 0 and the next call moves on,
+- `run_for_cycles` from a PC already on a breakpoint returns 0 and the next call moves on
+  (jsbeeb-mcp 3.3.0; fixed upstream the next day, mattgodbolt/jsbeeb-mcp#26),
   exactly as the kit's notes say; a three-breakpoint sweep costs two runs a stop.
 
 ## Not done
