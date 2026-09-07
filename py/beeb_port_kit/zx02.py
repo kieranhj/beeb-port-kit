@@ -10,7 +10,7 @@ both, so a project picks one and forks that file.
 
 WHY ZX02 AND NOT ZX0, measured 2026-09-07 over 43 real data files from both
 ports (242,481 bytes: sprites, tiles, chars, music, loading screens, panels):
-  - the depacker is 131 bytes, against zx0depack.asm's 257;
+  - the depacker is 131 bytes, against zx0depack.6502's 257;
   - it decodes 2.14x faster - 53.9 cycles/byte against 115.4, every file
     between 2.04x and 2.19x, measured by stepping both depackers in py65 and
     comparing the output with the source file byte for byte;
@@ -30,14 +30,14 @@ Saukas' BSD-3 ZX0) in its DEFAULT mode - forwards, elias_ending_bit = 0,
 elias_short_code = 0, zx1_mode = 0, initial offset 1. `zx02.exe -f` with no
 other flag produces exactly what compress() produces; py/tests/test_zx02.py
 asserts that on every file it can find. Change a flag and you must change
-lib/zx02depack.asm, which decodes exactly this.
+lib/zx02depack.6502, which decodes exactly this.
 
 compress() is O(n * max_offset) pure Python and takes seconds on a 16K bank;
 make_disc.py calls zx02.exe for the real streams and uses this module as the
 oracle. For a file already compressed by the exe, decompress() is all you
 need.
 
-THE FORMAT, as the 6502 stream reader sees it (see lib/zx02depack.asm):
+THE FORMAT, as the 6502 stream reader sees it (see lib/zx02depack.6502):
   - the stream opens in a literal run (no flag bit);
   - after literals, flag 0 = copy from the LAST offset, 1 = new offset;
   - after any copy,  flag 0 = literals,                1 = new offset;
@@ -259,7 +259,7 @@ def compress(input_data, skip=0, offset_limit=MAX_OFFSET_ZX02):
 
 
 def decompress(z):
-    """Round-trip verifier: decodes exactly what lib/zx02depack.asm decodes,
+    """Round-trip verifier: decodes exactly what lib/zx02depack.6502 decodes,
     8-bit wraparound included."""
     out = bytearray()
     pos = 0

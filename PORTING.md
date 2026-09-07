@@ -8,7 +8,8 @@ reused the first's process wholesale, and that is why it took a week where the f
 What the second port still had to rediscover is what this kit packages.
 
 It is written to be read by a coding agent, with a human directing it, and it assumes the
-agent knows 6502 and BeebASM. That is why it is dense: an agent that has read all of this
+agent knows 6502 and BeebASM (the kit assembles with Baron, its successor - see
+`docs/toolchain-baron.md`). That is why it is dense: an agent that has read all of this
 measures instead of guessing. A human reader wants the one-page summary in
 [`README.md`](README.md) instead. The hardware numbers are in
 [`docs/hardware-facts.md`](docs/hardware-facts.md), the mistakes in
@@ -229,7 +230,7 @@ likewise inside the current cycle as long as the row they name has not already p
 practice means the previous cycle whenever the row is early; R12/R13 are latched at cycle start
 so always the previous cycle; R5 never near a boundary. Fires that blank or unblank
 must land in horizontal blanking, and the phase is measured with a cycle counter modulo the
-scanline. Both ports' `rupture.asm` carry the table in their headers.
+scanline. Both ports' `rupture.6502` carry the table in their headers.
 
 A rupture with one shape is easy to hand over between screens. A rupture with **two** shapes (Edge
 Grinder's titles use four cycles and switch the display bank mid-frame) needs the switch made
@@ -310,10 +311,10 @@ to 7.
 ### 5.7 The disc: compress everything, one resident depacker, load in order
 
 Every data file ships compressed and the loader unpacks it. Boot time in Paradroid went from
-14.4 s to 10.4 s; the lever is sectors, not file count. Use **ZX02** (`lib/zx02depack.asm`,
+14.4 s to 10.4 s; the lever is sectors, not file count. Use **ZX02** (`lib/zx02depack.6502`,
 `py/zx02.py`): 131 bytes of depacker against ZX0's 257 and 2.14x the decode speed for +0.11% on
 the packed size, measured 2026-09-07 over both ports' data. The two shipping ports are ZX0 discs
-because they predate the measurement; `lib/zx0depack.asm` and `py/zx0.py` stay for them. Pick one
+because they predate the measurement; `lib/zx0depack.6502` and `py/zx0.py` stay for them. Pick one
 format for a project and never mix them - nothing checks that the disc and the depacker agree. There is one depacker and it is resident;
 Paradroid had two copies for a while and loaded one of them twice a session. A stream may not be
 overtaken by its own output, so an in-place unpack needs a measured margin and the build should
@@ -366,7 +367,7 @@ rip_*.py      original data  ->  PNG in tools/output/       for eyes
 export_*.py   original data  ->  src/data/*.bin, *.asm      committed
 render_*.py   src/data       ->  PNG                        the check that the export is right
 verify_*.py   anything       ->  pass/fail                  never against itself
-make_disc.py  beebasm's SSD  ->  the bootable disc          compress, relocate, order, pad
+make_disc.py  the assembler's SSD -> the bootable disc      compress, relocate, order, pad
 ```
 
 Rules that came out of using it:
@@ -381,7 +382,8 @@ Rules that came out of using it:
   write the image, refuses a stream that overlaps its own output, and lays files out in boot
   order.
 - The build stamps `!BOOT` with the time and the flags, and the release build is a
-  command-line symbol, because BeebASM has no `IFDEF`.
+  command-line symbol. (BeebASM had no `IFDEF` and no choice; Baron has `DEFINED()`, and the
+  kit still passes the flags every time so that a build says what it is.)
 
 The reusable halves of these tools are in this kit's [`py/`](py/) directory. Fork them.
 

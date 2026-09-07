@@ -71,18 +71,19 @@ area with all eight colours on screen.
 
 ```
 PORTING.md              the playbook: rules, artefacts, the layer plan, the patterns that transfer
-docs/hardware-facts.md  measured facts about the CRTC, VIAs, MOS, DFS, BeebASM and the emulators
+docs/hardware-facts.md  measured facts about the CRTC, VIAs, MOS, DFS, the assemblers and the
+                        emulators
 docs/gotchas.md         the bug classes that recurred, with the instance and the rule
 docs/verification.md    the measuring and checking procedures, by hand or through the MCP
 skills/                 the procedures as Claude Code skills; copy into .claude/skills/
 lib/                    6502 includes that were identical in both ports: depacker, IRQ owner,
-                        constants, keyboard read, loader
+                        constants, keyboard read, loader. Baron syntax (the assembler the kit
+                        defaults to now); docs/toolchain-baron.md has the BeebASM delta
 py/                     the Python halves that were identical: ZX02 and ZX0, DFS image builder,
                         mode packers, C64 readers, the art sheet pipeline
 template/               a starter project that boots to a panel above a play area with a
                         rupture, its own interrupt handler, direct keyboard and a compressed
-                        disc. Assembles with Baron (docs/toolchain-baron.md); lib/ is still
-                        BeebASM syntax, which is six lines' difference
+                        disc
 ```
 
 Everything in `lib/` and `py/` is meant to be **forked into your project and hacked**, not

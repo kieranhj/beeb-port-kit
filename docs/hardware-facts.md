@@ -603,7 +603,7 @@ property of the whole IRQ path and drifted ~6 us later than the calibration as t
   Measured: 2026-09-07, both depackers stepped in py65 over 43 real data files from both ports
   (242,481 bytes), each decode compared with the source file byte for byte; end to end by booting
   the kit template's ZX02 disc in jsbeeb (B-DFS1.2 and Master) and reading `&4A00` back.
-  [lib/zx02depack.asm](../lib/zx02depack.asm) [dmsc/zx02](https://github.com/dmsc/zx02)
+  [lib/zx02depack.6502](../lib/zx02depack.6502) [dmsc/zx02](https://github.com/dmsc/zx02)
 - **Both formats unpack forwards; a stream may share memory with its output only while the reader stays
   ahead of the writer.** The rule of thumb "the stream must end where the output ends" is not enough:
   the required gap is a property of THIS stream, because a literal run copies 1:1 plus flag bits and
@@ -633,9 +633,10 @@ property of the whole IRQ path and drifted ~6 us later than the calibration as t
 
 ## 10. beebasm (1.11) gotchas
 
-*The kit's template assembles with Baron now, and four of these do not apply to it -
-`docs/toolchain-baron.md` says which and what replaced them. They stay here because the two
-shipping ports are beebasm projects, and `lib/` is still beebasm syntax.*
+*The kit assembles with Baron now - `lib/` and `template/` both - and four of these do not apply
+to it; `docs/toolchain-baron.md` says which and what replaced them. They stay here because the
+two shipping ports are beebasm projects, and because a port that goes back to beebasm meets them
+again.*
 
 - **No `IFDEF`, and a symbol defined twice is an error**, so a source file cannot carry a default
   for a command-line symbol: every invocation must pass `-D RELEASE=0` (and every other such flag)

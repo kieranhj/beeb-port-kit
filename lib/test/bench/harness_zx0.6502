@@ -1,18 +1,19 @@
 \ ZX0 depacker, wrapped for bench_depack.py: set the two pointers, unpack
-\ STREAM to OUT, stop. Assembled by the harness with -D STREAM= and -D OUT=, FROM THE KIT ROOT;
+\ STREAM to OUT, stop. Assembled by the harness with -D STREAM= and -D OUT=, from the kit root;
 \ the 23-byte prologue is subtracted from the size it reports.
 
-ORG &70
+SECTION zeropage, org = &70, guard = &100
 .zxsrc SKIP 2
 .zxdst SKIP 2
 .zxofs SKIP 2
 .zxlen SKIP 2
 .zxbit SKIP 1
 .zxwrk SKIP 2
+ENDSECTION
 
-INCLUDE "lib/zx0depack.asm"
+INCLUDE "../../zx0depack.6502"
 
-ORG &2000
+SECTION Depack, org = &2000, filename = "ZX0"
 .start
   LDA #LO(STREAM) : STA zxsrc
   LDA #HI(STREAM) : STA zxsrc+1
@@ -24,4 +25,4 @@ ORG &2000
 .zx0_unpack
   ZX0_DEPACKER
 .end
-SAVE "lib/test/bench/build/zx0.bin", start, end
+ENDSECTION

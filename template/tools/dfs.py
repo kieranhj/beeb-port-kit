@@ -42,7 +42,7 @@ where main.asm's loader stages each stream and what order !BOOT reads the
 files in - and stay in the project's make_disc.py. examples/make_disc_example.py
 shows the shape with two files.
 
-WHICH COMPRESSOR. ZX02 (tools/zx02.py, src/lib/zx02depack.asm): half the
+WHICH COMPRESSOR. ZX02 (tools/zx02.py, src/lib/zx02depack.6502): half the
 depacker and twice the speed of ZX0 for +0.11% on the packed size, measured
 2026-09-07 over both shipping ports' data - zx02.py's header has the numbers.
 The disc and the depacker MUST agree on the format and nothing checks that

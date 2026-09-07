@@ -1,7 +1,7 @@
 \ ******************************************************************
-\ *	beeb.h.asm - the BBC Micro hardware constants both ports carried
+\ *	beeb.h.6502 - the BBC Micro hardware constants both ports carried
 \ ******************************************************************
-\ *	beeb-port-kit, MIT, Kieran Connell 2026. BeebASM syntax, plain 6502.
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, plain 6502.
 \ *
 \ *	WHAT IT IS. The forty-odd symbols that main.asm defined in both
 \ *	C64->BBC ports: the CRTC, the Video ULA and the VideoNuLA, the two
@@ -50,6 +50,19 @@
 \ *
 \ *	Fork this into your project; keep this header.
 \ ******************************************************************
+
+\ ---- ASSERT, which Baron does not have --------------------------
+\ BeebASM had ASSERT as a directive; Baron does not, so here it is as a
+\ macro. A failure is reported at the ERROR below, with "Note: Expanded
+\ from here" naming the assertion's own line. Two shapes: with a
+\ message and without.
+MACRO ASSERT c
+    IF NOT(c) : ERROR "assertion failed" : ENDIF
+ENDMACRO
+
+MACRO ASSERT c, msg
+    IF NOT(c) : ERROR msg : ENDIF
+ENDMACRO
 
 \ ---- MOS entry points ----------------------------------------
 \ Paradroid spells these OSBYTE, OSWRCH, OSCLI, OSASCI.
@@ -149,7 +162,7 @@ USR_VIA_IER   = &FE6E
 \ ---- the keyboard, through the System VIA -------------------
 \ Port A carries the key number out (PA0-PA3 column, PA4-PA6 row) and
 \ PA7 answers; latch line 3 is the keyboard's write-enable, and dropping
-\ it stops the hardware's free-running scan. See keydown.asm.
+\ it stops the hardware's free-running scan. See keydown.6502.
 KBD_PORTB     = SYS_VIA_ORB
 KBD_DDRA      = SYS_VIA_DDRA
 KBD_ORA       = SYS_VIA_ORA_NH

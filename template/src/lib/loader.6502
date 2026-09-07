@@ -1,7 +1,7 @@
 \ ******************************************************************
-\ *	loader.asm - OSFILE a packed stream into a staging area, unpack it out
+\ *	loader.6502 - OSFILE a packed stream into a staging area, unpack it out
 \ ******************************************************************
-\ *	beeb-port-kit, MIT, Kieran Connell 2026. BeebASM syntax, plain 6502.
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, plain 6502.
 \ *
 \ *	WHAT IT IS. Edge's boot loader, generalised: every data file on the
 \ *	disc ships compressed with a catalogue load address the disc
@@ -10,7 +10,7 @@
 \ *	has the DFS ROM paged in at &8000 while it works, so a bank's bytes
 \ *	would land in the ROM socket, and on a Master HAZEL is the filing
 \ *	system's own workspace. So each stages in RAM and is unpacked from
-\ *	there. ALL OF IT RUNS BEFORE install_irq (irq.asm): the DFS needs
+\ *	there. ALL OF IT RUNS BEFORE install_irq (irq.6502): the DFS needs
 \ *	the MOS's interrupt.
 \ *
 \ *	WHERE IT CAME FROM.
@@ -35,7 +35,7 @@
 \ *	    was the second bank landing on the first).
 \ *	  - Sideways RAM is written through ROMSEL alone; a Solidisk-style
 \ *	    board needing its write-enable latches is refused, not driven
-\ *	    (Paradroid swram_probe.asm, KC 2026-08-29).
+\ *	    (Paradroid swram_probe.6502, KC 2026-08-29).
 \ *	  - Writing &F4 as well as &FE30 before the load matters: the DFS
 \ *	    pages its ROM in over the bank and the MOS restores ROMSEL from
 \ *	    &F4 afterwards, so the unpack lands in the bank named there.
@@ -56,9 +56,9 @@
 \ *	    Do it FIRST, before anything can be broken into.
 \ *
 \ *	THE INCLUDER DEFINES, before this file is included:
-\ *	  zxsrc, zxdst (ZP)   the depacker's pointers (zx02depack.asm)
+\ *	  zxsrc, zxdst (ZP)   the depacker's pointers (zx02depack.6502)
 \ *	  zx_unpack           the depacker's entry, whichever depacker that
-\ *	                      is: zx02depack.asm for a new port, zx0depack.asm
+\ *	                      is: zx02depack.6502 for a new port, zx0depack.6502
 \ *	                      for a ZX0 disc. It was called zx0_unpack before
 \ *	                      2026-09-07 and still is in the two shipping ports.
 \ *	  LOADER_STAGE        the page-aligned address streams stage at for
@@ -67,7 +67,7 @@
 \ *	                      while the loading picture is up in main.
 \ *	                      Paradroid: DEPK_STREAM = &3200 in the
 \ *	                      framebuffer, blanked. It must not overlap the
-\ *	                      output (the in-place rule, zx02depack.asm).
+\ *	                      output (the in-place rule, zx02depack.6502).
 \ *	  MASTER              0 or 1: assembles load_hazel and unpack_andy.
 \ *	The filenames are the includer's: CR-terminated strings, the
 \ *	address in A/Y.

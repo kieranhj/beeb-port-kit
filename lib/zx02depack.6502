@@ -1,14 +1,14 @@
 \ ******************************************************************
-\ *	zx02depack.asm - a ZX02 decompressor, as a macro
+\ *	zx02depack.6502 - a ZX02 decompressor, as a macro
 \ ******************************************************************
-\ *	beeb-port-kit, MIT, Kieran Connell 2026. BeebASM syntax, plain 6502.
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, plain 6502.
 \ *
 \ *	WHAT IT IS. The depacker for the DEFAULT output of Daniel Serpell's
 \ *	ZX02 (MIT, https://github.com/dmsc/zx02), the 6502-tuned fork of
 \ *	Einar Saukas's ZX0: forwards, interlaced Elias gamma capped at 8
 \ *	bits, POSITIVE offsets, gamma terminated by a 0. 131 bytes, ~54
 \ *	cycles per byte of output. THIS IS WHAT NEW PORTS USE.
-\ *	zx0depack.asm stays beside it because the two shipping ports are
+\ *	zx0depack.6502 stays beside it because the two shipping ports are
 \ *	ZX0 discs; the formats are not interchangeable, so a project picks
 \ *	one depacker and one compressor and never mixes them.
 \ *
@@ -16,14 +16,14 @@
 \ *	dmsc's zx02-optim.asm (the recommended one of his five decoders),
 \ *	with the ZP names changed to the kit's and the assemble-time init
 \ *	block replaced by code, so that zxsrc/zxdst can be set at run time
-\ *	by loader.asm. No algorithmic change.
+\ *	by loader.6502. No algorithmic change.
 \ *
 \ *	WHAT WAS MEASURED (2026-09-07, this kit, py65 + beebasm). 43 real
 \ *	data files from the two shipping ports - sprites, tiles, chars,
 \ *	music, loading screens, panels, 242,481 bytes in all - compressed
 \ *	with both compressors and both streams stepped through a 6502
 \ *	simulator, the output compared with the source file byte for byte:
-\ *	  - SIZE:  131 bytes, against zx0depack.asm's 257 (both measured
+\ *	  - SIZE:  131 bytes, against zx0depack.6502's 257 (both measured
 \ *	           out of beebasm, not counted by eye).
 \ *	  - SPEED: 53.9 cycles/byte against 115.4 - 2.14x, and no file in
 \ *	           the corpus outside 2.04x..2.19x. A 20K loading screen
@@ -90,13 +90,18 @@
 \ *	Then, at the address the depacker is to live:
 \ *	  .zx_unpack
 \ *	  ZX02_DEPACKER
-\ *	loader.asm jumps to `zx_unpack`, so use that label unless you are
+\ *	loader.6502 jumps to `zx_unpack`, so use that label unless you are
 \ *	not using the loader.
 \ *
-\ *	THE BEEBASM PASS-1 TRAP (Edge, docs/layer-9-loader.md). The zero-page
-\ *	symbols MUST be defined before the first instruction that uses one -
+\ *	THE BEEBASM PASS-1 TRAP, WHICH BARON DOES NOT HAVE. Baron
+\ *	assembles to convergence, so a forward-referenced zero-page symbol
+\ *	is still assembled as zero page - MEASURED 2026-09-07,
+\ *	docs/toolchain-baron.md. Declare them in zero page with the rest of
+\ *	your zero page anyway: it reads better, and a port that goes back to
+\ *	BeebASM needs it, because under BeebASM the zero-page
+\ *	symbols had to be defined before the first instruction that uses one -
 \ *	which is the loader's, not this file's, if the loader is included
-\ *	first. beebasm assembles an undefined symbol as an ABSOLUTE address
+\ *	first. it assembled an undefined symbol as an ABSOLUTE address
 \ *	in pass 1 and then errors on the size change in pass 2 ("branch out
 \ *	of range" or a bad ASSERT, never a clear message). Declare them in
 \ *	zero page with the rest of your zero page, and ASSERT they are below

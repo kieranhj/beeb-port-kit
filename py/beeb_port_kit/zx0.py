@@ -10,7 +10,7 @@ Proven: every stream on both shipping discs round-trips through decompress()
 before the image is written, and the streams compress() produces are
 byte-identical to the reference zx0.exe's (make_disc.py checks the exe's
 output against decompress() on every build). The 6502 depacker in
-lib/zx0depack.asm decodes exactly this format.
+lib/zx0depack.6502 decodes exactly this format.
 Fork this into your project's tools/; keep this header.
 
 Ported line-for-line from the reference C (optimize.c + compress.c,

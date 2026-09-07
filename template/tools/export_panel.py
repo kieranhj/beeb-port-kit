@@ -22,7 +22,7 @@ writes (96 cycles) against 48 cycles of horizontal blanking, so twelve of
 them land in this line's DISPLAYED part. Those twelve are logicals 1-3,
 which a line of logical 0 never looks up; the four for logical 0 land in
 its blanking. Any other colour on this line would show the switch as a
-glitch at the beam (src/rupture.asm, docs/layer-0-toolchain.md). It reads
+glitch at the beam (src/rupture.6502, docs/layer-0-toolchain.md). It reads
 as black, the panel's colour 0.
 
 MODE 1 byte layout (beeb-port-kit docs/hardware-facts.md, measured): four

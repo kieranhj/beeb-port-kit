@@ -15,7 +15,7 @@
 \ *
 \ *	Geometry is Paradroid's (panel &4A00, strip &5800-&7FFF, 10K wrap,
 \ *	R1 = 80) because its T1 constants were measured for it; the frame
-\ *	shape is Edge Grinder's two cycles. See src/rupture.asm.
+\ *	shape is Edge Grinder's two cycles. See src/rupture.6502.
 \ *
 \ *	Build symbols, passed with -D on every invocation. Baron has
 \ *	DEFINED(), so a default could live here; the build scripts pass all
@@ -44,8 +44,8 @@ DEBUG_ANY     = 0
 VERSION_LINE  = "template v0.0 2026-09-07"
 
 \ ---- what the forked lib files want defined -------------------------
-IRQ_UNINSTALL = 0               ; irq.asm: never hands the machine back
-LOADER_STAGE  = &3000           ; loader.asm: streams stage in the blanked
+IRQ_UNINSTALL = 0               ; irq.6502: never hands the machine back
+LOADER_STAGE  = &3000           ; loader.6502: streams stage in the blanked
                                 ; screen, below everything they unpack to
 
 \ ---- geometry: Paradroid's -----------------------------------------
@@ -85,7 +85,7 @@ R8_BLANK = &30                  ; display-skew bits = non-display
 \ ---- the two palettes: the panel's four physical colours and the
 \ play strip's OTHER four, so all eight MODE 1 colours are on screen at
 \ once (decision 4). Physical numbers: 0 black 1 red 2 green 3 yellow
-\ 4 blue 5 magenta 6 cyan 7 white. The tables are in rupture.asm.
+\ 4 blue 5 magenta 6 cyan 7 white. The tables are in rupture.6502.
 PAN_PHYS_0 = 0                  ; black  - and the straddle line, see FIRE2_LINE
 PAN_PHYS_1 = 1                  ; red
 PAN_PHYS_2 = 3                  ; yellow
@@ -315,7 +315,7 @@ SECTION Game, org = CODE_ORG, guard = CODE_TOP, filename = "Game", exec = main
 .setup_display
 {
     \\ 10K hardware wrap: addressable latch lines 4 and 5 both SET
-    \\ (measured: 1/1 wraps &8000 to &5800; beeb.h.asm's header)
+    \\ (measured: 1/1 wraps &8000 to &5800; beeb.h.6502's header)
     lda #&0f : sta SYS_VIA_DDRB     ; latch bits are outputs
     lda #12  : sta SYS_VIA_ORB      ; line 4 = 1
     lda #13  : sta SYS_VIA_ORB      ; line 5 = 1
@@ -435,7 +435,7 @@ ASSERT panel_end - panel_start = PANEL_BYTES
 ENDSECTION
 
 \ ******************************************************************
-\ *	!BOOT - stamped with what this build is (boot_stamp.asm)
+\ *	!BOOT - stamped with what this build is (boot_stamp.6502)
 \ ******************************************************************
 SECTION Boot, org = BOOT_STAGE, guard = BOOT_STAGE + 256, filename = "!BOOT"
 .bootfile

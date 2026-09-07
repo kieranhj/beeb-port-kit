@@ -1,17 +1,17 @@
 \ ******************************************************************
-\ *	rupture.asm - two CRTC cycles a frame: a static panel over a
+\ *	rupture.6502 - two CRTC cycles a frame: a static panel over a
 \ *	hardware-scrolled play strip, each in a palette of its own
 \ ******************************************************************
 \ *	beeb-port-kit template, MIT, Kieran Connell 2026. Plain 6502.
 \ *
 \ *	Written for THIS geometry from two ancestors, after reading both:
-\ *	  Paradroid src/rupture.asm  - three cycles (panel / play / tail),
+\ *	  Paradroid src/rupture.6502  - three cycles (panel / play / tail),
 \ *	                               MODE 1, the same panel and strip
 \ *	                               addresses and the measured write-
 \ *	                               window table in its header; the
 \ *	                               panel's own palette (its "THE PANEL
 \ *	                               HAS ITS OWN PALETTE" header)
-\ *	  Edge Grinder src/rupture.asm - two cycles, MODE 2, VSync inside
+\ *	  Edge Grinder src/rupture.6502 - two cycles, MODE 2, VSync inside
 \ *	                               the play cycle; the shape used here
 \ *	Paradroid needs its third cycle for R5 smooth vertical scrolling.
 \ *	Nothing here scrolls vertically, so Edge's two-cycle shape fits
@@ -215,6 +215,6 @@ ENDMACRO
     rts
 }
 
-\ irq.asm's names for the two hooks
+\ irq.6502's names for the two hooks
 irq_vsync_hook = rupt_vsync
 irq_timer_hook = rupt_timer

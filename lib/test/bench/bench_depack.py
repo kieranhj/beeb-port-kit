@@ -2,8 +2,8 @@
 """
 bench_depack.py - what ZX02 costs against ZX0, measured rather than quoted.
 
-This is the harness behind the numbers in lib/zx02depack.asm and py/zx02.py.
-It assembles both depackers with beebasm, compresses each file you name with
+This is the harness behind the numbers in lib/zx02depack.6502 and py/zx02.py.
+It assembles both depackers with Baron, compresses each file you name with
 both compressors, steps both decodes through a 6502 simulator (py65), CHECKS
 THE OUTPUT AGAINST THE SOURCE FILE BYTE FOR BYTE, and prints packed size and
 cycles per output byte for each.
@@ -11,9 +11,9 @@ cycles per output byte for each.
     pip install py65
     python lib/test/bench/bench_depack.py FILE [FILE ...]      # from the kit root
 
-Needs, and says so if it cannot find them: beebasm, zx0.exe (Einar Saukas)
-and zx02.exe (https://github.com/dmsc/zx02/releases). Paths below, or set
-BEEBASM, ZX0_EXE and ZX02_EXE.
+Needs, and says so if it cannot find them: baron, zx0.exe (Einar Saukas) and
+zx02.exe (https://github.com/dmsc/zx02/releases). Paths below, or set BARON,
+ZX0_EXE and ZX02_EXE.
 
 WHAT IT SAID, 2026-09-07, over 43 data files from the two shipping ports -
 sprites, tiles, chars, music, loading screens, panels, 242,481 bytes:
@@ -45,7 +45,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent.parent                  # the kit root
 BUILD = HERE / "build"
 
-BEEBASM = Path(os.environ.get("BEEBASM", r"C:\Users\khcon\OneDrive\BEEB\Bin\beebasm.exe"))
+BARON = Path(os.environ.get("BARON", r"C:\Users\khcon\OneDrive\BEEB\Bin\baron.exe"))
 ZX0_EXE = Path(os.environ.get("ZX0_EXE", r"C:\Users\khcon\OneDrive\BEEB\Bin\zx0.exe"))
 ZX02_EXE = Path(os.environ.get("ZX02_EXE", r"C:\Users\khcon\OneDrive\BEEB\Bin\zx02.exe"))
 
@@ -56,11 +56,14 @@ PROLOGUE = 23                   # the harness's own bytes, before the depacker
 
 
 def assemble(harness, out_name):
-    r = subprocess.run([str(BEEBASM), "-i", str(harness.relative_to(ROOT)).replace("\\", "/"),
-                        "-D", "STREAM=&%04X" % STREAM, "-D", "OUT=&%04X" % OUT],
+    """Baron writes each named section into -p's directory, under the section's
+    own filename - so the harnesses' sections are named ZX0 and ZX02."""
+    r = subprocess.run([str(BARON), "-p", str(BUILD),
+                        "-D", "STREAM=&%04X" % STREAM, "-D", "OUT=&%04X" % OUT,
+                        str(harness)],
                        cwd=ROOT, capture_output=True, text=True)
     if r.returncode:
-        raise SystemExit("bench_depack: beebasm failed\n" + r.stdout + r.stderr)
+        raise SystemExit("bench_depack: baron failed\n" + r.stdout + r.stderr)
     return (BUILD / out_name).read_bytes()
 
 
@@ -90,12 +93,12 @@ def pack(exe, path, dst):
 
 
 def main(files):
-    for tool in (BEEBASM, ZX0_EXE, ZX02_EXE):
+    for tool in (BARON, ZX0_EXE, ZX02_EXE):
         if not tool.exists():
             raise SystemExit(f"bench_depack: {tool} not found (see this file's header)")
     BUILD.mkdir(parents=True, exist_ok=True)
-    zx0_code = assemble(HERE / "harness_zx0.asm", "zx0.bin")
-    zx02_code = assemble(HERE / "harness_zx02.asm", "zx02.bin")
+    zx0_code = assemble(HERE / "harness_zx0.6502", "ZX0")
+    zx02_code = assemble(HERE / "harness_zx02.6502", "ZX02")
     print("depacker size: zx0 %d bytes, zx02 %d bytes"
           % (len(zx0_code) - PROLOGUE, len(zx02_code) - PROLOGUE))
     print("%-26s%7s%7s%7s%10s%10s%9s" % ("file", "raw", "zx0 B", "zx02 B",

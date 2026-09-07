@@ -1,7 +1,7 @@
 \ ******************************************************************
-\ *	zx0depack.asm - a ZX0 (v2) decompressor, as a macro
+\ *	zx0depack.6502 - a ZX0 (v2) decompressor, as a macro
 \ ******************************************************************
-\ *	beeb-port-kit, MIT, Kieran Connell 2026. BeebASM syntax, plain 6502.
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, plain 6502.
 \ *
 \ *	WHAT IT IS. The depacker for the DEFAULT output of Einar Saukas's
 \ *	ZX0 (BSD-3, https://github.com/einar-saukas/ZX0): forwards,
@@ -12,8 +12,8 @@
 \ *	WHERE IT CAME FROM. Written for Paradroid from the reference
 \ *	compressor's source, NOT from a recalled depacker, and lifted into
 \ *	Edge with only the zero page renamed:
-\ *	  https://github.com/kieranhj/paradroid-beeb/blob/main/src/zx0depack.asm
-\ *	  https://github.com/kieranhj/edge-beeb/blob/master/src/zx0depack.asm
+\ *	  https://github.com/kieranhj/paradroid-beeb/blob/main/src/zx0depack.6502
+\ *	  https://github.com/kieranhj/edge-beeb/blob/master/src/zx0depack.6502
 \ *	The two are 84% identical by line; every difference is a symbol
 \ *	name (Paradroid reads through `src`/`mapptr`, Edge through
 \ *	`zxsrc`/`zxdst`) or the macro wrapper. This is Paradroid's macro
@@ -81,10 +81,15 @@
 \ *	the level loader and once in a boot overlay, code in a bank being
 \ *	unable to fill another bank. Instantiate it once if once is enough.
 \ *
-\ *	THE BEEBASM PASS-1 TRAP (Edge, docs/layer-9-loader.md). The six
-\ *	zero-page symbols MUST be defined before the first instruction that
+\ *	THE BEEBASM PASS-1 TRAP, WHICH BARON DOES NOT HAVE. Baron
+\ *	assembles to convergence, so a forward-referenced zero-page symbol
+\ *	is still assembled as zero page - MEASURED 2026-09-07,
+\ *	docs/toolchain-baron.md. Declare them in zero page with the rest of
+\ *	your zero page anyway: it reads better, and a port that goes back to
+\ *	BeebASM needs it, because under BeebASM the six
+\ *	zero-page symbols had to be defined before the first instruction that
 \ *	uses one - which is the loader's, not this file's, if the loader is
-\ *	included first. beebasm assembles an undefined symbol as an ABSOLUTE
+\ *	included first. it assembled an undefined symbol as an ABSOLUTE
 \ *	address in pass 1 and then errors on the size change in pass 2
 \ *	("branch out of range" or a bad ASSERT, never a clear message). Edge
 \ *	moved the declarations up to main.asm beside the variables they

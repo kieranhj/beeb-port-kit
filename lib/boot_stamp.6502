@@ -1,7 +1,7 @@
 \ ******************************************************************
-\ *	boot_stamp.asm - a !BOOT that says what build it is
+\ *	boot_stamp.6502 - a !BOOT that says what build it is
 \ ******************************************************************
-\ *	beeb-port-kit, MIT, Kieran Connell 2026. BeebASM syntax.
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax.
 \ *
 \ *	WHAT IT IS. Three macros that assemble the disc's !BOOT file with
 \ *	the build's own testimony in it: the assembly time from beebasm's
@@ -37,14 +37,22 @@
 \ *	  RELEASE        0 or 1 (both ports pass it on the command line:
 \ *	                 beebasm has no IFDEF and refuses a symbol defined
 \ *	                 twice, so main.asm cannot carry a default)
+\ *	  BUILD_TIME     the build's timestamp, as a string. BeebASM stamped
+\ *	                 this with TIME$; Baron has no TIME$, so the build
+\ *	                 script writes it - the template's build.ps1 and
+\ *	                 build.sh generate build/build_time.6502 holding one
+\ *	                 line, BUILD_TIME = "07 Sep 2026 15:47:31", and
+\ *	                 main.6502 includes it. NOT a -D: Windows PowerShell
+\ *	                 cannot hand a quoted string containing spaces to a
+\ *	                 native exe (measured 2026-09-07, three forms). Keep
+\ *	                 the file and a rebuild is byte-identical.
 \ *	  DEBUG_ANY      the OR of every DEBUG_ flag; the head macro ASSERTs
 \ *	                 it is 0 under RELEASE
 \ *	  VERSION_LINE   a string, printed under RELEASE (e.g. "v1.0 2026-09-06")
 \ *	and then, at a scratch address:
 \ *
-\ *	  code_p% = P%
-\ *	  CLEAR BOOT_STAGE, BOOT_STAGE + 256
-\ *	  ORG BOOT_STAGE
+\ *	  SECTION Boot, org = BOOT_STAGE,
+\ *	          guard = BOOT_STAGE + 256, filename = "!BOOT"
 \ *	  .bootfile
 \ *	  BOOT_STAMP_HEAD "Edge Grinder"
 \ *	  BOOT_FLAG DEBUG_COLL,   "DEBUG_COLL: collisions do not kill"
@@ -52,15 +60,14 @@
 \ *	  BOOT_FLAG MUSIC_AKL,    "MUSIC_AKL: Arkos replay"    \ legal under RELEASE
 \ *	  BOOT_STAMP_TAIL "Edge"
 \ *	  .bootfile_end
-\ *	  SAVE "!BOOT", bootfile, bootfile_end
-\ *	  ASSERT bootfile_end < BOOT_STAGE + 256
-\ *	  ORG code_p%
+\ *	  ENDSECTION      - the filename IS the request to save it, and
+\ *	                    the section guard is what the ASSERT was
 \ *
 \ *	BOOT_FLAG emits its line whenever the flag is non-zero, so a flag
 \ *	that is legal under RELEASE (a music or artwork variant) is stamped
 \ *	by the same macro; the ASSERT on DEBUG_ANY is what keeps DEBUG_
 \ *	flags out of a release, not the stamp. Anything with a "*" prefix,
-\ *	such as a bank detector to *RUN first (swram_probe.asm), goes
+\ *	such as a bank detector to *RUN first (swram_probe.6502), goes
 \ *	between BOOT_FLAG and BOOT_STAMP_TAIL as a plain EQUS.
 \ *
 \ *	Fork this into your project; keep this header.
@@ -86,6 +93,6 @@ ENDMACRO
 
 \ ---- REM BUILD <time>, *RUN <file> --------------------------------
 MACRO BOOT_STAMP_TAIL runfile
-    EQUS "REM BUILD ", TIME$("%d %b %Y %H:%M:%S"), 13
+    EQUS "REM BUILD ", BUILD_TIME, 13
     EQUS "*RUN ", runfile, 13
 ENDMACRO

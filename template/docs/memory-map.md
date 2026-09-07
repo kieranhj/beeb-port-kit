@@ -19,10 +19,10 @@ end). They go stale the moment anything grows: take live numbers from the listin
 | `&5400-&57FF` | 1,024 | between the panel and the strip. Displayed by nothing | 1,024 |
 | `&5800-&7FFF` | 10,240 | the play strip, 16 rows, the 10K hardware ring, rupture cycle B | 0 |
 | `&7E00-&7EFF` | | where `!BOOT` is **assembled** (inside the strip, which does not exist at assembly time); never loaded there | - |
-| `&8000-&BFFF` | 16K | sideways ROM/RAM, paged by `ROMSEL`. Unused here; `../lib/swram_probe.asm` finds the RAM banks on a B | - |
+| `&8000-&BFFF` | 16K | sideways ROM/RAM, paged by `ROMSEL`. Unused here; `../lib/swram_probe.6502` finds the RAM banks on a B | - |
 
 ## Master 128 (`MASTER=1`)
 
 The same map. Shadow RAM, ANDY (`&8000-&8FFF`, ROMSEL bit 7) and HAZEL (`&C000-&DFFF`, ACCCON
-bit 3) are all untouched; `loader.asm`'s `load_hazel` and `unpack_andy` assemble and are not
+bit 3) are all untouched; `loader.6502`'s `load_hazel` and `unpack_andy` assemble and are not
 called. `MODE 1` (not 129) keeps the display in main RAM.

@@ -33,12 +33,12 @@ where main.asm's loader stages each stream and what order !BOOT reads the
 files in - and stay in the project's make_disc.py. examples/make_disc_example.py
 shows the shape with two files.
 
-WHICH COMPRESSOR. Default ZX02 (py/zx02.py, lib/zx02depack.asm): half the
+WHICH COMPRESSOR. Default ZX02 (py/zx02.py, lib/zx02depack.6502): half the
 depacker and twice the speed of ZX0 for +0.11% on the packed size, measured
 2026-09-07 over both ports' data - zx02.py's header has the numbers. ZX0 is
 still here because the two shipping discs are ZX0 discs: pass codec=zx0 to
 compress() and in_place_delta() for one of those, and pair it with
-lib/zx0depack.asm. The formats are NOT interchangeable and nothing checks
+lib/zx0depack.6502. The formats are NOT interchangeable and nothing checks
 that the disc and the depacker agree except you.
 
 THE RAW IMAGE IS NOT BOOTABLE once the loader expects compressed streams:

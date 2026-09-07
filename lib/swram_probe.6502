@@ -1,7 +1,7 @@
 \ ******************************************************************
-\ *	swram_probe.asm - MODEL B ONLY: find the sideways RAM before loading
+\ *	swram_probe.6502 - MODEL B ONLY: find the sideways RAM before loading
 \ ******************************************************************
-\ *	beeb-port-kit, MIT, Kieran Connell 2026. BeebASM syntax, plain 6502.
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, plain 6502.
 \ *
 \ *	WHAT IT IS. Paradroid's PARSWR, a standalone overlay that !BOOT
 \ *	*RUNs BEFORE the game: it probes the sixteen sideways slots, takes
@@ -23,10 +23,10 @@
 \ *	The method is stnicc-beeb's (Bitshifters, src/loader.bas)
 \ *	transliterated, with three additions that file's own header
 \ *	explains below. Two edits for the kit: the MOS entry names are
-\ *	beeb.h.asm's lower-case ones (osasci, oscli) and the CLEAR/ORG/SAVE
+\ *	beeb.h.6502's lower-case ones (osasci, oscli) and the CLEAR/ORG/SAVE
 \ *	wrapper is the includer's - Paradroid's is
 \ *	  CLEAR SWR_ADDR, SWR_ADDR + &400 : ORG SWR_ADDR
-\ *	  INCLUDE "lib/swram_probe.asm"
+\ *	  INCLUDE "lib/swram_probe.6502"
 \ *	  SAVE "PARSWR", swr_start, swr_end, swr_start
 \ *	placed AFTER the main image's SAVE, because &1900 is inside that
 \ *	image and the bytes would otherwise land on it.

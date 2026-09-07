@@ -1,9 +1,9 @@
 # Baron, and BeebASM as the legacy (2026-09-07)
 
-The template assembles with [Baron](https://github.com/waitingforvsync/baron), Rich
-Talbot-Watkins's ground-up rewrite of BeebASM (MIT, active - the sections design changed on
-2026-09-06). BeebASM is the legacy: the two shipping ports are BeebASM projects, `lib/` is still
-BeebASM syntax, and this file records exactly what differs so either direction is a short walk.
+The kit assembles with [Baron](https://github.com/waitingforvsync/baron), Rich Talbot-Watkins's
+ground-up rewrite of BeebASM (MIT, active - the sections design changed on 2026-09-06). `lib/`
+and `template/` are both Baron. BeebASM is the legacy: the two shipping ports are BeebASM
+projects, and this file records exactly what differs so either direction is a short walk.
 
 Pin the version. `baron.exe` 0.3.0 lives in `..\..\Bin\` beside `beebasm.exe` (a local
 `template/bin\baron.exe` wins); binaries are on the project's releases page. The language is
@@ -15,6 +15,7 @@ Measured on this kit, 2026-09-07, not taken from the READMEs:
 
 | | Result |
 |---|---|
+| All of `lib/` converted, then the template rebuilt on it | every byte of `Game` and `PANEL` unchanged again - the conversion is provably cosmetic |
 | The template built with Baron vs BeebASM | `Game` (1,087 bytes DEV, 1,138 MASTER) and `PANEL` **byte-identical**; `!BOOT` differs only in the timestamp; final `GAME.SSD` differs in those bytes alone |
 | Both discs booted in jsbeeb (`B-DFS1.2` and `Master`) | `&4A00` reads back identical to `src/data/panel.bin`, `zxdst` left at `&5400` - same as the BeebASM build |
 | All of `lib/` assembled under Baron (a ported `test_lib`) | 1,509-byte image **byte-identical**, at a cost of 6 changed lines across 8 files |
@@ -64,7 +65,8 @@ Also unused so far: lists and broadcasting (a sine table in one `EQUB`), user `F
 
 ## Going back to BeebASM
 
-A port that wants BeebASM takes the kit's `lib/*.asm` (still BeebASM syntax) and reverses the
-table above. The whole delta measured on `lib/` was six lines: the `ASSERT` shim in `beeb.h`, the
-`TIME$` line in `boot_stamp`, and one `ASSERT` in `swram_probe`. The BeebASM template itself is
-in this repository's history - branch `zx02-depacker`, the commit before the Baron port.
+A port that wants BeebASM reverses the table above. The whole delta measured on `lib/` was six
+lines - the `ASSERT` shim in `beeb.h`, the `TIME$` line in `boot_stamp` - plus the `SECTION`
+wrappers in whatever includes them, and the file extensions. Everything else, macros and all,
+assembles unchanged under both. The BeebASM `lib/` and template are in this repository's
+history: branch `zx02-depacker`, the commit before the Baron port.

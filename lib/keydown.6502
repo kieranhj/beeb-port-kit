@@ -1,11 +1,11 @@
 \ ******************************************************************
-\ *	keydown.asm - is a key held? Read straight off the System VIA matrix
+\ *	keydown.6502 - is a key held? Read straight off the System VIA matrix
 \ ******************************************************************
-\ *	beeb-port-kit, MIT, Kieran Connell 2026. BeebASM syntax, plain 6502.
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, plain 6502.
 \ *
 \ *	WHAT IT IS. One write and one read that ask the keyboard matrix
 \ *	about ONE key we name, with the MOS's own scan stopped for the 26
-\ *	cycles it takes. It works with the MOS interrupt gone (irq.asm),
+\ *	cycles it takes. It works with the MOS interrupt gone (irq.6502),
 \ *	which OSBYTE &81 does not, and it is 69 cycles JSR to RTS inclusive
 \ *	against OSBYTE's 243 - MEASURED, Paradroid 2026-08-26, by a
 \ *	breakpoint pair on the JSR and its return differencing
@@ -67,7 +67,7 @@
 \ *	2026-09-06). Edge's thirty-five and Paradroid's are in their
 \ *	main.asm files; `*FX229,1` first, or BASIC eats ESCAPE.
 \ *
-\ *	THE INCLUDER DEFINES: nothing beyond beeb.h.asm's KBD_* symbols.
+\ *	THE INCLUDER DEFINES: nothing beyond beeb.h.6502's KBD_* symbols.
 \ *
 \ *	Fork this into your project; keep this header.
 \ ******************************************************************
