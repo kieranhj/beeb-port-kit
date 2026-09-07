@@ -17,7 +17,8 @@ say. Paradroid sent a session chasing a regression that counting showed was a 31
 
 1. **Find the two counters in the project.** The loop-pass counter and the field counter
    (Paradroid `gameTick` / `fieldCount`; Edge Grinder `frame_count` / `field_count`), and
-   `FRAME_LOCK`, from `CLAUDE.md` or `src/main.asm`. Take their addresses from `build/<NAME>.lst`,
+   `FRAME_LOCK`, from `CLAUDE.md` or the project's main source. Take their addresses from
+   `build/<NAME>.lst` (`python tools/listing.py symbols build/<NAME>.lst NAME`),
    never from an old note - main-RAM addresses move every build. If either lives above `&8000`,
    `read_memory` returns whichever bank is paged *at that instant*, and a sprite engine pages
    banks mid-frame; break at the top of the main loop first, or pick a main-RAM copy.

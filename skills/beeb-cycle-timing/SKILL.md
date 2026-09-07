@@ -16,8 +16,14 @@ deterministic, so one sample is exact for that state.
 ## Steps
 
 1. **Take the addresses from the listing, never from memory.** Main-RAM addresses move on every
-   build. The listing is `build/<NAME>.lst` (beebasm `-v`); or dump symbols with `-d`, passing
-   every `-D` flag the project's `CLAUDE.md` says a build needs:
+   build, and a zero-page address allocated by Baron moves on its own. The listing is
+   `build/<NAME>.lst` (`-v`), and `tools/listing.py` reads the symbols out of it:
+
+   ```bash
+   python tools/listing.py symbols build/<NAME>.lst spr_draw_all
+   ```
+
+   For a BeebASM project, the symbol dump does the same job:
 
    ```bash
    ./bin/beebasm.exe -i src/main.asm -do build/symbols.ssd -D RELEASE=0 <other -D flags> -d | tr ',' '\n' | grep "'spr_draw_all'"

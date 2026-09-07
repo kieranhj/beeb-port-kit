@@ -12,7 +12,7 @@ change, stronger.
 
 **Baseline:** build the OLD tree first and keep its image and listing somewhere the new build will not overwrite
 **Always differs:** `!BOOT`, which stamps the assembly time - so compare per file, not per image, when it does
-**Listing:** `build/<NAME>.lst`, from beebasm `-v`
+**Listing:** `build/<NAME>.lst`, from the assembler's `-v`
 
 ## Steps
 
@@ -42,24 +42,29 @@ change, stronger.
    kit's `py/beeb_port_kit/dfs.py` reads one. Say in the commit which files were compared.
 
 5. **When addresses legitimately moved - a width change, a data removal, a relocation - diff
-   the listing streams instead.** Reduce each listing to one entry per emitted instruction,
-   `(mnemonic, addressing class)`, operands dropped, absolute and zero-page collapsed together.
-   It is a dozen lines of regex over the listing's opcode column; write it inline in the
-   scratchpad, as both ports did.
+   the listing streams instead.** The reducer is checked in (`tools/listing.py`, forked from the
+   kit's `py/listing.py`); both ports wrote one inline each time, which is why the numbers below
+   were never reproducible.
 
    ```bash
-   python reduce.py build-old/<NAME>.lst > old.txt
-   python reduce.py build/<NAME>.lst     > new.txt
-   diff old.txt new.txt && wc -l old.txt
+   python tools/listing.py stream build-old/<NAME>.lst > old.txt
+   python tools/listing.py stream build/<NAME>.lst     > new.txt
+   diff old.txt new.txt && echo "stream identical, $(wc -l < new.txt) entries"
    ```
 
-   Identical streams (7,753 instructions in Paradroid's blitter pass; 22,954 in its RAM pass)
-   prove no instruction was added, removed or reordered, so every difference in the image is a
-   width change or data. Then the smoke test only has to confirm the new addresses do not collide.
+   Each entry is one emitted instruction as its opcode and operand length. Identical streams
+   (7,753 instructions in Paradroid's blitter pass; 22,954 in its RAM pass) prove no instruction
+   was added, removed or reordered, so every difference in the image is a width change or data.
+   Then the smoke test only has to confirm the new addresses do not collide.
 
-6. **Know what it cannot validate.** A change that *intentionally* alters instructions -
-   Paradroid's SCANSTEP tail folding - fails the stream diff by design; that is the oracle's job
-   (`beeb-buffer-oracle`). Do not weaken the reducer to make such a change pass.
+6. **Know what it cannot validate.** Two things, and the first is measured (kit, 2026-09-07, on
+   the template): **the stream cannot see an operand's value.** A build against itself gives 0
+   differences, one inserted `NOP` gives exactly 1, and changing a constant from 8 to 4 gives 0.
+   It proves the shape of the code, not its constants - which is why step 4's byte-for-byte
+   comparison comes first and this is the fallback. Second, a change that *intentionally* alters
+   instructions - Paradroid's SCANSTEP tail folding - fails the stream diff by design; that is
+   the oracle's job (`beeb-buffer-oracle`). Do not weaken the reducer to make such a change
+   pass.
 
 7. **Apply the same check to generated data.** "Every existing output is byte for byte
    untouched" caught a 28-byte move in every sprite bank when two tables were emitted in the

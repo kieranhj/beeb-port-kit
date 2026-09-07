@@ -675,7 +675,9 @@ again.*
   includes that need them. [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md)
 - **`TIME$` stamps the assembly time**, useful in `!BOOT` so any disc image can be dated.
   [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
-- **The symbol dump**: `beebasm -i src/main.asm -do build/symbols.ssd -D RELEASE=0 -d | tr ',' '\n'
+- **The symbol dump** (BeebASM only - Baron has none, so the kit parses the listing instead:
+  `python -m beeb_port_kit.listing symbols build/GAME.lst NAME`, and
+  waitingforvsync/baron#5): `beebasm -i src/main.asm -do build/symbols.ssd -D RELEASE=0 -d | tr ',' '\n'
   | grep "'name'"` prints every global label as `'name':decimal`, the quick way to find a variable's
   address for an emulator poke. `-do` is there only to stop the loose files. [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md)
 - **A mechanical change can be proved mechanical** by reducing both listings to a stream of

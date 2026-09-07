@@ -64,8 +64,8 @@ from the System VIA, so the internal matrix number is what the code carries.
    Hold Z: the third column goes to -1, proving INKEY -98 is Z, so internal 97 = INKEY index - 1.
    Then hold SHIFT and CTRL: SHIFT is INKEY -1 -> internal 0, CTRL INKEY -2 -> internal 1.
 
-6. **Cross-check against every number the project already carries** (`src/keyboard.asm`, the
-   `KEY_` constants in `main.asm`, a `bmKeyChar` table). Eight of Edge Grinder's cross-checked
+6. **Cross-check against every number the project already carries** (a `keyboard` source, the
+   `KEY_` constants in the main source, a `bmKeyChar` table). Eight of Edge Grinder's cross-checked
    exactly against an earlier session, which is what says the method was right rather than
    merely repeatable. A disagreement means one measurement is wrong - find which before editing.
 

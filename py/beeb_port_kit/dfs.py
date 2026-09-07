@@ -11,7 +11,8 @@ beeb-port-kit: the generic half of tools/make_disc.py in both ports.
       and the stream-top check
 Proven: both shipping discs are this writer's output. The catalogue format
 (descending start-sector order, the 18-bit load/exec/length in byte 6, the
-sector count in bytes 6-7 of sector 1) is what beebasm writes and what the
+sector count in bytes 6-7 of sector 1) is what beebasm and Baron both write,
+and what the
 Master's DFS and jsbeeb/b-em read. in_place_delta was measured against the
 Paradroid font stream, which unpacks over itself at &3000 from &3700; the
 rule "landing address >= dest + delta + 1" is what let it do that.
@@ -19,7 +20,7 @@ Fork this into your project's tools/; keep this header.
 
 What the ports' make_disc.py does with this module, in order:
 
-    img = read_image(raw_ssd)                  # beebasm's own SSD
+    img = read_image(raw_ssd)                  # the assembler's own SSD
     for name, (stream, dest) in COMPRESSED.items():
         raw = img.files[name].data
         packed = compress(raw, exe)            # the exe, checked by zx02.py
@@ -54,7 +55,7 @@ from . import zx0, zx02
 
 SECTOR = 256
 MAX_FILES = 31                  # a DFS catalogue holds 31 entries
-TOTAL_SECTORS = 800             # 80 tracks x 10 sectors, as beebasm writes
+TOTAL_SECTORS = 800             # 80 tracks x 10 sectors, a full DFS disc
 DISC_200K = 200 * 1024          # the padded size jsbeeb likes
 FIRST_SECTOR = 2                # sectors 0 and 1 are the catalogue
 
@@ -142,7 +143,7 @@ def build_image(files, layout=(), title=b"", cycle=0, opt=3,
                 total_sectors=TOTAL_SECTORS):
     """A complete .ssd, the files laid out contiguously from sector 2 in
     `layout` order (boot ACCESS order, so the head never seeks backwards
-    during a load - beebasm's own order is SAVE-statement order and put
+    during a load - the assembler's own order is source order and put
     !BOOT at the far end of the disc). Every file is padded to a sector.
 
     `files` is name -> Entry, or the read_catalogue() dict shape."""

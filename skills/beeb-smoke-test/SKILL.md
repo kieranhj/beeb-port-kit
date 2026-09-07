@@ -10,13 +10,15 @@ boot", a screenshot is enough. Everything past that point is verified against th
 (`beeb-buffer-oracle`), never the picture.
 
 **Image to boot:** the post-processed, padded SSD (`build/<NAME>-200K.SSD` in both ports)
-**Never boot:** beebasm's own output (`*-RAW.SSD`, `*-raw.ssd`) - the loader expects the compressed layout the disc tool writes
+**Never boot:** the assembler's own output (`*-RAW.SSD`, `*-raw.ssd`) - the loader expects the compressed layout the disc tool writes
 **Frames to run:** ~400 (about 8 s of emulated time; enough to clear the loader and reach the title)
 
 ## Steps
 
-1. **Build, and check the exit code.** beebasm writes progress to stderr, so do not redirect
-   it or `$ErrorActionPreference = 'Stop'` throws on a successful build. The build command and
+1. **Build, and check the exit code.** Baron is silent on success and puts every error of a run
+   on stderr as `file:line:col:`, so the exit code is the whole story. (A BeebASM project is the
+   awkward one: it writes *progress* to stderr, so do not redirect that stream or
+   `$ErrorActionPreference = 'Stop'` throws on a successful build.) The build command and
    the padded image's name come from the project's `CLAUDE.md` ("Build" section), not from
    memory: `.\build.ps1` in both ports, `tools/build.sh` from bash.
 

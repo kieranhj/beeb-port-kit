@@ -29,7 +29,7 @@ Screen memory order (what render() and unrender() assume): a character row
 is `width_bytes` cells of 8 bytes, one byte per scanline, so the byte at
 (cell x, character row r, scanline s) is at r * width_bytes * 8 + x * 8 + s.
 That is the linear order the CRTC fetches under the MOS's setup and what
-beebasm's INCBIN of a screen dump holds. Hardware scrolling wraps it; this
+an INCBIN of a screen dump holds. Hardware scrolling wraps it; this
 module does not.
 """
 

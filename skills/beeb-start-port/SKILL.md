@@ -48,7 +48,8 @@ the original is the specification; deviations are agreed before they are built a
    - `docs/decisions.md`: one table, `# | Date | Decision | Where`; **the only copy**.
    - `BUGS.md`: numbered, with evidence; fixed entries are never deleted.
    - `docs/memory-map.md`: every region, what is in it, how much is free, with the date measured
-     and "take live figures from the listing, never from this page".
+     and "take live figures from the listing, never from this page" -
+     `python tools/listing.py symbols build/<NAME>.lst NAME` is the one-liner for that.
    - `docs/layer-0-toolchain.md`: this layer's notes, started now.
    - `!BOOT` stamping the assembly time and every debug flag (the template does this; keep it).
 

@@ -22,7 +22,7 @@ Look these up before starting; record them in the project's `CLAUDE.md` once kno
 | Parameter | Where to find it |
 |---|---|
 | The draw call sites - **every** one (`JSR spr_draw_all`, both `JSR SprDrawTr`, the scroll's column copy) | the main loop in `src/main.asm`; addresses from `build/<NAME>.lst` |
-| The frame boundary symbol to break on (the redraw `JSR`, or the top of the main loop) | the listing |
+| The frame boundary symbol to break on (the redraw `JSR`, or the top of the main loop) | the listing (`tools/listing.py symbols`) |
 | Buffer base and size (Paradroid `&5800`, 10,240; Edge `&4000`, 16,384) | `CLAUDE.md` "Memory" |
 | Whether there are two banks (Master: main and shadow; ACCCON `&FE34` bit 2 selects which the CPU sees) | `CLAUDE.md` "Target" |
 | The renderer: the debug redraw key, or an off-machine model (`tools/render_*.py` from the map and the scroll position) | `CLAUDE.md`, `tools/` |

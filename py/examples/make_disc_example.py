@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 make_disc_example.py - the shape of a project's make_disc.py on top of
-beeb_port_kit.dfs: beebasm's SSD in, the shipping SSD out, with the data
+beeb_port_kit.dfs: the assembler's SSD in, the shipping SSD out, with the data
 files ZX02-compressed and the catalogue rewritten to where the loader stages
 each stream.
 
@@ -12,8 +12,8 @@ and stays here rather than in dfs.py:
     each stream, and where it unpacks to. All three numbers must match the
     loader; the stream address is what the catalogue's load address becomes.
   * STREAM_TOP: the address each staging area may not reach.
-  * LAYOUT: boot ACCESS order, so the head never seeks backwards. beebasm's
-    own order is SAVE-statement order.
+  * LAYOUT: boot ACCESS order, so the head never seeks backwards. The
+    assembler's own order is source order.
   * the list of files the loader reads, whose absence is an error.
 
 Usage: python make_disc_example.py RAW.SSD OUT.SSD [PADDED.SSD]

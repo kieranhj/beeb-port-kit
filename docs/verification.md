@@ -26,16 +26,34 @@ so rather than filling the gap from imagination.
 
 ## Before you start: two conventions
 
-**Addresses come from the listing, every time.** Both ports assemble with beebasm `-v` and keep
-the listing in `build/`; main-RAM addresses shift on every build. Paradroid's quick route to one
-symbol is the `-d` symbol dump
-([CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md)):
+**Addresses come from the listing, every time.** Builds keep the assembler's `-v` listing in
+`build/`; main-RAM addresses shift on every build, and a breakpoint or a memory read against a
+stale one measures nothing. **Under Baron this is not optional**: with zero-page allocation on,
+a `ZA_AUTO` variable's address is chosen by the assembler and moves when the code changes, so
+the listing is the only place it exists at all.
+
+```bash
+python -m beeb_port_kit.listing symbols build/GAME.lst score      # any substring
+python -m beeb_port_kit.listing symbols build/GAME.lst            # everything
+```
+
+That prints `name = &addr` for every label and every `[auto]` allocation. It is `py/listing.py`
+in this kit, and it exists because Baron has no symbol dump - BeebASM's `-d` had no successor
+(asked for upstream: waitingforvsync/baron#5), and Baron's listing puts a label on its own line
+with the address on the *next* line that carries one, so it wants a parser rather than a grep.
+Two things the listing cannot give you either way: a computed constant's value (the listing
+echoes `PLAY_R7 = 34 - FRAME_DROP_ROWS - PANEL_CYC_ROWS` unevaluated, so `PRINT` the ones you
+care about, as the template does for its T1 constants), and anything at all from a build you did
+not keep.
+
+The BeebASM equivalent, for the two shipping ports:
 
 ```bash
 ./bin/beebasm.exe -i src/main.asm -do build/symbols.ssd -D RELEASE=0 -d | tr ',' '\n' | grep "'score'"
 ```
 
-`-do` is there only to stop beebasm dropping loose `SAVE` files in the project root.
+`-do` is there only to stop beebasm dropping loose `SAVE` files in the project root; Baron writes
+nothing without `-p` or `-o`, so it needs no such guard.
 
 **Units.** The 6502 runs at 2 MHz; the MCP's `elapsed_cycles` and `run_for_cycles` count 2 MHz
 cycles. Both VIAs' timers count at **1 MHz**, so a T1 or T2 reading is half the CPU cycles, and
@@ -588,19 +606,31 @@ class of change, stronger. Paradroid's
 [layer-5-blitter.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-5-blitter.md)
 and [layer-15-endgame.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-15-endgame.md).
 
-1. Keep the beebasm `-v` listing of the build before the change.
+1. Keep the `-v` listing of the build before the change.
 2. Build after the change; keep that listing.
-3. Reduce each listing to a stream of `(mnemonic, addressing class)` - one entry per emitted
-   instruction, operands dropped, absolute and zero-page collapsed together.
-4. Diff the two streams. Identical (7,753 instructions in the blitter pass; 22,954 in the RAM
-   pass) proves no instruction was added, removed or reordered, so every difference in the image
-   is a width change or data. The emulator run afterwards then only confirms that the new
+3. Reduce each listing to one entry per emitted instruction - the opcode and its operand length,
+   never the operand's value, so that code which merely moved compares equal.
+4. Diff the two streams. Identical (7,753 instructions in Paradroid's blitter pass; 22,954 in the
+   RAM pass) proves no instruction was added, removed or reordered, so every difference in the
+   image is a width change or data. The emulator run afterwards then only confirms that the new
    addresses do not collide.
 
-Paradroid's rules file states the method; **neither repo has the script checked in** - it was
-written inline each time. It is a dozen lines of regex over the listing's opcode column. What it
-cannot validate: a change that intentionally alters instructions (Paradroid's SCANSTEP tail folding
-is called out as "the mechanical-diff check cannot validate it - use the oracle").
+**The reducer is checked in now**, which it never was in either port - `py/listing.py`:
+
+```bash
+python -m beeb_port_kit.listing stream build-old/GAME.lst > old.txt
+python -m beeb_port_kit.listing stream build/GAME.lst     > new.txt
+diff old.txt new.txt && echo "stream identical, $(wc -l < new.txt) entries"
+```
+
+What it cannot validate, measured on the kit's own template (2026-09-07): **an operand's value is
+invisible to it.** A build against itself gives 0 differences, one inserted `NOP` gives exactly 1,
+and changing `SCROLL_STEP` from 8 to 4 gives **0** - the constant changed, the shape did not. So
+compare the images byte for byte first (procedure 12), and reach for the stream only when the
+addresses were meant to move; read a clean diff as "the same instructions in the same order",
+not as "the same program". It also cannot validate a change that intentionally alters
+instructions (Paradroid's SCANSTEP tail folding is called out as "the mechanical-diff check
+cannot validate it - use the oracle").
 
 ---
 
@@ -699,8 +729,9 @@ The checklist for a new check:
 Recorded so the next port does not assume they are filled:
 
 - Edge Grinder has no redraw oracle (procedure 3). Its model oracles cover two static screens.
-- Neither repo checks in the listing-stream reducer (procedure 13) or the catalogue extractor
-  (procedure 12); both were done inline.
+- Neither PORT checks in the listing-stream reducer (procedure 13) or the catalogue extractor
+  (procedure 12); both were done inline. The kit ships the reducer now (`py/listing.py`,
+  2026-09-07); the catalogue extractor is still inline.
 - Paradroid's headless A/B script (procedure 14) survives only as a memory note.
 - The mid-frame bank flip, the 8K-wrap ring and the display-below-`&3000` rule are measured on
   one or two emulators and on no hardware (procedure 11).

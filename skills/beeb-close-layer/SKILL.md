@@ -57,9 +57,14 @@ next session re-litigating them.
    ```bash
    for R in 0 1; do for A in 0 1; do for C in 0 1; do
      printf "R=%s A=%s C=%s | " $R $A $C
-     ../../Bin/beebasm.exe -i src/main.asm -do /tmp/o.ssd -opt 3 -D RELEASE=$R -D MUSIC_AKL=$A -D GFX_CPC=$C 2>/dev/null | grep -E "CODE CEILING|^FREE" | tr '\n' ' '; echo
+     ../../Bin/baron.exe --check -v -D RELEASE=$R -D MUSIC_AKL=$A -D GFX_CPC=$C src/main.6502 \
+       | grep -E "CODE CEILING|^FREE" | tr '\n' ' '; echo
    done; done; done
    ```
+
+   `--check` assembles and validates while writing nothing, which is what this loop wants; the
+   `PRINT` figures still come out. A BeebASM project runs `beebasm -i src/main.asm -do /tmp/o.ssd
+   -opt 3 -D ...` instead, where the `-do` exists only to stop loose `SAVE` files.
 
    Adapt the symbol names to the project's. Add any new `DEBUG_` flag to `DEBUG_ANY` and to
    the `!BOOT` stamp; `RELEASE` asserts `DEBUG_ANY = 0`.
