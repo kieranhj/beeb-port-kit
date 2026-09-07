@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "beeb-port-kit"
+version = "0.1.0"
+description = "Python tool code shared by two C64 -> BBC Micro ports, packaged to be forked"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Kieran Connell"}]
+requires-python = ">=3.8"
+dependencies = ["Pillow"]
+
+[tool.setuptools.packages.find]
+include = ["beeb_port_kit*"]

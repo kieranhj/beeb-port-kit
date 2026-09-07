@@ -1,0 +1,220 @@
+\ ******************************************************************
+\ *	rupture.asm - two CRTC cycles a frame: a static panel over a
+\ *	hardware-scrolled play strip, each in a palette of its own
+\ ******************************************************************
+\ *	beeb-port-kit template, MIT, Kieran Connell 2026. Plain 6502.
+\ *
+\ *	Written for THIS geometry from two ancestors, after reading both:
+\ *	  Paradroid src/rupture.asm  - three cycles (panel / play / tail),
+\ *	                               MODE 1, the same panel and strip
+\ *	                               addresses and the measured write-
+\ *	                               window table in its header; the
+\ *	                               panel's own palette (its "THE PANEL
+\ *	                               HAS ITS OWN PALETTE" header)
+\ *	  Edge Grinder src/rupture.asm - two cycles, MODE 2, VSync inside
+\ *	                               the play cycle; the shape used here
+\ *	Paradroid needs its third cycle for R5 smooth vertical scrolling.
+\ *	Nothing here scrolls vertically, so Edge's two-cycle shape fits
+\ *	Paradroid's geometry and R5, R8 and R7 are all constants in play.
+\ *
+\ *	Frame (39 rows = 312 scanlines, the MODE 1 shape):
+\ *	  cycle A  rows  0-3    PANEL_ROWS = 4 displayed, start PANEL_ADDR
+\ *	  cycle B  rows  4-38   PLAY_ROWS = 16 displayed from the scroll
+\ *	           address, then 19 blank rows; VSync at B row PLAY_R7 = 27,
+\ *	           absolute row 31 (34 less FRAME_DROP_ROWS, see main.asm)
+\ *
+\ *	WHEN EACH REGISTER MUST BE WRITTEN (measured in Paradroid, held in
+\ *	Edge; beeb-port-kit docs/hardware-facts.md, "Write windows"):
+\ *	  R4       inside its OWN cycle, before C4 reaches the new value
+\ *	  R12/R13      inside the PREVIOUS cycle - latched at cycle start
+\ *	  R6           before C4 reaches the row it names: the current cycle if that row
+\ *	               is still ahead, else the previous one (KC 2026-09-07); written in
+\ *	               the previous cycle here because cycle A's R6 is row 4
+\ *	  R7       constant: PLAY_R7 = 27 never falls inside the 4-row A
+\ *	  R5       0, never written after setup
+\ *	  R8       0 in play (no interlace); &30 blanks during loading
+\ *
+\ *	THE PANEL HAS ITS OWN PALETTE (decision 4). The two cycles are two
+\ *	palettes: the panel displays in four physical colours and the strip
+\ *	in the OTHER four, so all eight MODE 1 colours are on screen at
+\ *	once. Paradroid's decision, taken for the same reason it took it -
+\ *	the panel's colours must not be at the mercy of the play area's -
+\ *	and its two placements copied:
+\ *	  the PANEL's, at the END of rupt_vsync: nothing is displaying
+\ *	    (the strip ended at B row 16, the panel starts 8 rows on) so
+\ *	    there is no phase to hit; AFTER the T1 restart, so the sixteen
+\ *	    writes cannot move the fires
+\ *	  the PLAY palette's, at the A -> B boundary. Paradroid had 20 free
+\ *    lines there (its panel cycle is 8 rows, 4 displayed); this frame
+\ *    has NONE - cycle A is 4 rows, all displayed, and B's first line
+\ *    is displayed too - so the switch cannot sit in a gap and must
+\ *    hit a PHASE. Sixteen `lda # : sta &FE21` are 96 cycles against
+\ *    48 of horizontal blanking, so the sequence straddles a line
+\ *    boundary and is placed so its displayed-time part is harmless:
+\ *    fire 2 lands in the panel's LAST scanline (A + 31), which
+\ *    export_panel.py keeps ALL LOGICAL 0. The twelve writes for
+\ *    logicals 1-3 fall in that line's displayed part, where no pixel
+\ *    looks them up; the four for logical 0 - the only entries that
+\ *    line reads - fall in its blanking, cycles 80-127. That line reads
+\ *    as black (panel colour 0) end to end and the strip's first line
+\ *    reads in the play palette. T1_TUNE2 in main.asm is the measured
+\ *    phase. Blue is the play palette's 0, so the OTHER placement - the
+\ *    strip's first line as the straddle - would have shown that line
+\ *    black-then-blue; the panel's line was chosen so the sacrifice is
+\ *    the panel's, a scanline the port controls, not the game's.
+\ *	&FE21 takes (logical << 4) | (physical EOR 7), and in a 4-colour
+\ *	mode the CAM compares only bits 7 and 5 of that byte, so ALL
+\ *	SIXTEEN entries are written and four land on each logical colour
+\ *	(hardware-facts.md section 2). Grouped by logical colour, as in
+\ *	Paradroid; the order WITHIN the sequence is load-bearing here.
+\ *
+\ *	The fires, from the VSync at B row 27 (handler entry is ~4 lines
+\ *	after the edge, hardware-facts.md):
+\ *	  VSync IRQ  R6 and R12/13 for A, which starts 8 rows later; take
+\ *	             the parked scroll address if FRAME_LOCK fields have
+\ *	             passed; restart T1 with T1_I1 and latch T1_I2; then
+\ *	             the PANEL palette
+\ *	  fire 1     A row 1 + 4 lines (FIRE1_LINE = 12 into A): R4 for A -
+\ *             8 lines behind the boundary, 12 ahead of C4 = 3 - and R6
+\ *             and R12/13 for B; latch T1_I3
+\ *	  fire 2     A + 31 lines, the panel's last (FIRE2_LINE), phased by
+\ *             T1_TUNE2: the PLAY palette, nothing else - R4 for B may
+\ *             not be written here, this is still cycle A and C4 = 3 is
+\ *             about to match it; latch T1_I4
+\ *	  fire 3     B row 2 (FIRE3_ROW): R4 for B, 32 rows ahead of C4 = 34.
+\ *             T1 then reloads T1_I4, which VSync restarts before it
+\ *             can fire
+\ *	The constants are in main.asm; the MEASURED intervals are in
+\ *	docs/layer-0-toolchain.md and CLAUDE.md.
+\ ******************************************************************
+
+\ One palette entry, written: logical n (0-15, the four per colour) to
+\ physical phys. 6 cycles: lda # (2) + sta abs (4).
+MACRO PALWR n, phys
+    lda #(n * 16) OR (phys EOR 7) : sta VIDEO_ULA_PAL
+ENDMACRO
+
+\ The four entries that share logical colour L: index bits 3 and 1 are
+\ L's two bits, bits 2 and 0 take every combination
+\ (Paradroid's logical = ((n AND 8) >> 2) OR ((n AND 2) >> 1)): logical
+\ 0 is entries 0,1,4,5; 1 is 2,3,6,7; 2 is 8,9,12,13; 3 is 10,11,14,15.
+\ The first cut had (L AND 1) without the * 2 and the screen said so at
+\ once - two of the four colours came out as stripes (2026-09-07).
+MACRO PALSET L, phys
+    PALWR (L AND 2) * 4 + (L AND 1) * 2 + 0, phys
+    PALWR (L AND 2) * 4 + (L AND 1) * 2 + 1, phys
+    PALWR (L AND 2) * 4 + (L AND 1) * 2 + 4, phys
+    PALWR (L AND 2) * 4 + (L AND 1) * 2 + 5, phys
+ENDMACRO
+
+\ ---- the VSync hook: IRQ on CA1, B row 27 + latency ----------------
+\ The frame handover: the main loop parks the scroll address it wants
+\ displayed next and sets frame_ready; this takes it only when
+\ FRAME_LOCK fields have passed since the last take, so the scroll
+\ never runs faster than 25 Hz and a slow pass costs whole fields, never
+\ a torn one - the address changes here, in vertical blanking, and
+\ nowhere else (Edge decision 16, without the bank flip a Model B has
+\ no banks for).
+.rupt_vsync
+{
+    \ Restart T1 FIRST (writing T1C-H loads the counter from the latch
+    \ and starts it), then re-latch the fire 1 -> fire 2 interval, which
+    \ the counter picks up when it reloads at fire 1. FIRST because
+    \ everything after it is a fire's phase: the take below runs on
+    \ every second field only, and with the restart after it every fire
+    \ alternated by its ~24 cycles between take and non-take fields -
+    \ measured 2026-09-07 as fire 2's palette group landing 24 cycles
+    \ apart on consecutive fields of one build (docs/layer-0-toolchain.md).
+    lda #LO(T1_I1) : sta SYS_VIA_T1LL
+    lda #HI(T1_I1) : sta SYS_VIA_T1CH
+    lda #LO(T1_I2) : sta SYS_VIA_T1LL
+    lda #HI(T1_I2) : sta SYS_VIA_T1LH
+
+    inc field_count
+
+    lda frame_ready
+    beq no_take
+    lda field_count
+    sec
+    sbc flip_field
+    cmp #FRAME_LOCK
+    bcc no_take
+
+    lda field_count
+    sta flip_field
+    lda crtc_park
+    sta crtc_live
+    lda crtc_park+1
+    sta crtc_live+1
+    lda #0
+    sta frame_ready
+    .no_take
+
+    \\ For cycle A, which starts 8 rows from now: the PREVIOUS cycle is
+    \\ this one. B's own R6 = 16 was matched 11 rows ago and the display
+    \\ flip-flop stays cleared, so lowering R6 here shows nothing.
+    CRTC 6, PANEL_ROWS
+    CRTC 12, HI(PANEL_ADDR / 8)
+    CRTC 13, LO(PANEL_ADDR / 8)
+
+    \\ The panel's palette, AFTER the T1 restart (see the header). The
+    \\ strip stopped displaying 11 rows ago and the panel is 8 rows
+    \\ away: no phase to hit, and any order will do.
+    PALSET 0, PAN_PHYS_0
+    PALSET 1, PAN_PHYS_1
+    PALSET 2, PAN_PHYS_2
+    PALSET 3, PAN_PHYS_3
+
+    lda #0
+    sta rupt_state
+    rts
+}
+
+\ ---- the T1 hook: fires 1, 2 and 3 ---------------------------------
+.rupt_timer
+{
+    lda rupt_state
+    bne not_fire1
+
+    \\ ---- fire 1: A row 1 + 4 lines ----
+    CRTC 4, PANEL_R4            ; A's own; C4 is 1, the value is 3
+    CRTC 6, PLAY_ROWS           ; for B, which starts in 20 lines
+    lda #12 : sta CRTC_ADDR : lda crtc_live+1 : sta CRTC_DATA
+    lda #13 : sta CRTC_ADDR : lda crtc_live   : sta CRTC_DATA
+    lda #LO(T1_I3) : sta SYS_VIA_T1LL   ; fire 2 -> fire 3
+    lda #HI(T1_I3) : sta SYS_VIA_T1LH
+    inc rupt_state
+    rts
+
+    .not_fire1
+    cmp #1
+    bne not_fire2
+
+    \\ ---- fire 2: A + 31, the panel's last scanline, all logical 0 ----
+    \\ The play palette. THE ORDER IS THE POINT: logicals 1-3 first, in
+    \\ the displayed part of a line that never looks them up; logical 0
+    \\ last, in that line's horizontal blanking. Nothing may go in front
+    \\ of the first write - the phase (T1_TUNE2) was measured to it.
+    PALSET 1, PLAY_PHYS_1
+    PALSET 2, PLAY_PHYS_2
+    PALSET 3, PLAY_PHYS_3
+    PALSET 0, PLAY_PHYS_0
+    lda #LO(T1_I4) : sta SYS_VIA_T1LL   ; fire 3 -> (nothing): longer than
+    lda #HI(T1_I4) : sta SYS_VIA_T1LH   ; the time to VSync, which restarts T1
+    inc rupt_state
+    rts
+
+    .not_fire2
+    cmp #2
+    bne done
+
+    \\ ---- fire 3: B row 2 ----
+    CRTC 4, PLAY_R4
+    inc rupt_state
+    .done
+    rts
+}
+
+\ irq.asm's names for the two hooks
+irq_vsync_hook = rupt_vsync
+irq_timer_hook = rupt_timer

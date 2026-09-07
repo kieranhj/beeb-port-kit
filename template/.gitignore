@@ -1,0 +1,19 @@
+# ---- Build output: the disc images, the padded copy, the listing ----
+build/
+
+# ---- Third-party tools (beebasm and zx0 live in ..\..\Bin; a local copy is optional) ----
+bin/
+
+# ---- Python ----
+__pycache__/
+*.pyc
+
+# beebasm's SAVE writes a loose host file whenever it has no disc image to
+# put it in, so any run without a working -do drops these in the project root
+/Game
+/PANEL
+/!BOOT
+
+# ---- Local editor / agent settings ----
+.claude/settings.local.json
+.vscode/

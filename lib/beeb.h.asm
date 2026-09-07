@@ -1,0 +1,164 @@
+\ ******************************************************************
+\ *	beeb.h.asm - the BBC Micro hardware constants both ports carried
+\ ******************************************************************
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. BeebASM syntax, plain 6502.
+\ *
+\ *	WHAT IT IS. The forty-odd symbols that main.asm defined in both
+\ *	C64->BBC ports: the CRTC, the Video ULA and the VideoNuLA, the two
+\ *	6522 VIAs, the sideways/shadow paging registers, IRQ1V, the keyboard
+\ *	latch values, SL, the MOS entry points, and the CRTC macro.
+\ *
+\ *	WHERE IT CAME FROM. Assembled from the constant blocks at the top of
+\ *	  https://github.com/kieranhj/paradroid-beeb/blob/main/src/main.asm
+\ *	    (CRTC/ULA/IRQ1V ~30-34, ROMSEL/ROMSHAD ~50-51, VIA ~1012-1020,
+\ *	    SND_*/KBD_* ~1028-1045, SL ~927, the CRTC macro ~1362)
+\ *	  https://github.com/kieranhj/edge-beeb/blob/master/src/main.asm
+\ *	    (MOS entries ~29-37, the CRTC macro ~230, CRTC/NuLA/VIA/KBD_*
+\ *	    ~467-486, HAZEL_BIT ~308, SL ~611)
+\ *	  https://github.com/kieranhj/paradroid-beeb/blob/main/src/swram.asm
+\ *	    (RAMSEL, the User VIA port B pair, ROMTYPE, ~58-65)
+\ *	The names are Edge's (lower-case MOS entries, upper-case hardware);
+\ *	where Paradroid's differ they are noted beside the symbol. Neither
+\ *	port's file is changed by this one existing.
+\ *
+\ *	WHAT WAS MEASURED, and when:
+\ *	  - SL = 64: a scanline is 64 us, which is 64 ticks of a 1 MHz VIA
+\ *	    timer and 128 CPU cycles at 2 MHz. Both ports' rupture timings
+\ *	    are written in SL and were measured against the raster
+\ *	    (Paradroid docs/raster-timing.md, 2026-08; Edge 2026-09-02:
+\ *	    VSync handler -> fire 1 = 53 scanlines with T1 = 56*SL-4*SL-2).
+\ *	  - KBD_ORA is &FE4F, port A WITHOUT handshake. &FE41 strobes CA2
+\ *	    and confuses the MOS (Paradroid, 2026-08-26).
+\ *	  - ROMSEL bit 7 selects ANDY on a Master, and ANDY overlays ONLY
+\ *	    &8000-&8FFF of whichever bank is paged (Edge, jsbeeb 2026-09-04).
+\ *	  - ACCCON bit 0 (D) can be flipped INSIDE a frame and takes effect
+\ *	    at the next character fetch (Edge, jsbeeb 2026-09-04; b2/beebjit not
+\ *	    checked). Bit 2 (X) is what Edge's bank flip writes; bit 3 (Y)
+\ *	    pages HAZEL. The other five bits are the Master reference
+\ *	    manual's names and NEITHER PORT USES THEM: treat them as
+\ *	    unmeasured.
+\ *	  - The display wrap is the System VIA addressable latch lines 4 and
+\ *	    5: 0/0 = 16K (&4000), 1/0 = 8K (&6000), 0/1 = 20K (&3000),
+\ *	    1/1 = 10K (&5800) - the value added back past &8000 (Edge,
+\ *	    jsbeeb 2026-09-04). Written as SYS_VIA_ORB = 4/12 for line 4,
+\ *	    5/13 for line 5.
+\ *	  - &FFFE reads &E59E on a Master, so paging HAZEL cannot break IRQ
+\ *	    dispatch (Edge).
+\ *
+\ *	THE INCLUDER DEFINES nothing. Include this first, before any file
+\ *	that names a register.
+\ *
+\ *	Fork this into your project; keep this header.
+\ ******************************************************************
+
+\ ---- MOS entry points ----------------------------------------
+\ Paradroid spells these OSBYTE, OSWRCH, OSCLI, OSASCI.
+osbyte  = &FFF4
+oswrch  = &FFEE
+osasci  = &FFE3             ; OSWRCH, but 13 comes out as CR AND LF
+oscli   = &FFF7
+osfile  = &FFDD
+osword  = &FFF1
+osfind  = &FFCE
+osgbpb  = &FFD1
+osargs  = &FFDA
+osrdch  = &FFE0
+
+IRQ1V   = &0204             ; the vector both ports own outright
+ROMTYPE = &02A1             ; MOS ROM type table, one byte per bank
+                            ; (non-zero = a ROM answered the boot scan)
+
+\ ---- the 6845 CRTC -------------------------------------------
+CRTC_ADDR     = &FE00
+CRTC_DATA     = &FE01
+
+\ Write CRTC register r with the constant v. Both mains define this;
+\ Paradroid's is `MACRO CRTC reg, val` on one line, the same bytes.
+MACRO CRTC r, v
+    lda #r : sta CRTC_ADDR
+    lda #v : sta CRTC_DATA
+ENDMACRO
+
+\ ---- the Video ULA and the VideoNuLA --------------------------
+VIDEO_ULA_CTRL = &FE20      ; neither port writes it directly: VDU 22
+                            ; sets it with the mode
+VIDEO_ULA_PAL  = &FE21      ; palette, write only: (logical << 4) | physical EOR 7
+NULA_CTRL      = &FE22      ; VideoNuLA control; &40 resets its state,
+                            ; &11 selects LOGICAL colour mapping (Edge,
+                            ; decision 64: load-bearing)
+NULA_PAL       = &FE23      ; VideoNuLA palette, TWO bytes an entry:
+                            ; [index<<4 | red] then [green<<4 | blue]
+
+\ ---- sideways and shadow paging ------------------------------
+\ ROMSEL selects the 16K bank at &8000-&BFFF; ROMSHAD is the MOS's copy,
+\ from which its IRQ path restores ROMSEL after a service call. Write
+\ BOTH, always, or the next OS call pages something unexpected back in
+\ (Paradroid main.asm ~36-44).
+ROMSEL      = &FE30
+ROMSHAD     = &F4
+SWRAM_BASE  = &8000
+ANDY_ROMSEL = &80           ; Master: ROMSEL bit 7 pages ANDY over &8000-&8FFF
+RAMSEL      = &FE32         ; Solidisk-style write select (swram_probe only)
+
+\ ACCCON, the Master's shadow/HAZEL control. Bit names are the Master
+\ reference manual's; D, X and Y are the three Edge uses.
+ACCCON      = &FE34
+ACCCON_D    = &01           ; display the SHADOW screen
+ACCCON_E    = &02           ; VDU code accesses shadow (unused here)
+ACCCON_X    = &04           ; the CPU sees shadow at &3000-&7FFF
+ACCCON_Y    = &08           ; HAZEL &C000-&DFFF paged in over the MOS
+ACCCON_ITU  = &10           ; (unused, unmeasured)
+ACCCON_IFJ  = &20           ; (unused, unmeasured)
+ACCCON_TST  = &40           ; (unused, unmeasured)
+ACCCON_IRR  = &80           ; (unused, unmeasured)
+HAZEL_BASE  = &C000
+HAZEL_BIT   = ACCCON_Y      ; Edge's name for it
+
+\ ---- the System VIA, &FE40 ------------------------------------
+SYS_VIA_ORB   = &FE40       ; port B: low nibble is the addressable latch,
+                            ; written as (value << 3) | line
+SYS_VIA_ORA   = &FE41       ; port A WITH handshake - do not use for the
+                            ; keyboard or the sound chip, see ORA_NH
+SYS_VIA_DDRB  = &FE42
+SYS_VIA_DDRA  = &FE43
+SYS_VIA_T1CL  = &FE44       ; reading it acknowledges T1
+SYS_VIA_T1CH  = &FE45       ; writing it RESTARTS the counter
+SYS_VIA_T1LL  = &FE46
+SYS_VIA_T1LH  = &FE47       ; latch only - does not reload the counter
+SYS_VIA_ACR   = &FE4B
+SYS_VIA_PCR   = &FE4C
+SYS_VIA_IFR   = &FE4D       ; bit 6 = T1, bit 1 = CA1 (VSync)
+SYS_VIA_IER   = &FE4E       ; bit 7 set = enable the bits written
+SYS_VIA_ORA_NH = &FE4F      ; port A, no handshake
+
+\ Paradroid's name for port B, and its aliases for the sound chip's
+\ route in, which is the SAME port as the keyboard's (latch line 0
+\ against line 3).
+VIA_PORTB     = SYS_VIA_ORB
+SND_PORTB     = SYS_VIA_ORB
+SND_DDRA      = SYS_VIA_DDRA
+SND_ORA       = SYS_VIA_ORA_NH
+
+\ ---- the User VIA, &FE60 --------------------------------------
+USR_VIA_ORB   = &FE60       ; swram.asm's USR_ORB
+USR_VIA_DDRB  = &FE62       ; swram.asm's USR_DDRB
+USR_VIA_T1CL  = &FE64       ; a free-running 1 MHz counter: Paradroid's
+USR_VIA_T1CH  = &FE65       ; DEBUG_TIME meter
+USR_VIA_IER   = &FE6E
+
+\ ---- the keyboard, through the System VIA -------------------
+\ Port A carries the key number out (PA0-PA3 column, PA4-PA6 row) and
+\ PA7 answers; latch line 3 is the keyboard's write-enable, and dropping
+\ it stops the hardware's free-running scan. See keydown.asm.
+KBD_PORTB     = SYS_VIA_ORB
+KBD_DDRA      = SYS_VIA_DDRA
+KBD_ORA       = SYS_VIA_ORA_NH
+KBD_LATCH_OFF = &03         ; line 3 = 0: stop the free-run scan
+KBD_LATCH_ON  = &0B         ; line 3 = 1: hand it back
+KBD_DDRA_SCAN = &7F         ; PA0-PA6 out (the key number), PA7 in
+
+\ ---- timing ------------------------------------------------
+\ One scanline is 64 us: 64 ticks of a 1 MHz VIA timer, 128 CPU cycles.
+\ Both rupture engines write their T1 intervals as n * SL - 2 (the -2 is
+\ the 6522's reload latency) and tune the first one against the raster.
+SL = 64

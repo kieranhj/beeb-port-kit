@@ -1,0 +1,450 @@
+\ ******************************************************************
+\ *	main.asm - beeb-port-kit template: the smallest thing that boots
+\ ******************************************************************
+\ *	MIT, Kieran Connell 2026. BeebASM, plain 6502 (CPU 0).
+\ *
+\ *	What it is: a MODE 1 screen with a 4-row static panel above a
+\ *	16-row play strip, as a two-cycle CRTC rupture driven from our own
+\ *	IRQ1V handler (System VIA T1 + VSync), frame-locked at 25 Hz; keys
+\ *	read straight off the VIA; Z/X scroll the strip by moving the CRTC
+\ *	start address round the 10K hardware wrap; the panel and the strip
+\ *	have a PALETTE each - four physical colours and the other four, all
+\ *	eight MODE 1 colours at once; the panel image ships
+\ *	ZX0-compressed and is loaded and unpacked by the kit's loader;
+\ *	!BOOT is stamped with the build time and flags. Nothing else.
+\ *
+\ *	Geometry is Paradroid's (panel &4A00, strip &5800-&7FFF, 10K wrap,
+\ *	R1 = 80) because its T1 constants were measured for it; the frame
+\ *	shape is Edge Grinder's two cycles. See src/rupture.asm.
+\ *
+\ *	Build symbols, passed on EVERY beebasm invocation (beebasm has no
+\ *	IFDEF and refuses a symbol defined twice, so no default lives here):
+\ *	  RELEASE  0/1  every DEBUG_ flag off, version line in !BOOT
+\ *	  MASTER   0/1  the Master 128 path: loader.asm's load_hazel and
+\ *	                unpack_andy assemble, and !BOOT says so. The
+\ *	                template itself uses no shadow RAM, ANDY or HAZEL.
+\ ******************************************************************
+
+CPU 0
+
+INCLUDE "src/lib/beeb.h.asm"
+
+ASSERT (RELEASE = 0) OR (RELEASE = 1)
+ASSERT (MASTER = 0) OR (MASTER = 1)
+
+\ ---- debug flags: add every new one to DEBUG_ANY and to !BOOT ------
+DEBUG_ANY     = 0
+VERSION_LINE  = "template v0.0 2026-09-07"
+
+\ ---- what the forked lib files want defined -------------------------
+IRQ_UNINSTALL = 0               ; irq.asm: never hands the machine back
+LOADER_STAGE  = &3000           ; loader.asm: streams stage in the blanked
+                                ; screen, below everything they unpack to
+
+\ ---- geometry: Paradroid's -----------------------------------------
+ROW_BYTES   = 640               ; R1 = 80 units x 8 bytes
+PLAY_UNITS  = 80
+PANEL_ADDR  = &4A00             ; 4 rows, &4A00-&53FF
+PANEL_ROWS  = 4
+PANEL_BYTES = PANEL_ROWS * ROW_BYTES
+ASSERT PANEL_BYTES = 2560
+BUF_BASE    = &5800             ; the strip: 10K, hardware-wrapped
+BUF_SIZE    = 10240             ; 16 rows x 640
+ASSERT BUF_BASE + BUF_SIZE = &8000
+ASSERT LO(BUF_SIZE) = 0         ; the wrap arithmetic in scroll_step
+PLAY_ROWS   = 16                ; the ceiling: the window must fit ONE wrap
+
+\ ---- the frame: two CRTC cycles, 39 rows = 312 lines --------------
+PANEL_CYC_ROWS = 4              ; cycle A, all displayed
+PLAY_CYC_ROWS  = 35             ; cycle B, 16 displayed, VSync inside it
+ASSERT PANEL_CYC_ROWS + PLAY_CYC_ROWS = 39
+PANEL_R4 = PANEL_CYC_ROWS - 1   ; 3
+PLAY_R4  = PLAY_CYC_ROWS - 1    ; 34
+
+\ Where VSync falls decides where the picture sits on the tube: earlier
+\ in our frame moves it DOWN. The OS's MODE 1 has VSync at row 34 with
+\ 32 rows displayed; we display 20, and Paradroid's KC chose three rows
+\ lower than the OS's for the same 20-row picture on the same panel and
+\ strip (2026-08-21, by eye on b-em; four looked low). Not re-measured
+\ here: the emulator crops the border, so this one is a hardware call.
+FRAME_DROP_ROWS = 3
+PLAY_R7 = 34 - FRAME_DROP_ROWS - PANEL_CYC_ROWS     ; 27, absolute row 31
+ASSERT PLAY_R7 > PLAY_ROWS      ; VSync after the strip's display ends
+ASSERT PLAY_R7 < PLAY_R4        ; and inside cycle B
+
+R8_ON    = &00                  ; no interlace: VSync at a fixed phase
+R8_BLANK = &30                  ; display-skew bits = non-display
+
+\ ---- the two palettes: the panel's four physical colours and the
+\ play strip's OTHER four, so all eight MODE 1 colours are on screen at
+\ once (decision 4). Physical numbers: 0 black 1 red 2 green 3 yellow
+\ 4 blue 5 magenta 6 cyan 7 white. The tables are in rupture.asm.
+PAN_PHYS_0 = 0                  ; black  - and the straddle line, see FIRE2_LINE
+PAN_PHYS_1 = 1                  ; red
+PAN_PHYS_2 = 3                  ; yellow
+PAN_PHYS_3 = 7                  ; white
+PLAY_PHYS_0 = 4                 ; blue
+PLAY_PHYS_1 = 5                 ; magenta
+PLAY_PHYS_2 = 6                 ; cyan
+PLAY_PHYS_3 = 2                 ; green
+
+\ ---- T1: the fires, in 1 MHz ticks (SL = 64 a scanline) ----------
+\ The handler runs about 4 scanlines after the VSync edge (measured in
+\ Paradroid, reconfirmed in Edge), so the first interval carries -4*SL;
+\ the -2 is the 6522's reload latency. The MEASURED values these give
+\ are in docs/layer-0-toolchain.md - take those, not this arithmetic.
+\
+\ Fire 2 is the palette switch and the one fire that must land at a
+\ PHASE within its scanline: sixteen palette writes are 96 cycles and
+\ MODE 1's horizontal blanking is 48 (cycles 80-127 of the 128-cycle
+\ line), so the sequence straddles a line boundary. It is placed so the
+\ twelve writes for logicals 1-3 fall in the DISPLAYED part of the
+\ panel's last scanline (row 3 scan 7 - FIRE2_LINE = 31), which
+\ export_panel.py keeps all logical 0, and the four writes for logical
+\ 0 fall in that line's blanking. T1_TUNE2 is the sub-scanline phase,
+\ in 1 MHz ticks (2 CPU cycles each), MEASURED in jsbeeb: breakpoints
+\ and elapsed_cycles for the CPU's time, tools/probe_shot.mjs and
+\ tools/scan_png.py for where on the line that is. At 58 the first
+\ write lands at cycle 24 of line 31 and the four logical-0 writes
+\ complete at 96, 102, 108, 114 of its 128 - in blanking (80-127) with
+\ 16 cycles before and 13 after (docs/layer-0-toolchain.md). Re-measure
+\ it if ANYTHING in the IRQ path before the writes changes, including
+\ rupt_vsync: T1 is restarted there and the fires are timed from it.
+FIRE1_LINE = 12                 ; scanlines into cycle A: row 1 + 4
+FIRE2_LINE = 31                 ; scanlines into cycle A: the panel's last
+FIRE3_ROW  = 2                  ; rows into cycle B (lands a line early: B row 1 + 7)
+T1_TUNE  = -4 * SL
+T1_TUNE2 = 58                   ; MEASURED 2026-09-07, jsbeeb (see above)
+T1_I1 = ((PLAY_CYC_ROWS - PLAY_R7) * 8 + FIRE1_LINE) * SL - 2 + T1_TUNE
+T1_I2 = (FIRE2_LINE - FIRE1_LINE) * SL - 2 + T1_TUNE2
+T1_I3 = (PANEL_CYC_ROWS * 8 + FIRE3_ROW * 8 - FIRE2_LINE) * SL - 2 - T1_TUNE2
+T1_I4 = 250 * SL                ; fire 3 -> never: VSync restarts T1 first
+ASSERT T1_I4 > (PLAY_R7 - FIRE3_ROW + 1) * 8 * SL
+ASSERT T1_I4 < 65536
+ASSERT FIRE1_LINE < PANEL_R4 * 8        ; R4 lands before C4 reaches it
+ASSERT FIRE2_LINE = PANEL_CYC_ROWS * 8 - 1  ; the panel's last line
+ASSERT FIRE3_ROW < PLAY_R4              ; R4 lands before C4 reaches it
+
+FRAME_LOCK = 2                  ; fields per frame: 25 Hz
+
+\ ---- keys: internal numbers, MEASURED (Edge, OSBYTE 121) ----------
+KEY_LEFT  = 97                  ; Z
+KEY_RIGHT = 66                  ; X
+SCROLL_STEP = 8                 ; one CRTC unit = 4 MODE 1 pixels a frame
+
+\ ---- addresses ----------------------------------------------------
+CODE_ORG   = &1900              ; above DFS's workspace on a Model B (PAGE)
+CODE_TOP   = &3000              ; the screen
+BOOT_STAGE = &7E00              ; where !BOOT is ASSEMBLED, never loaded
+
+\ ******************************************************************
+\ *	Zero page. Wiped at boot. The depacker's six slots come FIRST and
+\ *	before any file that uses them (zx0depack.asm's pass-1 trap).
+\ ******************************************************************
+ORG &00
+GUARD &90                       ; &90-&FF is the MOS's and the DFS's
+.zxsrc       SKIP 2
+.zxdst       SKIP 2
+.zxofs       SKIP 2
+.zxlen       SKIP 2
+.zxbit       SKIP 1
+.zxwrk       SKIP 2
+ASSERT P% <= &100
+
+.field_count SKIP 1             ; IRQ: +1 a field
+.flip_field  SKIP 1             ; IRQ: field_count at the last take
+.frame_ready SKIP 1             ; loop -> IRQ: crtc_park is ready
+.crtc_park   SKIP 2             ; loop writes: next R12/R13 (lo, hi)
+.crtc_live   SKIP 2             ; IRQ writes: the R12/R13 being shown
+.rupt_state  SKIP 1             ; 0 before fire 1, 1 before fire 2, 2 before fire 3, 3 after
+.scroll      SKIP 2             ; byte offset into the strip, 0..BUF_SIZE-1
+.frame_count SKIP 2             ; loop: +1 a pass (the frame-lock check)
+.tmp         SKIP 2
+.fill_ptr    SKIP 2
+.fill_row    SKIP 1
+.fill_unit   SKIP 1
+ZP_END = P%
+
+\ ******************************************************************
+\ *	The code image
+\ ******************************************************************
+ORG CODE_ORG
+GUARD CODE_TOP
+.start
+
+.main
+{
+    ldx #&ff
+    txs
+
+    \\ Blank until there is something to show. R8's skew bits are the
+    \\ chip's own display enable; R10 = &20 hides the cursor, which R8
+    \\ does not. VDU 22 resets both, so they are written again after it.
+    CRTC 8, R8_BLANK
+    CRTC 10, &20
+
+    ldx #0
+    txa
+    .zp_loop
+    sta &00, x
+    inx
+    cpx #ZP_END
+    bcc zp_loop
+
+    lda #22
+    jsr oswrch
+    lda #1                      ; MODE 1 (not 129: no shadow on a Master)
+    jsr oswrch
+    CRTC 8, R8_BLANK
+    CRTC 10, &20
+
+    \\ The one data file: its stream lands at LOADER_STAGE in the
+    \\ blanked screen and unpacks up to PANEL_ADDR. Every disc access
+    \\ happens HERE, before install_irq takes the MOS's tick away.
+    lda #LO(panel_filename)
+    ldy #HI(panel_filename)
+    ldx #HI(LOADER_STAGE)
+    jsr load_stream
+    lda #LO(PANEL_ADDR)
+    ldx #HI(PANEL_ADDR)
+    jsr unpack_to
+
+    jsr fill_play               ; something in the strip to scroll
+    jsr setup_display           ; the wrap, the B shape, display on
+    jsr install_irq             ; and the rupture takes over
+}
+\ falls into the main loop
+
+\ ******************************************************************
+\ *	The main loop: read the keys, move the scroll, hand the frame over
+\ ******************************************************************
+.main_loop
+{
+    ldx #KEY_LEFT
+    jsr keydown_int
+    bpl not_left
+    sec                         ; scroll -= STEP, wrapping below 0
+    lda scroll
+    sbc #SCROLL_STEP
+    sta scroll
+    lda scroll+1
+    sbc #0
+    sta scroll+1
+    bpl not_left
+    clc
+    lda scroll
+    adc #LO(BUF_SIZE)
+    sta scroll
+    lda scroll+1
+    adc #HI(BUF_SIZE)
+    sta scroll+1
+    .not_left
+
+    ldx #KEY_RIGHT
+    jsr keydown_int
+    bpl not_right
+    clc                         ; scroll += STEP, wrapping at BUF_SIZE
+    lda scroll
+    adc #SCROLL_STEP
+    sta scroll
+    lda scroll+1
+    adc #0
+    sta scroll+1
+    cmp #HI(BUF_SIZE)           ; LO(BUF_SIZE) = 0, asserted above
+    bcc not_right
+    sec
+    lda scroll
+    sbc #LO(BUF_SIZE)
+    sta scroll
+    lda scroll+1
+    sbc #HI(BUF_SIZE)
+    sta scroll+1
+    .not_right
+
+    \\ CRTC start = (BUF_BASE + scroll) / 8. Parked under SEI so the
+    \\ VSync hook, which reads the pair, cannot see half of it.
+    clc
+    lda scroll+1
+    adc #HI(BUF_BASE)           ; LO(BUF_BASE) = 0
+    sta tmp
+    lda scroll
+    lsr tmp : ror a
+    lsr tmp : ror a
+    lsr tmp : ror a
+    sei
+    sta crtc_park
+    lda tmp
+    sta crtc_park+1
+    lda #1
+    sta frame_ready
+    cli
+
+    \\ frame_wait: spin until the VSync hook has taken it. The hook only
+    \\ takes when FRAME_LOCK fields have passed, so this is the 25 Hz lock.
+    .wait_take
+    lda frame_ready
+    bne wait_take
+
+    inc frame_count
+    bne same_page
+    inc frame_count+1
+    .same_page
+    jmp main_loop
+}
+
+\ ******************************************************************
+\ *	setup_display - the 10K wrap, the CRTC in cycle B's shape, display on
+\ ******************************************************************
+\ *	The CRTC is left in the B shape so the first VSync the handler
+\ *	sees arrives with C4 where the steady state expects it (Edge's
+\ *	setup_display and Paradroid's SetupRupture both do this): the
+\ *	hook writes A's registers 8 rows before A starts, and the rupture
+\ *	locks on the first field. The change of shape from the OS's MODE 1
+\ *	frame costs a malformed field or two under the blank; Paradroid's
+\ *	RuptAlign is the aligned version, not ported here (PLAN.md).
+.setup_display
+{
+    \\ 10K hardware wrap: addressable latch lines 4 and 5 both SET
+    \\ (measured: 1/1 wraps &8000 to &5800; beeb.h.asm's header)
+    lda #&0f : sta SYS_VIA_DDRB     ; latch bits are outputs
+    lda #12  : sta SYS_VIA_ORB      ; line 4 = 1
+    lda #13  : sta SYS_VIA_ORB      ; line 5 = 1
+
+    CRTC 4, PLAY_R4
+    CRTC 5, 0
+    CRTC 6, PLAY_ROWS
+    CRTC 7, PLAY_R7
+    CRTC 10, &20                    ; cursor off
+    CRTC 12, HI(BUF_BASE / 8)
+    CRTC 13, LO(BUF_BASE / 8)
+
+    lda #0
+    sta field_count
+    sta flip_field
+    sta frame_ready
+    sta rupt_state
+    sta scroll
+    sta scroll+1
+    lda #LO(BUF_BASE / 8)
+    sta crtc_live
+    sta crtc_park
+    lda #HI(BUF_BASE / 8)
+    sta crtc_live+1
+    sta crtc_park+1
+
+    CRTC 8, R8_ON                   ; display on, interlace off
+    rts
+}
+
+\ ******************************************************************
+\ *	fill_play - a pattern in the strip so the scroll can be seen
+\ ******************************************************************
+\ *	Diagonal bands of ALL FOUR logical colours: unit u of row r is
+\ *	colour ((u / 4) + r) AND 3, so the bands step one unit a row and
+\ *	any horizontal offset is visible, and under the play palette the
+\ *	four read blue, magenta, cyan, green - the four the panel has not
+\ *	got (decision 4). Unit 0 of every row is a single pixel column of
+\ *	colour 3 (&88: pixel 0 of colour 3; green in play), a seam marker
+\ *	at the ring's start.
+.fill_play
+{
+    lda #LO(BUF_BASE) : sta fill_ptr
+    lda #HI(BUF_BASE) : sta fill_ptr+1
+    lda #0
+    sta fill_row
+    .row_loop
+    lda #0
+    sta fill_unit
+    .unit_loop
+    lda fill_unit
+    lsr a
+    lsr a
+    clc
+    adc fill_row
+    and #3
+    tax
+    lda solid_bytes, x
+    ldx fill_unit
+    bne not_seam
+    lda #&88
+    .not_seam
+    ldy #7
+    .byte_loop
+    sta (fill_ptr), y
+    dey
+    bpl byte_loop
+    clc
+    lda fill_ptr
+    adc #8
+    sta fill_ptr
+    bcc no_carry
+    inc fill_ptr+1
+    .no_carry
+    inc fill_unit
+    lda fill_unit
+    cmp #PLAY_UNITS
+    bne unit_loop
+    inc fill_row
+    lda fill_row
+    cmp #PLAY_ROWS
+    bne row_loop
+    rts
+}
+.solid_bytes EQUB &00, &0F, &F0, &FF    ; four pixels of logical 0..3
+
+\ ******************************************************************
+\ *	The rupture and the forked kit files
+\ ******************************************************************
+INCLUDE "src/rupture.asm"
+INCLUDE "src/lib/irq.asm"
+INCLUDE "src/lib/keydown.asm"
+INCLUDE "src/lib/loader.asm"
+INCLUDE "src/lib/zx0depack.asm"
+INCLUDE "src/lib/boot_stamp.asm"
+
+.zx0_unpack
+    ZX0_DEPACKER
+
+.panel_filename EQUS "PANEL", 13
+
+.end
+SAVE "Game", start, end, main
+
+\ ******************************************************************
+\ *	The panel as a disc file, from src/data/panel.bin. beebasm SAVEs
+\ *	it raw; tools/make_disc.py compresses it and moves its catalogue
+\ *	load address to LOADER_STAGE. Assembled at PANEL_ADDR because it
+\ *	has to be assembled somewhere that nothing else claims.
+\ ******************************************************************
+code_p% = P%
+CLEAR PANEL_ADDR, PANEL_ADDR + PANEL_BYTES
+ORG PANEL_ADDR
+.panel_start
+INCBIN "src/data/panel.bin"
+.panel_end
+ASSERT panel_end - panel_start = PANEL_BYTES
+SAVE "PANEL", panel_start, panel_end
+ORG code_p%
+
+\ ******************************************************************
+\ *	!BOOT - stamped with what this build is (boot_stamp.asm)
+\ ******************************************************************
+boot_p% = P%
+CLEAR BOOT_STAGE, BOOT_STAGE + 256
+ORG BOOT_STAGE
+.bootfile
+    BOOT_STAMP_HEAD "beeb-port-kit template"
+    BOOT_FLAG MASTER, "MASTER: Master 128 build"       \ legal under RELEASE
+    BOOT_STAMP_TAIL "Game"
+.bootfile_end
+ASSERT bootfile_end < BOOT_STAGE + 256
+SAVE "!BOOT", bootfile, bootfile_end
+ORG boot_p%
+
+PRINT "------"
+PRINT "beeb-port-kit template"
+PRINT "CODE  ", ~start, "-", ~end, " (", end - start, " bytes), FREE to", ~CODE_TOP, "=", ~CODE_TOP - end
+PRINT "ZP    high water", ~ZP_END
+PRINT "T1_I1 =", T1_I1, " T1_I2 =", T1_I2, " T1_I3 =", T1_I3, " T1_I4 =", T1_I4
+PRINT "!BOOT ", bootfile_end - bootfile, " bytes"
+PRINT "------"

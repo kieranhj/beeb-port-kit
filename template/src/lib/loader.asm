@@ -1,0 +1,195 @@
+\ ******************************************************************
+\ *	loader.asm - OSFILE a ZX0 stream into a staging area, unpack it out
+\ ******************************************************************
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. BeebASM syntax, plain 6502.
+\ *
+\ *	WHAT IT IS. Edge's boot loader, generalised: every data file on the
+\ *	disc ships ZX0-compressed with a catalogue load address the disc
+\ *	builder writes (py/make_disc.py), and none of them could be loaded
+\ *	straight to where it belongs even uncompressed - the filing system
+\ *	has the DFS ROM paged in at &8000 while it works, so a bank's bytes
+\ *	would land in the ROM socket, and on a Master HAZEL is the filing
+\ *	system's own workspace. So each stages in RAM and is unpacked from
+\ *	there. ALL OF IT RUNS BEFORE install_irq (irq.asm): the DFS needs
+\ *	the MOS's interrupt.
+\ *
+\ *	WHERE IT CAME FROM.
+\ *	  https://github.com/kieranhj/edge-beeb/blob/master/src/main.asm
+\ *	    (load_stream / unpack_to / load_bank / unpack_andy / load_hazel,
+\ *	    ~1712-1840)
+\ *	  https://github.com/kieranhj/edge-beeb/blob/master/src/tables.asm
+\ *	    (the OSFILE parameter block, ~33-47)
+\ *	  https://github.com/kieranhj/edge-beeb/blob/master/lib/disksys.asm
+\ *	    (the same block; Edge's boot uses OSFILE, not disksys)
+\ *	Paradroid loads by `*LOAD` through OSCLI instead (its ts_loads,
+\ *	main.asm ~2570-2600, and UnpackBankIn) - the same staging idea with
+\ *	a command string per file. It is NOT ported here: OSFILE takes a
+\ *	filename pointer and a block, which is the smaller thing to
+\ *	generalise, and Edge's is the later of the two.
+\ *
+\ *	WHAT WAS MEASURED, and when:
+\ *	  - OSFILE WRITES THE FILE'S CATALOGUE ADDRESSES BACK INTO ITS
+\ *	    PARAMETER BLOCK after a load, so the next call would honour the
+\ *	    LAST file's load address and land wherever that was. load_stream
+\ *	    resets load and exec before every call (Edge, 2026-09-03; it
+\ *	    was the second bank landing on the first).
+\ *	  - Sideways RAM is written through ROMSEL alone; a Solidisk-style
+\ *	    board needing its write-enable latches is refused, not driven
+\ *	    (Paradroid swram_probe.asm, KC 2026-08-29).
+\ *	  - Writing &F4 as well as &FE30 before the load matters: the DFS
+\ *	    pages its ROM in over the bank and the MOS restores ROMSEL from
+\ *	    &F4 afterwards, so the unpack lands in the bank named there.
+\ *	  - MASTER ONLY. ANDY is 4K at &8000-&8FFF, ROMSEL bit 7, overlaying
+\ *	    only that 4K of whichever bank is paged (Edge, jsbeeb
+\ *	    2026-09-04, from 6502 in main RAM: &AA to &8000 under bank 4 and
+\ *	    &55 under &84 read back separately; &9000 is the bank either
+\ *	    way). The test HAS to be machine code: BASIC is itself the ROM
+\ *	    at &8000. The loader cannot write into ANDY while the filing
+\ *	    system runs, so its stream is loaded early and unpacked last.
+\ *	  - MASTER ONLY. HAZEL (&C000-&DFFF, ACCCON bit 3) is the filing
+\ *	    system's workspace. Load into it LAST and touch the disc never
+\ *	    again; and BREAK must then be a power-on reset, because a soft
+\ *	    break leaves the wreckage in place - measured: no DFS banner,
+\ *	    *CAT returns nothing. OSBYTE 200, X = 3 at the top of main makes
+\ *	    BREAK a power-on reset (bit 1) and disables ESCAPE (bit 0):
+\ *	        lda #200 : ldx #3 : ldy #0 : jsr osbyte
+\ *	    Do it FIRST, before anything can be broken into.
+\ *
+\ *	THE INCLUDER DEFINES, before this file is included:
+\ *	  zxsrc, zxdst (ZP)   the depacker's pointers (zx0depack.asm)
+\ *	  zx0_unpack          the depacker's entry
+\ *	  LOADER_STAGE        the page-aligned address streams stage at for
+\ *	                      load_bank / load_hazel. Edge: DEPK_STREAM =
+\ *	                      &3000, the SHADOW screen, 20K nobody displays
+\ *	                      while the loading picture is up in main.
+\ *	                      Paradroid: DEPK_STREAM = &3200 in the
+\ *	                      framebuffer, blanked. It must not overlap the
+\ *	                      output (the in-place rule, zx0depack.asm).
+\ *	  MASTER              0 or 1: assembles load_hazel and unpack_andy.
+\ *	The filenames are the includer's: CR-terminated strings, the
+\ *	address in A/Y.
+\ *
+\ *	Fork this into your project; keep this header.
+\ *	FORKED into beeb-port-kit/template 2026-09-07, unchanged.
+\ ******************************************************************
+
+\ ---- load_stream: A/Y = filename, X = the page it loads at ---------
+\ Leaves zxsrc pointing at it, ready for unpack_to. Clobbers A, X, Y.
+.load_stream
+{
+    stx stream_page
+    sta osfile_nameaddr
+    sty osfile_nameaddr+1
+
+    \\ OSFILE writes the file's catalogue addresses back into the block
+    \\ after a load, so the next call would honour the last file's load
+    \\ address and land wherever that was. Reset load and exec = 0 (exec
+    \\ low byte 0 = "use the block's load address") every call.
+    lda #0
+    sta osfile_loadaddr
+    sta osfile_loadaddr+2
+    sta osfile_loadaddr+3
+    sta osfile_execaddr
+    lda stream_page
+    sta osfile_loadaddr+1
+
+    ldx #LO(osfile_params)
+    ldy #HI(osfile_params)
+    lda #&FF                    ; OSFILE &FF: load, to the block's address
+    jsr osfile
+
+    \\ AFTER the call, not before: the depacker's zero page is borrowed
+    \\ from the game's, and the filing system may be running in it.
+    lda #0
+    sta zxsrc
+    lda stream_page
+    sta zxsrc+1
+    rts
+    .stream_page EQUB 0
+}
+
+\ ---- unpack_to: the stream at zxsrc to X:A ------------------------
+.unpack_to
+{
+    sta zxdst
+    stx zxdst+1
+    jmp zx0_unpack
+}
+
+\ ---- load_bank: A/Y = filename, X = the ROMSEL value of the bank ---
+\ Stages the stream at LOADER_STAGE and unpacks it straight into the
+\ paged-in bank at &8000. Leaves the bank selected.
+.load_bank
+{
+    stx ROMSHAD                 ; both: the DFS pages its ROM in over
+    stx ROMSEL                  ; us and the MOS restores from ROMSHAD
+    ldx #HI(LOADER_STAGE)
+    jsr load_stream
+    lda #LO(SWRAM_BASE)
+    ldx #HI(SWRAM_BASE)
+    jmp unpack_to
+}
+
+IF MASTER
+\ ---- unpack_andy: the stream at zxsrc into ANDY at X:A -------------
+\ Called AFTER the last load, with zxsrc already pointing at a stream
+\ loaded earlier (the loader cannot write into ANDY while the filing
+\ system runs). With interrupts off and ROMSHAD set as well as ROMSEL:
+\ the MOS's IRQ handler is still installed here, and anything that
+\ pages a ROM restores ROMSEL from ROMSHAD - which would drop ANDY out
+\ from under the depacker half way through and put the rest of the
+\ stream into the bank underneath. Puts the bank back on the way out
+\ (Edge does not: its caller's next instruction does).
+.unpack_andy
+{
+    sei
+    lda ROMSHAD
+    pha
+    ora #ANDY_ROMSEL
+    sta ROMSHAD
+    sta ROMSEL
+    jsr unpack_to
+    pla
+    sta ROMSHAD
+    sta ROMSEL
+    cli
+    rts
+}
+
+\ ---- load_hazel: A/Y = filename, unpacked into HAZEL at &C000 ------
+\ Stages at LOADER_STAGE and unpacks with ACCCON's Y bit set over the
+\ unpack. THIS IS THE LAST DISC ACCESS: HAZEL is the filing system's
+\ workspace, and BREAK must be a power-on reset from here on - see the
+\ header.
+.load_hazel
+{
+    ldx #HI(LOADER_STAGE)
+    jsr load_stream
+    lda ACCCON
+    ora #ACCCON_Y
+    sta ACCCON
+    lda #LO(HAZEL_BASE)
+    ldx #HI(HAZEL_BASE)
+    jsr unpack_to
+    lda ACCCON
+    and #255-ACCCON_Y
+    sta ACCCON
+    rts
+}
+ENDIF
+
+\ ---- the OSFILE parameter block -----------------------------------
+\ Boot-only data in both ports: read while the disc is loading and never
+\ again. Edge keeps it above SPR_SAVE's base with the rest of the boot
+\ code, where the game walks over it once it starts.
+.osfile_params
+.osfile_nameaddr
+EQUW 0                          ; -> the CR-terminated filename
+.osfile_loadaddr
+EQUD 0                          ; rewritten by every load - see the header
+.osfile_execaddr
+EQUD 0                          ; low byte 0 = use loadaddr
+.osfile_length
+EQUD 0                          ; OSFILE fills these two in on the way
+.osfile_endaddr
+EQUD 0                          ; back; nothing here reads them

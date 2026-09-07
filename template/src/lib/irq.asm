@@ -1,0 +1,183 @@
+\ ******************************************************************
+\ *	irq.asm - the IRQ1V owner: System VIA T1 and CA1 (VSync), nothing else
+\ ******************************************************************
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. BeebASM syntax, plain 6502.
+\ *
+\ *	WHAT IT IS. The interrupt handler both ports run their raster
+\ *	"rupture" from, and the routine that puts it in place. It OWNS
+\ *	IRQ1V outright: nothing is passed on to the MOS, so the MOS's
+\ *	handler never adds latency ahead of ours. The cost is that the MOS
+\ *	100 Hz tick stops, and with it OS sound, the OS keyboard scan and
+\ *	the clock; both ports read the keyboard straight off the VIA
+\ *	(keydown.asm) and drive the sound chip themselves.
+\ *
+\ *	WHERE IT CAME FROM. Paradroid's IrqHandler / InstallIrq /
+\ *	UninstallIrq and Edge's irq_handler / install_irq, which are the
+\ *	same code with two differences: Edge dropped the uninstall (it never
+\ *	hands the machine back - BREAK is a power-on reset there) and the
+\ *	sound-tick paging shim, and Paradroid bumps a field counter in the
+\ *	handler where Edge does it in the hook.
+\ *	  https://github.com/kieranhj/paradroid-beeb/blob/main/src/main.asm
+\ *	    (~3276-3395; the saved-state bytes ~3610-3615)
+\ *	  https://github.com/kieranhj/edge-beeb/blob/master/src/rupture.asm
+\ *	    (~262-317)
+\ *
+\ *	WHAT WAS MEASURED, and when:
+\ *	  - The MOS saves the interrupted A in &FC before dispatching through
+\ *	    IRQ1V and does NOT save X or Y, so this does (both ports, and
+\ *	    every BBC reference agrees).
+\ *	  - Silencing BOTH VIAs' IERs first is load-bearing: any source
+\ *	    left enabled that we never acknowledge holds the IRQ line
+\ *	    asserted forever (Paradroid, 2026-08).
+\ *	  - The CA1 (VSync) interrupt is serviced about 4 scanlines after
+\ *	    the VSync edge, so every T1 fire measured from it carries -4*SL
+\ *	    (Paradroid docs/raster-timing.md; Edge reconfirmed 2026-09-02:
+\ *	    handler -> fire 1 = 53 scanlines with T1_I1 = 56*SL - 4*SL - 2,
+\ *	    fire 1 -> fire 2 = 40.0 scanlines with T1_I2 = 40*SL - 2).
+\ *	  - T1 continuous (ACR bit 6 set, bit 7 clear) reloads from its
+\ *	    latch on every underflow, so a handler that overruns cannot
+\ *	    shift the cadence; only the latch writes do.
+\ *	  - FILING-SYSTEM CALLS MUST PRECEDE install_irq. The DFS needs the
+\ *	    MOS's interrupt (its timeouts run off the 100 Hz tick) and a
+\ *	    load after install hangs. Both ports load everything, then
+\ *	    install. Edge, which takes HAZEL, may not touch the disc again
+\ *	    at all (loader.asm).
+\ *	  - THE MOS SOUND WORKSPACE AT &0800 MUST BE FLUSHED BEFORE
+\ *	    uninstall_irq, if anything of yours has been written over
+\ *	    &0800-&08FF. The moment the MOS gets its tick back its sound
+\ *	    driver reads its queues, finds your data and PLAYS it - a quiet
+\ *	    endless sweep of rising notes (Paradroid, KC heard it
+\ *	    2026-08-26). OSBYTE &0F, X = 0 flushes every buffer. BEFORE the
+\ *	    uninstall, not after: with our handler still installed the
+\ *	    MOS's sound IRQ is definitively not running, so it cannot be
+\ *	    halfway through a note as the pointers are reset under it.
+\ *	  - THE HANDLER MUST NOT TOUCH A SIDEWAYS BANK unless it saves and
+\ *	    restores ROMSEL itself - and ROMSHAD (&F4) is the byte to save,
+\ *	    because the interrupted code writes ROMSHAD before ROMSEL, so
+\ *	    the shadow always names the bank it INTENDS even between the
+\ *	    pair's two stores (Paradroid main.asm ~91-105, its sound tick;
+\ *	    Edge pages bank 3 in for the music from rupt_vsync the same
+\ *	    way). A hook that pages: LDA ROMSHAD : PHA : ... : PLA :
+\ *	    STA ROMSHAD : STA ROMSEL. Paradroid's shim is not here; put it
+\ *	    in your hook if you need it.
+\ *
+\ *	THE INCLUDER DEFINES, before this file is included:
+\ *	  irq_timer_hook   a routine, called with T1 already acknowledged;
+\ *	                   both ports' rupt_timer / RuptTimer (the CRTC
+\ *	                   register writes for the next display cycle, and
+\ *	                   the next T1 latch)
+\ *	  irq_vsync_hook   a routine, called with CA1 acknowledged; both
+\ *	                   ports' rupt_vsync / RuptVSync (the bank flip, the
+\ *	                   first T1 latch, the music tick, the field count)
+\ *	  IRQ_UNINSTALL    0 or 1. 1 makes install_irq save the MOS's vector
+\ *	                   and VIA state and assembles uninstall_irq to put
+\ *	                   them back, for a game that hands the machine back
+\ *	                   (Paradroid's game-over titles run under the MOS).
+\ *	                   0 is Edge: 27 bytes smaller and no saves.
+\ *	Both hooks may clobber A, X, Y and must RTS. They run with I set.
+\ *	install_irq is called ONCE, after the last disc access, with the
+\ *	CRTC and the T1 latch already programmed for the first fire (both
+\ *	ports write T1LL/T1LH from the VSync hook, so the first field after
+\ *	install merely starts the cadence).
+\ *
+\ *	Fork this into your project; keep this header.
+\ *	FORKED into beeb-port-kit/template 2026-09-07, unchanged.
+\ ******************************************************************
+
+.irq_handler
+{
+    txa : pha
+    tya : pha
+
+    lda SYS_VIA_IFR
+    and #&40                    ; T1
+    beq not_t1
+    lda SYS_VIA_T1CL            ; acknowledge
+    jsr irq_timer_hook
+    jmp done
+    .not_t1
+
+    lda SYS_VIA_IFR
+    and #&02                    ; CA1 = VSync
+    beq done
+    lda #&02
+    sta SYS_VIA_IFR             ; acknowledge
+    jsr irq_vsync_hook
+
+    .done
+    pla : tay
+    pla : tax
+    lda &fc                     ; the interrupted A, saved by the MOS
+    rti
+}
+
+\ ---- install: put irq_handler at the head of IRQ1V ---------------
+.install_irq
+{
+    sei
+IF IRQ_UNINSTALL
+    \\ Save what the MOS had FIRST, before any of it is clobbered. The
+    \\ T1 latches matter as much as the vector: the rupture reprograms
+    \\ them every field, and the MOS's 100 Hz events - the keyboard
+    \\ scan, the clock, the disc timeouts - run off what it left there.
+    \\ Reading T1LL/T1LH reads the latches without touching the counter.
+    lda SYS_VIA_IER : and #&7f : sta old_sys_ier
+    lda USR_VIA_IER : and #&7f : sta old_usr_ier
+    lda SYS_VIA_ACR : sta old_sys_acr
+    lda SYS_VIA_T1LL : sta old_sys_t1l
+    lda SYS_VIA_T1LH : sta old_sys_t1h
+    lda IRQ1V   : sta old_irq1v
+    lda IRQ1V+1 : sta old_irq1v+1
+ENDIF
+
+    lda #&7f : sta SYS_VIA_IER  ; silence both VIAs: anything we do not
+    lda #&7f : sta USR_VIA_IER  ; service would hold IRQ asserted forever
+
+    lda #LO(irq_handler) : sta IRQ1V
+    lda #HI(irq_handler) : sta IRQ1V+1
+
+    lda SYS_VIA_ACR             ; T1 continuous, no PB7 output
+    and #&3f
+    ora #&40
+    sta SYS_VIA_ACR
+
+    lda #&7f : sta SYS_VIA_IFR  ; clear anything pending
+    lda #&c2 : sta SYS_VIA_IER  ; enable CA1 (VSync) + T1
+    cli
+    rts
+}
+
+IF IRQ_UNINSTALL
+\ ---- uninstall: give the machine back to the MOS -----------------
+\ The exact inverse, from the saves above: silence everything, put the
+\ MOS's ACR and T1 latches back, restore IRQ1V, then re-enable what the
+\ MOS had enabled. Writing the T1 LATCHES only - never T1C-H, which
+\ would restart the counter mid-count - is enough: T1 is continuous and
+\ reloads from the latch on its next underflow, so the MOS clock is at
+\ most one rupture interval late.
+\ Callable only after install_irq has run at least once. Flush the MOS
+\ sound workspace FIRST if you have written over &0800 - see the header.
+.uninstall_irq
+{
+    sei
+    lda #&7f : sta SYS_VIA_IER
+    lda #&7f : sta USR_VIA_IER
+    lda old_sys_acr : sta SYS_VIA_ACR
+    lda old_sys_t1l : sta SYS_VIA_T1LL
+    lda old_sys_t1h : sta SYS_VIA_T1LH
+    lda old_irq1v   : sta IRQ1V
+    lda old_irq1v+1 : sta IRQ1V+1
+    lda #&7f : sta SYS_VIA_IFR  ; nothing of ours may be left pending
+    lda old_sys_ier : ora #&80 : sta SYS_VIA_IER
+    lda old_usr_ier : ora #&80 : sta USR_VIA_IER
+    cli
+    rts
+}
+
+.old_irq1v   EQUW 0
+.old_sys_ier EQUB 0             ; the MOS's VIA state, saved by install_irq
+.old_usr_ier EQUB 0             ; and handed back by uninstall_irq
+.old_sys_acr EQUB 0
+.old_sys_t1l EQUB 0
+.old_sys_t1h EQUB 0
+ENDIF
