@@ -83,7 +83,9 @@ py/                     the Python halves that were identical: ZX02 and ZX0, DFS
                         mode packers, C64 readers, the art sheet pipeline
 template/               a starter project that boots to a panel above a play area with a
                         rupture, its own interrupt handler, direct keyboard and a compressed
-                        disc
+                        disc; template/examples/vscroll is the other frame shape - the play
+                        area FIRST, scrolled one scanline at a time under the cursor keys,
+                        with its own oracle and its measurements
 ```
 
 Everything in `lib/` and `py/` is meant to be **forked into your project and hacked**, not

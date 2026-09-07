@@ -16,9 +16,10 @@ these was found by a second emulator or by hardware, after jsbeeb had said it wa
   instrument measures length, not phase.
 - **The mid-frame bank flip** is measured in jsbeeb only, and Edge Grinder's rules say so.
 - **The vertical total adjust displaying when `R6 = rows + 1`** - the fact a scanline vertical
-  scroll's bottom sliver comes free from - is a jsbeeb 1.25.0 result on a Master (1942, 2026-09-08).
-  Rich Talbot-Watkins's demo disc relies on it and runs on a Model B in jsbeeb; nothing has checked
-  it on b2, beebjit or hardware. A port that spends the row it saves should check first.
+  scroll's bottom sliver comes free from - is a jsbeeb 1.25.0 result on a Master (1942) and on a
+  Model B (the kit's own `template/examples/vscroll`), both 2026-09-08. Rich Talbot-Watkins's demo
+  disc relies on it and runs in jsbeeb too; nothing has checked it on b2, beebjit or hardware. A
+  port that spends the row it saves should check first.
 - **Perceived smoothness** - no emulator can judge it (`beeb-frame-drops`).
 
 **Second emulator:** b2 or beebjit (b-em is no longer used); `b2 -0 <ssd> -b` or `beebjit -0 <ssd> -autoboot` (`-master` for a Master, `-swram 4` per bank)

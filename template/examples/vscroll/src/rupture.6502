@@ -1,0 +1,162 @@
+\ ******************************************************************
+\ *	rupture.6502 - two CRTC cycles a frame, the PLAY STRIP FIRST and
+\ *	scrolled through them by scanline, a static panel under it
+\ ******************************************************************
+\ *	beeb-port-kit template example, MIT, Kieran Connell 2026.
+\ *
+\ *	The frame, the write windows and the sources are in main.6502's
+\ *	header. This file is the three fires and the VSync hook.
+\ *
+\ *	WHICH REGISTER GOES WHERE, and why each is where it is:
+\ *
+\ *	  R4   inside its OWN cycle, before C4 reaches the INHERITED value
+\ *	       (each cycle starts with the other one's R4 still in the
+\ *	       chip). Play inherits 22 and needs 14: fire 1, at play row 0,
+\ *	       has 22 rows of margin. Panel inherits 14 and needs 22:
+\ *	       fire 3, at panel row 0, has 14.
+\ *	  R5   ANYWHERE IN THE CYCLE BUT NOT NEAR A BOUNDARY. It is sampled
+\ *	       at each cycle's end, and changed after the adjust counter
+\ *	       has passed the new value the match never happens and the
+\ *	       adjust runs on to its 5-bit wrap - about 29 extra scanlines.
+\ *	         the panel's (8 - line), sampled at line 72  -> VSync, line 4
+\ *	         the play's `line`,      sampled at line 200-line -> fire 2,
+\ *	                                                            line 140
+\ *	       FIRE 2 EXISTS FOR NO OTHER REASON. Rich's demo writes the
+\ *	       play cycle's R5 in its first fire and gets away with it by
+\ *	       instruction ordering; at `line` = 0 our fire 1 lands in the
+\ *	       blanking of the panel adjust's LAST scanline, which is
+\ *	       precisely the worst case the trap describes, so the write
+\ *	       goes in the middle of the cycle where the rule says to put it.
+\ *	  R6   before C4 reaches the row it names. Each cycle's is written
+\ *	       in the cycle BEFORE it, which is the conservative form and
+\ *	       what Rich's demo does: 16 at VSync (in the panel cycle, for
+\ *	       the play cycle), 4 at fire 3 (in the panel cycle, for itself
+\ *	       - panel row 0, and the deadline is panel row 4).
+\ *	  R7   there is only ONE, compared in every cycle, and no constant
+\ *	       serves: R7_NEVER at VSync so the play cycle is silent, then
+\ *	       PANEL_R7 at fire 3, in panel row 0, before C4 reaches 14.
+\ *	  R8   fire 1 only, and it is THE ONLY SCANLINE-EXACT WRITE IN THE
+\ *	       FRAME. The panel-first shape needs four of these, one at
+\ *	       each edge of its two blanked gaps.
+\ *	  R12/13  latched at cycle start, so always the PREVIOUS cycle:
+\ *	       the play cycle's at VSync, the panel's at fire 2.
+\ *
+\ *	ONE PALETTE, set by the MODE 1 VDU 22 and never touched here.
+\ *	There is no blanked scanline at the play/panel boundary for a
+\ *	second palette to be switched in - that is what "no gap" means -
+\ *	so the panel draws in the play palette. If a HUD ever needed its
+\ *	own colours, a partial switch of two logical colours is eight ULA
+\ *	writes = 48 cycles, which fits MODE 1's 48-cycle horizontal
+\ *	blanking exactly and would need a measured phase; all sixteen
+\ *	writes (96 cycles) would not fit and would cost a play-line.
+\ ******************************************************************
+
+\ ---- the VSync hook: IRQ on CA1, panel row 14 + latency ------------
+.rupt_vsync
+{
+    \ Restart T1 FIRST - everything after it is a fire's phase, and the
+    \ take below runs on alternate fields only, so a restart after it
+    \ would move every fire by the take's cycles on every other field.
+    lda #LO(T1_I1) : sta SYS_VIA_T1LL
+    lda #HI(T1_I1) : sta SYS_VIA_T1CH
+    lda #LO(T1_I2) : sta SYS_VIA_T1LL
+    lda #HI(T1_I2) : sta SYS_VIA_T1LH
+
+    inc field_count
+
+    \\ The take: all FOUR bytes of a position together, or a field
+    \\ could show one position's start address with another's scanline
+    \\ offset. It happens here, in vertical blanking, and nowhere else.
+    lda frame_ready
+    beq no_take
+    lda field_count
+    sec
+    sbc flip_field
+    cmp #FRAME_LOCK
+    bcc no_take
+
+    lda field_count
+    sta flip_field
+    lda crtc_park   : sta crtc_live
+    lda crtc_park+1 : sta crtc_live+1
+    lda line_park   : sta line_live
+    lda adj_park    : sta adj_live
+    lda #0
+    sta frame_ready
+    .no_take
+
+    \\ R5 for THIS cycle's own adjust, which is the top border. It is
+    \\ sampled at line 72 and we are at line 4: 68 lines of margin, and
+    \\ the adjust has not started counting.
+    lda #5 : sta CRTC_ADDR : lda adj_live : sta CRTC_DATA
+
+    \\ Everything else here is for the PLAY cycle, which starts 76
+    \\ lines from now; this cycle is its "previous", which is where R6,
+    \\ R7 and R12/13 belong. This cycle reached its own R6 = 4 at line
+    \\ 232 and its own R7 = 14 at line 312, so raising both here
+    \\ disturbs neither.
+    CRTC 6, PLAY_R6             ; 16: the adjust row must display too
+    CRTC 7, R7_NEVER            ; so the play cycle cannot fire VSync
+    lda #12 : sta CRTC_ADDR : lda crtc_live+1 : sta CRTC_DATA
+    lda #13 : sta CRTC_ADDR : lda crtc_live   : sta CRTC_DATA
+
+    \\ Blank, for the play cycle's first `line` scanlines. They are the
+    \\ top of the buffer row that has already scrolled off, and they
+    \\ ARE displayed - R6 = 16 sees to that - so they must not be seen.
+    \\ Fire 1 turns the display back on at the first visible line.
+    CRTC 8, R8_BLANK
+
+    lda #0
+    sta rupt_state
+    rts
+}
+
+\ ---- the T1 hook: fires 1 to 3 -------------------------------------
+.rupt_timer
+{
+    lda rupt_state
+    bne not_fire1
+
+    \\ ---- fire 1: line 80, THE FIRST VISIBLE PLAY LINE ----
+    \\ NOTHING may go in front of this write: T1_PHASE was measured to
+    \\ it, and it has to land in the horizontal blanking of the line
+    \\ before its target.
+    lda #8 : sta CRTC_ADDR : lda #R8_ON : sta CRTC_DATA
+    CRTC 4, PLAY_R4             ; the play cycle's own, 22 rows of margin
+    lda #LO(T1_I3) : sta SYS_VIA_T1LL
+    lda #HI(T1_I3) : sta SYS_VIA_T1LH
+    inc rupt_state
+    rts
+
+    .not_fire1
+    cmp #1
+    bne not_fire2
+
+    \\ ---- fire 2: line 140, the middle of the play cycle ----
+    \\ R5 for the play cycle's own adjust - the bottom sliver - kept
+    \\ 60 lines clear of the boundary where it is sampled. R12/13 for
+    \\ the panel cycle may be written anywhere inside this one.
+    lda #5 : sta CRTC_ADDR : lda line_live : sta CRTC_DATA
+    lda #12 : sta CRTC_ADDR : lda #HI(PANEL_ADDR / 8) : sta CRTC_DATA
+    lda #13 : sta CRTC_ADDR : lda #LO(PANEL_ADDR / 8) : sta CRTC_DATA
+    lda #LO(T1_I4) : sta SYS_VIA_T1LL
+    lda #HI(T1_I4) : sta SYS_VIA_T1LH
+    inc rupt_state
+    rts
+
+    .not_fire2
+    cmp #2
+    bne done
+
+    \\ ---- fire 3: line 204, panel row 0 ----
+    CRTC 4, PANEL_R4
+    CRTC 6, PANEL_R6            ; deadline: before C4 reaches 4
+    CRTC 7, PANEL_R7            ; deadline: before C4 reaches 14
+    inc rupt_state
+    .done
+    rts
+}
+
+\ ---- the hooks irq.6502 calls (aliases, not jumps) -----------------
+irq_vsync_hook = rupt_vsync
+irq_timer_hook = rupt_timer

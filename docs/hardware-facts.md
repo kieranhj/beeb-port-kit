@@ -126,6 +126,11 @@ the comments in the listing are the specification).
   the same day, same result. The field stays 312 lines with it: 3,993,600 cycles over 100 fields =
   39,936.00 each. Rich's demo was booted here too (jsbeeb 1.25.0, Model B): it runs, and its own
   field measures 39,936.0 cycles over 50 fields.
+  Measured again on a **Model B**, 2026-09-08, jsbeeb 1.25.0, by the kit's own worked example
+  (`template/examples/vscroll`, and `template/docs/vertical-scroll.md` for the numbers): a 15-row
+  play cycle with `R6 = 16`, **0 of 38,400 pixels wrong at all eight values of `line`, 0 wrong of
+  19,840 pixels fetched by the adjust**, one unbroken lit run of 152 scanlines, 39,936.00 cycles a
+  field.
 - **Put the scrolling area FIRST in the frame.** The pair of adjusts is `line` on the scrolling
   cycle and `8 - line` on the other. With a static panel *above* the scrolling area the
   `8 - line` lands *between* them, where it is visible and has to be blanked: a gap of up to 8
@@ -155,10 +160,10 @@ the comments in the listing are the specification).
 - **What Rich's shape assumes, and what has not been measured.** It assumes the scrolling area can
   come first - a port whose panel must sit at the top of the tube cannot have it - and it assumes
   `R6 > rows` displays the adjust on the CRTC you are running on. That second one is measured on a
-  **Master in jsbeeb 1.25.0 only**: not on a Model B build, not on b2 or b-em, and not on real
-  hardware. Rich's demo is a Model B program and it runs, which is evidence about the 6845 but not
-  a measurement of the sliver. Cross-check it on your own target before you spend the row it saves
-  (procedure 11 in [verification.md](verification.md)).
+  Master and on a Model B, but **in jsbeeb 1.25.0 only**: not on b2, not on beebjit, and not on
+  real hardware. Rich's demo is a Model B program that relies on it and runs, which is evidence
+  about the 6845 but not a measurement of the sliver. Cross-check it on your own target before you
+  spend the row it saves (procedure 11 in [verification.md](verification.md)).
 
 ### R8: blanking, skew, the cursor, interlace
 
@@ -916,8 +921,9 @@ Kept separate so they are not mistaken for the rest:
 - The Master mid-frame bank switch, the wrap-inside-bank behaviour and the "nothing displayed below
   `&3000`" rule are emulator results (jsbeeb; b-em for the last) with no real-hardware confirmation. [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
 - The vertical total adjust displaying under `R6 > rows` is a jsbeeb 1.25.0 result on a Master
-  (1942 Layer 2b, 2026-09-08). Rich Talbot-Watkins's demo relies on the same behaviour and runs on
-  a Model B in jsbeeb, but neither has been checked on b2, b-em or real hardware.
+  (1942 Layer 2b) and on a Model B (`template/examples/vscroll`), both 2026-09-08. Rich
+  Talbot-Watkins's demo relies on the same behaviour and runs in jsbeeb too, but nothing has
+  checked it on b2, beebjit, b-em or real hardware.
 - DFS sector timings are jsbeeb's disc model and were flagged as such before any faster reader was
   costed. [Paradroid loader-compression.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/loader-compression.md)
 - The keyboard phantom on real hardware was reported, not instrumented, and the redefined-controls

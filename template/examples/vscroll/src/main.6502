@@ -1,0 +1,495 @@
+\ ******************************************************************
+\ *	main.6502 - smooth VERTICAL scrolling, one scanline at a time,
+\ *	under key control: Rich Talbot-Watkins's frame shape
+\ ******************************************************************
+\ *	beeb-port-kit template example, MIT, Kieran Connell 2026. Baron,
+\ *	plain 6502 (NMOS).
+\ *
+\ *	What it is: a MODE 1 screen with a 15-row play strip ABOVE a 4-row
+\ *	static panel, as a two-cycle CRTC rupture driven from our own IRQ1V
+\ *	handler, frame-locked at 25 Hz. Hold the cursor UP/DOWN keys and
+\ *	the strip scrolls ONE SCANLINE a tick. Nothing else: no loader, no
+\ *	compression, no palette switch.
+\ *
+\ *	WHY IT IS A SEPARATE EXAMPLE. The template's own rupture scrolls
+\ *	HORIZONTALLY and puts the panel on top, which is the shape both
+\ *	shipped ports used. A scanline vertical scroll wants the opposite
+\ *	order, and the reason is the whole point of this file:
+\ *
+\ *	  The sub-row part of the scroll comes from R5, the vertical total
+\ *	  adjust, which appends scanlines to the END of a CRTC cycle. Two
+\ *	  cycles, adjusts `line` and `8 - line`, always sum to 8, so the
+\ *	  field stays 312 lines while the boundary between them slides one
+\ *	  scanline at a time.
+\ *
+\ *	  1. PUT THE SCROLLING AREA FIRST. Then the `8 - line` adjust falls
+\ *	     at the end of the PANEL cycle, which is top border - invisible,
+\ *	     free - and the first visible play line sits at a FIXED distance
+\ *	     from the VSync edge whatever `line` is, because the (8 - line)
+\ *	     of border and the `line` scanlines blanked at the top of the
+\ *	     play cycle always sum to 8. Put the panel first instead and
+\ *	     that adjust lands BETWEEN panel and play area, where it has to
+\ *	     be blanked and reads as a gap.
+\ *	  2. R6 = DISPLAYED ROWS + 1, BECAUSE THE ADJUST DISPLAYS. The
+\ *	     adjust counts as one more character row for the R6 compare, so
+\ *	     PLAY_R6 = PLAY_VIS_ROWS + 1 keeps display enable on through it
+\ *	     and the CRTC fetches the NEXT buffer row's top `line`
+\ *	     scanlines - exactly the sliver a 1-scanline scroll needs at the
+\ *	     bottom. Rich's demo sets R6 = 24 + 1 for a 24-row window.
+\ *	     PARADROID DELIBERATELY AVOIDED THIS - "we never depend on the
+\ *	     murky R6 > R4 behaviour where the VADJ scanlines themselves are
+\ *	     displayed" - and bought the sliver another way. We depend on
+\ *	     it, so tools/verify_vscroll.mjs scores those scanlines
+\ *	     separately: the moment it stops being true they are all wrong.
+\ *
+\ *	Sources: BEEB\Notes\Vertical Rupture.txt (Rich's write-up) and
+\ *	BEEB\Disks\RTW\smoothscroll.ssd (his demo, detokenised); the kit's
+\ *	docs/hardware-facts.md, "The vertical total adjust displays". The
+\ *	measurements for THIS build are in ../../docs/vertical-scroll.md.
+\ *
+\ *	The geometry is the template's, deliberately - 10K wrap, R1 = 80,
+\ *	strip at &5800, panel at &4A00 - so the comparison with Paradroid
+\ *	is like for like. In THIS geometry the ring is 16 rows and the
+\ *	window may fetch 16, so the shape buys no row back here: 15 rows
+\ *	are visible either way. What it buys is the two visible gaps, three
+\ *	timer fires and both palette switches. A port whose ring has a
+\ *	spare row gets the row as well.
+\ ******************************************************************
+
+INCLUDE "../../../src/lib/beeb.h.6502"
+
+\ ---- what the forked lib files want defined -------------------------
+IRQ_UNINSTALL = 0               ; irq.6502: never hands the machine back
+
+\ ---- geometry: the template's --------------------------------------
+ROW_BYTES  = 640                ; R1 = 80 units x 8 bytes
+PLAY_UNITS = 80
+PANEL_ADDR = &4A00              ; 4 rows, BELOW the wrap span: never scrolled
+PANEL_ROWS = 4
+PANEL_BYTES = PANEL_ROWS * ROW_BYTES
+BUF_BASE   = &5800              ; the strip: 10K, hardware-wrapped
+BUF_SIZE   = 10240
+BUF_ROWS   = BUF_SIZE / ROW_BYTES       ; 16
+ASSERT BUF_BASE + BUF_SIZE = &8000
+ASSERT BUF_ROWS * ROW_BYTES = BUF_SIZE  ; the ring is a whole number of rows
+
+PLAY_VIS_ROWS = 15              ; 120 play-lines
+PLAY_R6 = PLAY_VIS_ROWS + 1     ; 16: THE ADJUST ROW MUST DISPLAY
+\ The window the CRTC fetches is PLAY_VIS_ROWS whole rows plus `line`
+\ scanlines of one more, and it must fit inside ONE hardware wrap: the
+\ address translator subtracts its 10K once and does not iterate.
+ASSERT (PLAY_VIS_ROWS + 1) * ROW_BYTES <= BUF_SIZE
+
+\ ---- the frame: two cycles, PLAY FIRST, 38 rows + 8 = 312 lines -----
+PLAY_CYC_ROWS  = PLAY_VIS_ROWS  ; 15 whole rows, then the adjust
+PANEL_CYC_ROWS = 23             ; 4 displayed, the rest blank; VSync inside
+ASSERT PLAY_CYC_ROWS + PANEL_CYC_ROWS = 38      ; + 8 adjust scanlines = 312
+PLAY_R4  = PLAY_CYC_ROWS - 1    ; 14
+PANEL_R4 = PANEL_CYC_ROWS - 1   ; 22
+PANEL_R6 = PANEL_ROWS           ; 4
+
+\ There is ONE R7 and it is compared in every cycle, so the play cycle
+\ has to be given a value it can never reach.
+PANEL_R7 = 14                   ; panel-cycle row 14: puts the 152-line
+                                ; picture at line 80, near the OS's MODE 1
+R7_NEVER = 127
+ASSERT PANEL_R7 >= PANEL_ROWS   ; VSync after the panel has displayed
+ASSERT PANEL_R7 <= PANEL_R4     ; and inside the panel cycle
+ASSERT R7_NEVER > PLAY_R4       ; and the play cycle can never reach it
+
+R8_ON    = &00                  ; display on, interlace off
+R8_BLANK = &30                  ; display-skew bits = non-display
+
+\ ---- the frame in scanlines, line 0 = the VSync EDGE ----------------
+\ line   0  panel rows 14-22 run out (72 lines)
+\ line  72  the panel cycle's adjust: (8 - line) lines of TOP BORDER
+\ line  80-line  the play cycle starts, from the scroll address. Its
+\           first `line` scanlines are real, displayed and wrong, and
+\           R8 is blank over them
+\ line  80  R8 ON. THE FIRST VISIBLE PLAY LINE - scanline `line` of the
+\           buffer row at the scroll address. Fixed, whatever `line` is
+\ line 200-line  the play cycle's 15 rows end; its adjust follows,
+\           `line` DISPLAYED scanlines of the 16th row: the bottom sliver
+\ line 200  the panel cycle starts IMMEDIATELY, with no gap: 4 rows
+\ line 232  PANEL_R6 has ended its display; blanking from here
+\ line 312  the next VSync edge (panel row PANEL_R7 = 14)
+LINE_PLAY_TOP = (PANEL_CYC_ROWS - PANEL_R7) * 8 + 8     ; 80
+LINE_FIRE2    = 140                                     ; mid play cycle
+LINE_FIRE3    = LINE_PLAY_TOP + PLAY_VIS_ROWS * 8 + 4   ; 204: panel row 0
+ASSERT LINE_FIRE3 - 4 + PANEL_R7 * 8 = 312
+ASSERT LINE_FIRE2 > LINE_PLAY_TOP + 16          ; clear of the top boundary
+ASSERT LINE_FIRE2 < LINE_PLAY_TOP + PLAY_VIS_ROWS * 8 - 16      ; and the bottom
+
+\ ---- T1: the three fires, in 1 MHz ticks (SL = 64 a scanline) -------
+\ The handler runs about 4 scanlines after the VSync edge (measured in
+\ Paradroid, reconfirmed in Edge and here), so the first interval
+\ carries -4*SL; the -2 is the 6522's reload latency.
+\
+\ FIRE 1 IS THE ONLY WRITE IN THE FRAME THAT MUST LAND AT A PHASE
+\ WITHIN ITS SCANLINE: an R8 write takes effect immediately, so one
+\ landing in displayed time cuts that scanline part-way across. MODE 1
+\ at R1 = 80 displays 80 of 128 character times, so the blanking window
+\ is cycles 80-127, 48 CPU cycles wide. T1_PHASE is MEASURED - see
+\ ../../docs/vertical-scroll.md - and must be re-measured if anything
+\ in the IRQ path before that write changes.
+T1_TUNE  = -4 * SL
+T1_PHASE = 31                   ; ticks, 2 CPU cycles each. MEASURED
+                                ; 2026-09-08, jsbeeb 1.25.0, Model B, by
+                                ; sweeping it and reading the oracle: 20 to
+                                ; 42 pass, 18 lights a scanline that should
+                                ; be blanked, 44 cuts into the first visible
+                                ; line. 31 is the middle, 11 ticks of margin
+                                ; each way. Re-measure it if ANYTHING in the
+                                ; IRQ path before that write changes.
+T1_I1 = LINE_PLAY_TOP * SL - 2 + T1_TUNE + T1_PHASE
+T1_I2 = (LINE_FIRE2 - LINE_PLAY_TOP) * SL - 2
+T1_I3 = (LINE_FIRE3 - LINE_FIRE2) * SL - 2
+T1_I4 = 250 * SL                ; fire 3 -> never: VSync restarts T1 first
+ASSERT T1_I1 > 0
+ASSERT T1_I4 < 65536
+
+FRAME_LOCK = 2                  ; fields per game tick: 25 Hz
+
+\ ---- keys: internal numbers, MEASURED (kit hardware-facts.md 7) -----
+KEY_UP   = 57
+KEY_DOWN = 41
+
+\ ---- addresses -----------------------------------------------------
+CODE_ORG   = &1900              ; above DFS's workspace on a Model B (PAGE)
+CODE_TOP   = &3000              ; the screen
+BOOT_STAGE = &7E00              ; where !BOOT is ASSEMBLED, never loaded
+
+\ ******************************************************************
+\ *	Zero page, allocated by Baron from &00-&8F.
+\ ******************************************************************
+ZA_POOL &00..&8F
+
+ZA_AUTO1 field_count            ; IRQ: +1 a field
+ZA_AUTO1 flip_field             ; IRQ: field_count at the last take
+ZA_AUTO1 frame_ready            ; loop -> IRQ: the parked position is ready
+ZA_AUTO1 rupt_state             ; 0 before fire 1, 1 before 2, 2 before 3
+
+\ THE PARKED POSITION AND THE LIVE ONE. The loop computes the next
+\ position and parks it; the VSync hook takes it FRAME_LOCK fields
+\ later. All four bytes move together, or a field could show one
+\ position's start address with another's scanline offset and tear by
+\ up to 7 play-pixels. The LIVE ones are what the CRTC was actually
+\ given - which is what an oracle has to be fed, never the parked pair
+\ (kit verification.md, procedure 3).
+ZA_AUTO2 crtc_park
+ZA_AUTO2 crtc_live
+ZA_AUTO1 line_park              ; 0-7: R5 for the PLAY cycle
+ZA_AUTO1 line_live
+ZA_AUTO1 adj_park               ; 8 - line: R5 for the PANEL cycle
+ZA_AUTO1 adj_live
+
+ZA_AUTO1 ypos                   ; the view, in scanlines: 0..BUF_ROWS*8-1
+ZA_AUTO2 frame_count            ; loop: +1 a pass
+ZA_AUTO2 park_addr              ; the loop's working copy of the row address
+ZA_AUTO1 park_adj
+ZA_AUTO2 fill_ptr
+ZA_AUTO1 fill_row
+ZA_AUTO1 fill_unit
+ZA_AUTO1 fill_col
+
+\ ******************************************************************
+SECTION VScroll, org = CODE_ORG, guard = CODE_TOP, filename = "VScroll", exec = main
+.start
+
+.main
+{
+    ZA_ENTRY                    ; *RUN enters here; nothing in the program calls it
+    ldx #&ff
+    txs
+
+    CRTC 8, R8_BLANK            ; blank until there is something to show
+    CRTC 10, &20                ; and hide the cursor, which R8 does not
+
+    lda #22 : jsr oswrch
+    lda #1  : jsr oswrch        ; MODE 1
+    CRTC 8, R8_BLANK
+    CRTC 10, &20
+
+    jsr fill_play
+    jsr fill_panel
+    jsr setup_display
+    jsr install_irq
+}
+\ falls into the main loop
+
+\ ******************************************************************
+\ *	The main loop: read the keys, move the view by ONE SCANLINE, hand
+\ *	the position to the VSync hook, wait for it to be taken
+\ ******************************************************************
+.main_loop
+{
+    ldx #KEY_UP
+    jsr keydown_int
+    bpl not_up
+    dec ypos                    ; the view moves UP the strip
+    lda ypos
+    cmp #BUF_ROWS * 8
+    bcc not_up
+    lda #BUF_ROWS * 8 - 1       ; it wrapped below 0
+    sta ypos
+    .not_up
+
+    ldx #KEY_DOWN
+    jsr keydown_int
+    bpl not_down
+    inc ypos                    ; the view moves DOWN the strip
+    lda ypos
+    cmp #BUF_ROWS * 8
+    bcc not_down
+    lda #0
+    sta ypos
+    .not_down
+
+    \\ ypos -> the four bytes the CRTC needs. The row's start address
+    \\ comes off a table because 640 is not a shift; `line` is the
+    \\ sub-row part; and the two adjusts must sum to 8.
+    lda ypos
+    lsr a : lsr a : lsr a
+    tax
+    lda row_crtc_lo, x : sta park_addr
+    lda row_crtc_hi, x : sta park_addr+1
+    lda ypos
+    and #7
+    tax                         ; X = line
+    lda adj_of_line, x
+    sta park_adj
+
+    sei                         ; the hook reads all four: never half a set
+    lda park_addr   : sta crtc_park
+    lda park_addr+1 : sta crtc_park+1
+    txa             : sta line_park
+    lda park_adj    : sta adj_park
+    lda #1
+    sta frame_ready
+    cli
+
+    .wait_take                  ; the 25 Hz lock: the hook takes it, we spin
+    lda frame_ready
+    bne wait_take
+
+    inc frame_count
+    bne same_page
+    inc frame_count+1
+    .same_page
+    jmp main_loop
+}
+
+\ R5 for the panel cycle, indexed by `line`. The pair always sums to 8,
+\ which is what keeps the field at 312 lines.
+.adj_of_line EQUB 8, 7, 6, 5, 4, 3, 2, 1
+
+\ The CRTC start address of each buffer row, / 8. 16 rows of 640 bytes.
+.row_crtc_lo
+    EQUB LO((BUF_BASE +  0 * ROW_BYTES) / 8), LO((BUF_BASE +  1 * ROW_BYTES) / 8)
+    EQUB LO((BUF_BASE +  2 * ROW_BYTES) / 8), LO((BUF_BASE +  3 * ROW_BYTES) / 8)
+    EQUB LO((BUF_BASE +  4 * ROW_BYTES) / 8), LO((BUF_BASE +  5 * ROW_BYTES) / 8)
+    EQUB LO((BUF_BASE +  6 * ROW_BYTES) / 8), LO((BUF_BASE +  7 * ROW_BYTES) / 8)
+    EQUB LO((BUF_BASE +  8 * ROW_BYTES) / 8), LO((BUF_BASE +  9 * ROW_BYTES) / 8)
+    EQUB LO((BUF_BASE + 10 * ROW_BYTES) / 8), LO((BUF_BASE + 11 * ROW_BYTES) / 8)
+    EQUB LO((BUF_BASE + 12 * ROW_BYTES) / 8), LO((BUF_BASE + 13 * ROW_BYTES) / 8)
+    EQUB LO((BUF_BASE + 14 * ROW_BYTES) / 8), LO((BUF_BASE + 15 * ROW_BYTES) / 8)
+.row_crtc_hi
+    EQUB HI((BUF_BASE +  0 * ROW_BYTES) / 8), HI((BUF_BASE +  1 * ROW_BYTES) / 8)
+    EQUB HI((BUF_BASE +  2 * ROW_BYTES) / 8), HI((BUF_BASE +  3 * ROW_BYTES) / 8)
+    EQUB HI((BUF_BASE +  4 * ROW_BYTES) / 8), HI((BUF_BASE +  5 * ROW_BYTES) / 8)
+    EQUB HI((BUF_BASE +  6 * ROW_BYTES) / 8), HI((BUF_BASE +  7 * ROW_BYTES) / 8)
+    EQUB HI((BUF_BASE +  8 * ROW_BYTES) / 8), HI((BUF_BASE +  9 * ROW_BYTES) / 8)
+    EQUB HI((BUF_BASE + 10 * ROW_BYTES) / 8), HI((BUF_BASE + 11 * ROW_BYTES) / 8)
+    EQUB HI((BUF_BASE + 12 * ROW_BYTES) / 8), HI((BUF_BASE + 13 * ROW_BYTES) / 8)
+    EQUB HI((BUF_BASE + 14 * ROW_BYTES) / 8), HI((BUF_BASE + 15 * ROW_BYTES) / 8)
+
+\ ******************************************************************
+\ *	setup_display - the 10K wrap, the CRTC in the PANEL cycle's shape,
+\ *	the view at 0
+\ ******************************************************************
+\ *	The CRTC is left in the panel cycle's shape so that the first
+\ *	VSync the handler sees arrives with C4 where the steady state
+\ *	expects it, and the rupture locks on the first field. Changing
+\ *	shape from the OS's MODE 1 frame costs a malformed field or two,
+\ *	under the blank.
+.setup_display
+{
+    \\ 10K hardware wrap: addressable latch lines 4 and 5 both SET
+    lda #&0f : sta SYS_VIA_DDRB
+    lda #12  : sta SYS_VIA_ORB
+    lda #13  : sta SYS_VIA_ORB
+
+    CRTC 4, PANEL_R4
+    CRTC 5, 8                   ; line = 0, so the panel cycle's adjust is 8
+    CRTC 6, PANEL_R6
+    CRTC 7, PANEL_R7
+    CRTC 10, &20                ; cursor off
+    CRTC 12, HI(PANEL_ADDR / 8)
+    CRTC 13, LO(PANEL_ADDR / 8)
+
+    lda #0
+    sta field_count
+    sta flip_field
+    sta frame_ready
+    sta rupt_state
+    sta ypos
+    sta line_park
+    sta line_live
+    sta frame_count
+    sta frame_count+1
+    lda #8
+    sta adj_park
+    sta adj_live
+    lda #LO(BUF_BASE / 8)
+    sta crtc_park
+    sta crtc_live
+    lda #HI(BUF_BASE / 8)
+    sta crtc_park+1
+    sta crtc_live+1
+    rts                         ; R8 stays blank: fire 1 turns it on
+}
+
+\ ******************************************************************
+\ *	fill_play - a pattern that changes EVERY SCANLINE
+\ ******************************************************************
+\ *	byte(row, unit, scan) = solid_bytes[(row + scan + unit / 4) AND 3],
+\ *	except unit 0 scan 0, which is &88 - a one-pixel seam marker at the
+\ *	start of each buffer row.
+\ *
+\ *	`scan` is in the formula ON PURPOSE. A pattern that changed once
+\ *	every eight scanlines would hide a one-scanline scroll error seven
+\ *	times out of eight - which is exactly the bug class this example
+\ *	exists to show working. tools/verify_vscroll.mjs re-derives this
+\ *	formula from this comment and diffs all 10,240 bytes.
+.fill_play
+{
+    lda #LO(BUF_BASE) : sta fill_ptr
+    lda #HI(BUF_BASE) : sta fill_ptr+1
+    lda #0 : sta fill_row
+    .row_loop
+    lda #0 : sta fill_unit
+    .unit_loop
+    lda fill_unit               ; base colour for this unit
+    lsr a : lsr a
+    clc
+    adc fill_row
+    and #3
+    sta fill_col
+    ldy #0
+    .byte_loop
+    tya                         ; + scan
+    clc
+    adc fill_col
+    and #3
+    tax
+    lda solid_bytes, x
+    cpy #0
+    bne not_seam
+    ldx fill_unit
+    bne not_seam
+    lda #&88                    ; the seam: one pixel of logical 3
+    .not_seam
+    sta (fill_ptr), y
+    iny
+    cpy #8
+    bne byte_loop
+
+    clc
+    lda fill_ptr : adc #8 : sta fill_ptr
+    bcc no_carry
+    inc fill_ptr+1
+    .no_carry
+    inc fill_unit
+    lda fill_unit
+    cmp #PLAY_UNITS
+    bne unit_loop
+    inc fill_row
+    lda fill_row
+    cmp #BUF_ROWS
+    bne row_loop
+    rts
+}
+.solid_bytes EQUB &00, &0F, &F0, &FF    ; four pixels of logical 0..3
+
+\ ******************************************************************
+\ *	fill_panel - something obviously static under the scroll
+\ ******************************************************************
+\ *	Blocks of logical 1 and 2, eight units wide, with the panel's top
+\ *	and bottom scanlines in logical 3. The bottom rule sits directly
+\ *	against the last play scanline: THERE IS NO GAP between the two
+\ *	cycles, which is the thing to look at.
+.fill_panel
+{
+    lda #LO(PANEL_ADDR) : sta fill_ptr
+    lda #HI(PANEL_ADDR) : sta fill_ptr+1
+    lda #0 : sta fill_row
+    .row_loop
+    lda #0 : sta fill_unit
+    .unit_loop
+    lda fill_unit
+    lsr a : lsr a : lsr a
+    and #1
+    tax
+    lda solid_bytes+1, x        ; logical 1 or 2
+    ldy #0
+    .byte_loop
+    sta (fill_ptr), y
+    iny
+    cpy #8
+    bne byte_loop
+
+    ldy #0                      ; the top rule, panel row 0 scanline 0
+    lda fill_row
+    bne not_top
+    lda #&FF
+    sta (fill_ptr), y
+    .not_top
+    lda fill_row                ; the bottom rule, last row scanline 7
+    cmp #PANEL_ROWS - 1
+    bne not_bot
+    ldy #7
+    lda #&FF
+    sta (fill_ptr), y
+    .not_bot
+
+    clc
+    lda fill_ptr : adc #8 : sta fill_ptr
+    bcc no_carry
+    inc fill_ptr+1
+    .no_carry
+    inc fill_unit
+    lda fill_unit
+    cmp #PLAY_UNITS
+    bne unit_loop
+    inc fill_row
+    lda fill_row
+    cmp #PANEL_ROWS
+    bne row_loop
+    rts
+}
+
+\ ******************************************************************
+INCLUDE "rupture.6502"
+INCLUDE "../../../src/lib/irq.6502"
+INCLUDE "../../../src/lib/keydown.6502"
+
+.end
+ENDSECTION
+
+\ ******************************************************************
+\ *	!BOOT - plain, because this example has no data files to stage
+\ ******************************************************************
+SECTION Boot, org = BOOT_STAGE, guard = BOOT_STAGE + 256, filename = "!BOOT"
+.bootfile
+    EQUS "REM beeb-port-kit: smooth vertical scroll", 13
+    EQUS "REM cursor UP/DOWN scroll one scanline a tick", 13
+    EQUS "*RUN VScroll", 13
+.bootfile_end
+ENDSECTION
+
+PRINT "------"
+PRINT "beeb-port-kit template example: smooth vertical scroll"
+PRINT "CODE  &", ~start, "-&", ~end, " (", end - start, " bytes), FREE to &", ~CODE_TOP, " = ", (CODE_TOP - end)
+PRINT "FRAME play ", PLAY_VIS_ROWS, " rows first (R6 =", PLAY_R6, "), panel ", PANEL_ROWS, " rows after it"
+PRINT "T1_I1 =", T1_I1, " T1_I2 =", T1_I2, " T1_I3 =", T1_I3, " T1_I4 =", T1_I4
+PRINT "------"
