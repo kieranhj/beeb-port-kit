@@ -13,8 +13,13 @@
 \ *	                               HAS ITS OWN PALETTE" header)
 \ *	  Edge Grinder src/rupture.6502 - two cycles, MODE 2, VSync inside
 \ *	                               the play cycle; the shape used here
-\ *	Paradroid needs its third cycle for R5 smooth vertical scrolling.
-\ *	Nothing here scrolls vertically, so Edge's two-cycle shape fits
+\ *	Paradroid needs its third cycle because its panel is ABOVE the play
+\ *	area: with R5 smooth vertical scrolling and that order, the variable
+\ *	adjust would land between the two and slide the panel. It is NOT
+\ *	what a scanline scroll costs in general - put the scrolling area in
+\ *	the FIRST cycle and two cycles do it with no gap and no lost row
+\ *	(hardware-facts.md, "The vertical total adjust displays"). Nothing
+\ *	here scrolls vertically at all, so Edge's two-cycle shape fits
 \ *	Paradroid's geometry and R5, R8 and R7 are all constants in play.
 \ *
 \ *	Frame (39 rows = 312 scanlines, the MODE 1 shape):

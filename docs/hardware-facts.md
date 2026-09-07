@@ -14,6 +14,10 @@ jsbeeb (through an MCP that can set breakpoints, read memory and registers, and 
 the primary instrument, with b-em and b2 as cross-checks and a real Master 128 where noted. Dates
 are the ports' own; a fact whose write-up carries no date is marked with the layer it came from.
 
+A few entries carry a third source: **1942** (BBC Master 128, September 2026), the first port built
+*with* this kit rather than distilled into it. It is unpublished, so those entries name the layer
+and the measurement rather than a link, and they say when the kit re-ran the check itself.
+
 The rule the whole document exists to serve is **measure, do not recall**. Paradroid's `CLAUDE.md`
 tells the story: an early file, `src/hal_video.asm`, was written from remembered CRTC arithmetic,
 with `TODO: verify in emulator` comments and a half-finished derivation in the middle of it, and it
@@ -87,9 +91,74 @@ be left constant if only one cycle ever reaches it.
 - **R5 is sampled at each cycle's end**, so a value must be in place between the sample it must not
   disturb and the one it serves.
   Measured: Layer 3, jsbeeb (three-cycle smooth vertical scroll). [Paradroid layer-3-scroll.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-3-scroll.md)
+- **The specific worst case: a fire that lands in the adjust's own last scanline.** In the
+  two-cycle scroll frame below, whose cycles carry `line` and `8 - line`, the first timer fire
+  after VSync is placed at the first visible line - and at `line` = 0 that is the blanking of the
+  *preceding* adjust's last scanline, precisely where an R5 write must not go. Rich
+  Talbot-Watkins's demo writes the scrolling cycle's R5 in that fire and gets away with it by
+  instruction ordering (R8, then the timer, then R4, then R5); 1942 writes it in the middle of the
+  cycle instead, which is what the rule above already says, and that write is the whole reason its
+  frame has a second timer fire at all.
+  Measured: 1942 Layer 2b, 2026-09-08, jsbeeb 1.25.0, Master; Rich's ordering read off the
+  detokenised listing of his demo (lines 510-580).
 - **Timer fires that must land in a cycle should overshoot the boundary by a few rows.** Sized to
   reach the boundary exactly, IRQ latency alone carried them into the previous cycle.
   Measured: Layer 3, jsbeeb, with a `DEBUG_RASTER` tint at each interrupt entry. [Paradroid layer-3-scroll.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-3-scroll.md)
+
+### The vertical total adjust displays, and where that puts the scrolling area
+
+The adjust (R5) is how a rupture scrolls vertically by single scanlines: two cycles whose adjusts
+sum to 8 keep the field at 312 lines while the boundary between them slides. These are the facts
+that decide what the technique costs. The primary source is Rich Talbot-Watkins's own write-up,
+*Line by line vertical scrolling on the Beeb* (`BEEB\Notes\Vertical Rupture.txt`) and his working
+demo `smoothscroll.ssd` (`$.TEST25`, tokenised BASIC; detokenise it and read the register writes -
+the comments in the listing are the specification).
+
+- **`R6 = displayed rows + 1`, because the vertical total adjust counts as one more character row
+  for the R6 compare.** Set R6 one higher than the cycle's row count and display enable survives
+  into the adjust, and the CRTC fetches the *next* buffer row's top `line` scanlines - which is
+  exactly the bottom sliver a 1-scanline scroll needs. Rich's demo sets `R6 = 24 + 1` for a 24-row
+  window and his write-up says why ("total screen rows + 1 to account for the fractional row which
+  comes from R5").
+  Measured: 1942 Layer 2b, 2026-09-08, jsbeeb 1.25.0, Master, by a buffer oracle that scores the
+  adjust's own scanlines separately against an independent model of what the CRTC must fetch:
+  **0 wrong of 14,784 pixels fetched by the adjust**, at all eight values of `line`. Re-run here
+  the same day, same result. The field stays 312 lines with it: 3,993,600 cycles over 100 fields =
+  39,936.00 each. Rich's demo was booted here too (jsbeeb 1.25.0, Model B): it runs, and its own
+  field measures 39,936.0 cycles over 50 fields.
+- **Put the scrolling area FIRST in the frame.** The pair of adjusts is `line` on the scrolling
+  cycle and `8 - line` on the other. With a static panel *above* the scrolling area the
+  `8 - line` lands *between* them, where it is visible and has to be blanked: a gap of up to 8
+  scanlines. Put the scrolling area first and the same adjust falls at the end of the panel cycle,
+  which is **top border**, where there is nothing to see - and the first visible line then sits at
+  a *fixed* distance from the VSync edge whatever `line` is, because the `8 - line` of border and
+  the `line` scanlines blanked at the top of the scrolling cycle always sum to 8. Nothing slides,
+  and there is no gap.
+  Measured: 1942 Layer 2b, 2026-09-08, jsbeeb 1.25.0, Master - the port built both shapes. Rich's
+  shape: 2 CRTC cycles, 3 T1 fires, 272 lit lines in a 272-line span with no gaps, 40 lines of
+  blanking. The Paradroid-shaped first cut of the same port: 3 cycles, 6 fires, a 296-line span
+  with two visible 8-line gaps, 16 lines of blanking.
+- **Only ONE R8 edge in such a frame has to land on an exact scanline** - the unblank at the first
+  visible line. The panel-first shape needed four, because each of its two gaps has two edges.
+  Measured: 1942 Layer 2b, 2026-09-08, by counting the scanline-exact writes in the two builds.
+- **Paradroid deliberately refused to depend on the displayed adjust, and it cost a row of play
+  area.** Its layer-3 write-up: *"18 cycle rows rather than 17 is deliberate. It makes row 16
+  non-displayed, so display-enable turns off by ordinary means and we never depend on the murky
+  "R6 > R4" behaviour where the VADJ scanlines themselves are displayed."* That is a true record of
+  that port and it is still true of it. Two other constraints stand behind it: Paradroid's 10K wrap
+  makes its strip exactly 16 rows, so there was no spare row for the sliver to come out of (see the
+  display window rules below), and its panel is above the play area, which is what forces three
+  cycles - *"two cycles would leave the variable adjust between VSync and the panel, sliding the
+  panel up to 7 scanlines"*. **Neither cost is intrinsic to the technique**; both follow from that
+  port's frame shape.
+  Source: [Paradroid layer-3-scroll.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-3-scroll.md).
+- **What Rich's shape assumes, and what has not been measured.** It assumes the scrolling area can
+  come first - a port whose panel must sit at the top of the tube cannot have it - and it assumes
+  `R6 > rows` displays the adjust on the CRTC you are running on. That second one is measured on a
+  **Master in jsbeeb 1.25.0 only**: not on a Model B build, not on b2 or b-em, and not on real
+  hardware. Rich's demo is a Model B program and it runs, which is evidence about the 6845 but not
+  a measurement of the sliver. Cross-check it on your own target before you spend the row it saves
+  (procedure 11 in [verification.md](verification.md)).
 
 ### R8: blanking, skew, the cursor, interlace
 
@@ -121,7 +190,10 @@ be left constant if only one cycle ever reaches it.
   mode amount once, when MA12 goes high; it does not iterate. A window larger than the wrap span
   fetches from `&8000` upwards (ROM) at some scroll positions and shows garbage on the last rows.
   With the 10K wrap and 80-unit rows the strip is exactly 16 rows, so 16 displayed rows is the
-  ceiling, and 1-scanline vertical scrolling costs one row of play area.
+  ceiling **in Paradroid**, and 1-scanline vertical scrolling cost it one row of play area: with no
+  spare row, the sliver had to come out of the visible 16. That is the wrap's cost, not the scroll
+  technique's - a strip with a spare row takes the sliver out of the displayed adjust instead and
+  pays nothing (see the vertical total adjust above).
   Measured: Layer 3, jsbeeb: at `scrollS = 10200` the model predicted garbage from unit 5 of the
   bottom row onward, and that is where it started. [Paradroid layer-3-scroll.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-3-scroll.md)
 - **A 16K play buffer with 640-byte rows does not wrap on a row boundary** (16,384 / 640 = 25.6), so
@@ -843,6 +915,9 @@ Kept separate so they are not mistaken for the rest:
   field, unmeasured beyond the one 376-line field recorded. [Paradroid raster-timing.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/raster-timing.md)
 - The Master mid-frame bank switch, the wrap-inside-bank behaviour and the "nothing displayed below
   `&3000`" rule are emulator results (jsbeeb; b-em for the last) with no real-hardware confirmation. [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
+- The vertical total adjust displaying under `R6 > rows` is a jsbeeb 1.25.0 result on a Master
+  (1942 Layer 2b, 2026-09-08). Rich Talbot-Watkins's demo relies on the same behaviour and runs on
+  a Model B in jsbeeb, but neither has been checked on b2, b-em or real hardware.
 - DFS sector timings are jsbeeb's disc model and were flagged as such before any faster reader was
   costed. [Paradroid loader-compression.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/loader-compression.md)
 - The keyboard phantom on real hardware was reported, not instrumented, and the redefined-controls

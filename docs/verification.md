@@ -192,6 +192,17 @@ recipe changed") and
 6. Repeat at the other parity of everything in step 1, and - in a double-buffered port - at both
    bank parities.
 
+**Feed the oracle the state the hardware was using, not the state the game has got to.** A
+frame-locked port has *two* of every scroll variable: the main loop computes the next position and
+parks it, and the VSync hook takes the parked pair when `FRAME_LOCK` fields have passed - so at any
+moment the main loop's `scroll`/`line` are up to one game tick ahead of what the CRTC was given,
+and only the live pair is on the screen. 1942's view oracle, fed the parked pair, scored **57,284
+of 57,344 pixels wrong on a build that was completely correct**, and reported the model's answer
+for `line + 1` at every position (2026-09-07, jsbeeb 1.25.0, Master). Read `crtc_live`/`line_live`,
+not `scroll`/`line`. The same applies to anything else the hook latches at VSync - a bank parity, a
+palette index, a display wrap - and it is worth naming in the oracle's own header, because the
+failure looks exactly like a real regression.
+
 The trap in the obvious method: the first attempt dumped, pressed the key, ran 800,000 cycles and
 dumped again. That is twenty passes, and a door opening or a recharger turning in between is a
 diff that has nothing to do with the change under test. It reported 35 and 196 bytes wrong on
@@ -206,6 +217,14 @@ two builds that were both correct; the baseline scoring 0 on the same method was
 | positions to vary | `mapHX` odd/even, `line != 0`, diagonal | scroll phase odd/even, both bank parities |
 | writers to NOP | `SprDrawAll`, both `SprDrawTr` | would be `spr_draw_all` and the scroll's column copy |
 | dump size | 10,240 | 16,384 per bank |
+
+**A framebuffer lit-run length is a cheap structural test to run beside the diff.** Count the
+scanlines that are lit and check it is one unbroken run of the expected height: if a CRTC cycle
+stops displaying where it should not, the run is short and - in a scanline scroll, where the last
+`line` scanlines come from the vertical total adjust - the number moves with the scroll instead of
+standing still. 1942 asserts `224x272, one run, nothing else lit` on every position it checks
+(2026-09-08, jsbeeb 1.25.0, Master). It costs one pass over the framebuffer and it catches whole
+classes of frame-shape error that a pixel diff of the play area alone does not see.
 
 **A model oracle is the same check with the reference computed off-machine.** Edge Grinder's
 titles ([layer-6e-titles.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-6e-titles.md)

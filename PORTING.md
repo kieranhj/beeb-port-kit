@@ -213,24 +213,45 @@ The CRTC's address translator wraps the display at one of four sizes set by the 
 addressable latch (20K, 16K, 10K, 8K; see the facts file for the settings). Put the play buffer in
 that region, scroll by moving the CRTC start address, and draw only the leading edge. The display
 window must fit inside **one** wrap: the translator subtracts once. Paradroid's 10K strip is 16
-rows exactly, so smooth vertical scrolling cost a row of play area.
+rows exactly, so it had no spare row and smooth vertical scrolling cost it one of the visible
+sixteen. **That is the wrap's cost, not the scroll's**: size the strip with a row in hand and the
+scroll's sub-row sliver comes out of the vertical total adjust for nothing (see 5.2).
 
 On a Master, Edge Grinder holds two copies of the strip, main and shadow, half a byte out of
 phase, and flips the displayed bank every field. A CRTC step in MODE 2 is two pixels; the odd
 pixel is the other bank.
 
-### 5.2 A static panel above a scrolling area is a CRTC rupture
+### 5.2 A static panel and a scrolling area are a CRTC rupture - and the scrolling area goes FIRST
 
-Two or three CRTC cycles a field: the panel at a fixed address, then the play area at the
-scrolling address, with VSync in the last cycle. The System VIA's T1 timer fires the stage
-changes; the handler is a small state machine indexed by stage. The register write-window rules
-are the whole difficulty. The principle is that a register must be written before the counter
-that compares against it reaches the value: R4 in its own cycle before C4 gets there; R6 and R7
-likewise inside the current cycle as long as the row they name has not already passed, which in
-practice means the previous cycle whenever the row is early; R12/R13 are latched at cycle start
-so always the previous cycle; R5 never near a boundary. Fires that blank or unblank
-must land in horizontal blanking, and the phase is measured with a cycle counter modulo the
-scanline. Both ports' `rupture.6502` carry the table in their headers.
+Two or three CRTC cycles a field: each cycle at its own start address, with VSync in the last one.
+**If the play area scrolls vertically by scanlines, put it in the first cycle and the panel in the
+last.** Sub-scanline scrolling comes from a pair of vertical total adjusts (R5) summing to 8: the
+scrolling cycle takes `line`, the other takes `8 - line`. Put the panel above and that `8 - line`
+lands between panel and play area, where it is visible, has to be blanked, and reads as a gap;
+put the scrolling area first and it lands in the top border, where it costs nothing and the first
+visible line sits at a fixed distance from the VSync edge whatever `line` is. The bottom sliver
+then comes out of the scrolling cycle's own adjust, which displays when `R6 = rows + 1`. The
+facts, the measurements and what the shape assumes are in the facts file under *The vertical total
+adjust displays*; the primary source is Rich Talbot-Watkins's write-up and demo disc, and it is
+worth reading before designing the frame.
+
+Paradroid puts its panel above the play area anyway, and its layer-3 doc says why it then needs a
+third cycle: with the panel on top, two cycles would leave the variable adjust between VSync and
+the panel and slide the panel itself. That is a consequence of the ordering, not a reason for it.
+A third port copied Paradroid's shape wholesale, paid two visible 8-line gaps, three extra timer
+fires and half its blanking budget, and then rebuilt the frame the other way round for nothing.
+**Ask what a technique's own author does before assuming the nearest previous port got it right.**
+
+Whichever order, the panel sits at a fixed address and the play area at the scrolling one, with
+VSync in the last cycle. The System VIA's T1 timer fires the stage changes; the handler is a small
+state machine indexed by stage. The register write-window rules are the whole difficulty. The
+principle is that a register must be written before the counter that compares against it reaches
+the value: R4 in its own cycle before C4 gets there; R6 and R7 likewise inside the current cycle
+as long as the row they name has not already passed, which in practice means the previous cycle
+whenever the row is early; R12/R13 are latched at cycle start so always the previous cycle; R5
+never near a boundary. Fires that blank or unblank must land in horizontal blanking, and the phase
+is measured with a cycle counter modulo the scanline. Both ports' `rupture.6502` carry the table
+in their headers.
 
 A rupture with one shape is easy to hand over between screens. A rupture with **two** shapes (Edge
 Grinder's titles use four cycles and switch the display bank mid-frame) needs the switch made

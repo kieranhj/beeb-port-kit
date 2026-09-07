@@ -69,7 +69,12 @@ Look these up before starting; record them in the project's `CLAUDE.md` once kno
    ```
 
    With an **off-machine** oracle, B is the renderer's output for the scroll position read from
-   the game's own variables at the moment of dump A.
+   the game's own variables at the moment of dump A. **Read the variables the hardware was given,
+   not the ones the game has got to**: a frame-locked port parks the next scroll position in the
+   main loop and the VSync hook takes it fields later, so `scroll`/`line` run up to a game tick
+   ahead of `crtc_live`/`line_live`, which are what is on the screen. 1942 scored 57,284 of 57,344
+   pixels wrong on a correct build by feeding the parked pair (2026-09-07, jsbeeb 1.25.0, Master).
+   The same goes for any other state the hook latches at VSync: bank parity, palette, display wrap.
 
 5. **Diff, and report "N of <size>".** `cmp -l a.bin b.bin | wc -l`, or three lines of Python
    printing offsets. Anything sprite-shaped: resume draws, let the overlap heal, re-freeze
@@ -79,6 +84,12 @@ Look these up before starting; record them in the project's `CLAUDE.md` once kno
    flip ACCCON's X bit (`&FE34` bit 2) from the guest - poke it, or break where the game has the
    other bank up - before the dump and put it back after. Then repeat steps 1-5 at the other
    parity of everything: odd and even scroll unit, the other scanline offset, the other bank.
+
+   Where the check renders a *view* rather than a buffer, count the lit scanlines in the
+   framebuffer as well: one unbroken run of the expected height, nothing else lit. It is one extra
+   pass and it catches frame-shape errors a play-area diff cannot see - if a CRTC cycle stops
+   displaying where it should not, the run is short, and in a scanline scroll the shortfall moves
+   with the scroll (1942: `224x272, one run`, 2026-09-08).
 
 7. **Record the figure in the commit body and the layer doc** with the positions tested. "0 of
    16,384, both banks, scroll phase odd and even" is the shape.

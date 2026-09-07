@@ -13,6 +13,9 @@ places, before it had read the first port's notes. The classes are the point. A 
 has never seen `explosion_dirs` or `disrFlash` will still meet a runtime table that drifts over
 an unguarded ceiling, or a byte that is zero on the emulator and garbage on the machine.
 
+A few entries also draw on **1942** (Master 128, September 2026), the first port built with this
+kit; it is unpublished, so those name the layer and the date rather than a link.
+
 The entries only state what the two repositories record. Where a figure is quoted it is the
 figure in the source document, and where the source document itself was later corrected the
 correction is given rather than the original. Two things could not be confirmed from the
@@ -50,6 +53,25 @@ hands back a real-looking byte from the wrong entry. `tools/verify_annotation.py
 standing check.
 Source: [BUGS.md #19](https://github.com/kieranhj/paradroid-beeb/blob/main/BUGS.md),
 [tools/verify_annotation.py](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/verify_annotation.py).
+
+**The nearest previous port is not the specification either, and neither is this kit.**
+Instance: 1942 needed 1-scanline vertical scrolling and took the shape the kit encoded - Paradroid's
+three CRTC cycles, panel above the play area, the vertical total adjust never allowed to display.
+It worked, and it verified 0/0, and it cost two visible 8-line gaps, six timer fires instead of
+three, and the vertical blanking interval down from 32 lines to 16. None of that was intrinsic to
+the technique. Paradroid's shape answered Paradroid's constraints: a 10K wrap that made its strip
+exactly 16 rows, so there was no spare row for the sub-row sliver, and a panel that sits above the
+play area. KC read the gaps off the screen and pointed at the technique's author - Rich
+Talbot-Watkins's write-up and his working demo disc, neither of which the kit cited. Putting the
+scrolling area first and letting the adjust display removed both gaps, three fires, both palette
+switches and the open decision that had been raised to pay for them.
+Cost: the frame rebuilt twice inside one layer, and a costed decision with four fallbacks, all of
+which paid in play area, none of which was necessary.
+Rule: **when a borrowed technique costs something, ask whether the cost is intrinsic to it or to
+the port you copied it from** - and read what the technique's own author does before assuming the
+nearest previous implementation got it right.
+Source: 1942 Layer 2b, 2026-09-07/08; the facts and measurements are in
+[hardware-facts.md](hardware-facts.md) under *The vertical total adjust displays*.
 
 **"I cannot measure this" is itself a claim, and it wants testing.**
 Instance: Edge Grinder's VideoNuLA build (decision 63) wrote no `&FE21` at all, inferring from a
