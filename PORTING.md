@@ -262,16 +262,25 @@ atomically inside the VSync handler, and that was the one bug still open when th
 ### 5.3 Own IRQ1V outright
 
 Take the interrupt vector, service VSync and T1 yourself, and give the MOS nothing. No MOS tick, no
-OS sound, no OSBYTE keyboard. Consequences, all measured: filing-system calls must happen before
-the takeover (DFS needs the MOS interrupt); the MOS's sound workspace at `&0800` is yours only
-while you hold the vector, so flush the buffers before handing back; and on a Master, HAZEL is the
-filing system's workspace, so if you take it, BREAK must be a power-on reset (`OSBYTE 200,3`) or
-the next boot finds no DFS.
+OS sound, no OSBYTE keyboard. Consequences, all measured: the MOS's sound workspace at `&0800` is
+yours only while you hold the vector, so flush the buffers before handing back; and on a Master,
+HAZEL is the filing system's workspace, so if you take it, BREAK must be a power-on reset
+(`OSBYTE 200,3`) or the next boot finds no DFS.
 
-One thing neither port measured and a future one should: whether DFS needs the MOS to service the
-VSync interrupt to work correctly. Both ports load everything before taking the vector, so the
-question never arose. What is known is narrower: in jsbeeb the 8271 poll hangs if the CRTC stops
-producing VSync at all.
+**DFS does not need the MOS to service interrupts.** Both ports load everything before taking the
+vector and assumed that was why loading worked, but the assumption was never tested; measured now,
+it is false. An 8 KB, 32-sector `*LOAD` completes byte-for-byte with IRQ1V pointed at a handler
+that only clears the two VIAs' flags and returns - the MOS tick never runs, `TIME` does not
+advance, and 232 interrupts pass through the null handler while the load proceeds. The same load
+completes with interrupts masked outright (`SEI` across the whole call, an interrupt counter
+proving none was taken), and again with the CRTC's VSync stopped as well. The 8271's transfers are
+NMI-driven, and NMI is reachable in all three cases.
+Measured: 2026-09-09, jsbeeb-mcp 3.4.0 / jsbeeb 1.25.0, `B-DFS1.2`, MODE 7, purpose-built one-file
+disc.
+
+Load before you take the vector anyway - the reasons that survive are real ones: DFS pages its ROM
+in over `&8000`, its workspace is live until the last call returns, and a load in the middle of a
+running display costs whole frames. Just do not expect a takeover to break the disc.
 
 The frame lock lives in the VSync handler: the main loop parks a finished frame and a ready flag,
 the handler flips the display when `FRAME_LOCK` fields have passed. A slow frame costs whole

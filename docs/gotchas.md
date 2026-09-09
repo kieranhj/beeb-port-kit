@@ -536,8 +536,10 @@ Source: [BUGS.md #11](https://github.com/kieranhj/edge-beeb/blob/master/BUGS.md)
 **The MOS is listening too, if you ever hand the machine back.** Paradroid builds its charset over
 `&0800-&08FF`, the MOS's sound queues and envelopes - safe only while the game owns IRQ1V. Any path
 that returns to the MOS must flush the buffers first (`OSBYTE &0F, X=0`) or the MOS plays the
-charset as notes. And R7 must not sit at the tail's VSync row while a filing-system call runs,
-because that stops VSync and hangs the 8271 poll.
+charset as notes. And R7 must not sit at the tail's VSync row while a filing-system call runs:
+Paradroid hung in the 8271 poll that way. Stopping VSync no longer reproduces it on
+jsbeeb 1.25.0 (hardware-facts section 6), so the shape, not the missing VSync, may be
+what did it - keep the display out of the way of a load either way.
 Source: [CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md),
 [docs/layer-3-scroll.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-3-scroll.md).
 

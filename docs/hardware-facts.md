@@ -528,13 +528,26 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
 - **OSFILE writes a file's catalogue addresses back into its parameter block after a load**, so
   reset load/exec before every call or the second file lands wherever the first said.
   Measured: Layer 2 (2026-09-02), jsbeeb. [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
-- **Every `*LOAD`/OSFILE must happen before you take IRQ1V**: taking it stops the MOS servicing the
-  filing system.
-  Established: Layer 3, jsbeeb. [Paradroid layer-3-scroll.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-3-scroll.md)
-- **The MOS's disc code needs VSync.** With the CRTC's R7 parked where VSync never fires, the second
-  `*LOAD` hung forever in DFS's 8271 status poll at `&ACAE`; bisecting the CRTC writes one at a time
-  showed R7 was the trigger.
+- **DFS does not need the MOS to service interrupts, and does not need interrupts at all.** An
+  8 KB, 32-sector `*LOAD` completed byte-for-byte in three configurations: IRQ1V pointed at a
+  handler that only clears both VIAs' flags and returns (`TIME` unmoved, 232 interrupts through the
+  null handler); interrupts masked with `SEI` across the whole call (a counter in the handler proved
+  none was taken); and both of those with VSync stopped as well. The 8271 transfers on NMI, which
+  none of that touches. This **replaces** the older claim that taking IRQ1V stops the MOS servicing
+  the filing system, which was assumed from the fact that both ports load before the takeover and
+  was never tested.
+  Measured: 2026-09-09, jsbeeb-mcp 3.4.0 / jsbeeb 1.25.0, `B-DFS1.2`, MODE 7, purpose-built
+  one-file disc. Load before the takeover anyway, for the reasons that do hold: DFS pages its ROM
+  over `&8000`, its workspace is live until the last call returns, and loads cost whole frames.
+- **The MOS's disc code needs VSync - not reproducible on current jsbeeb.** The original: with the
+  CRTC's R7 parked where VSync never fires, the second `*LOAD` hung forever in DFS's 8271 status
+  poll at `&ACAE`, and bisecting the CRTC writes one at a time showed R7 was the trigger.
   Measured: Layer 3 (August 2026), jsbeeb. [Paradroid bug-map-corruption.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/bug-map-corruption.md)
+  Re-tested 2026-09-09 on jsbeeb-mcp 3.4.0 / jsbeeb 1.25.0: R7 = 34 against R4 = 30 in MODE 7 stops
+  VSync (System VIA IFR bit 1 never sets again across 3,000 loop iterations, against 78 interrupts
+  carrying it before the change) and the same 8 KB `*LOAD` still completed. That is R7 alone in a
+  full-length frame, not Paradroid's rupture shape, and a different jsbeeb; treat the hang as real
+  but not yet pinned to VSync as its cause.
 - **The DFS ROM is paged in at `&8000` during a filing-system call**, so a bank cannot be loaded
   at `&8000` even uncompressed; stage below and copy or unpack.
   Established: Layer 13d (2026-08), jsbeeb. [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md)
@@ -866,9 +879,13 @@ again.*
   NOT emulated.** The belief that a NuLA build could not be tested in jsbeeb is what let a
   palette-mapping mistake reach real hardware.
   Measured: 2026-09-05, jsbeeb, decision 67. [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md) [Edge layer-8b-nula.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-8b-nula.md)
-- **jsbeeb needs VSync for the 8271 poll**: with R7 parked so VSync never fires, `*LOAD` hangs at
-  `&ACAE` (section 6). It reproduces from BASIC, so it is not the game.
+- **jsbeeb needs VSync for the 8271 poll - no longer true, if it ever was the cause**: with R7
+  parked so VSync never fires, `*LOAD` hung at `&ACAE` (section 6), reproducing from BASIC, so it
+  was not the game.
   Measured: Layer 3, jsbeeb. [Paradroid bug-map-corruption.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/bug-map-corruption.md)
+  On jsbeeb-mcp 3.4.0 / jsbeeb 1.25.0 the same idea does not reproduce: with VSync confirmed dead
+  (IFR bit 1 never sets) an 8 KB `*LOAD` runs to completion. See section 6 for the re-test.
+  Measured: 2026-09-09, jsbeeb-mcp 3.4.0 / jsbeeb 1.25.0.
 - **`frame_count` counts the CRTC's own frames, not 50 Hz ones**, which is why it climbs 14 in
   258k cycles when the CRTC is left free-running in a short shape.
   Measured: 2026-08-31. [Paradroid raster-timing.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/raster-timing.md)
