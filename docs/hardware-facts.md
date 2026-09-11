@@ -588,6 +588,11 @@ advancing and `&0D00` reads `&40`.
   filing system hangs a working machine. Select the bank (`STY ROMSEL`) before reading the byte you
   save, or stage 3 restores bank 0's byte into every RAM bank.
   Built and measured: 2026-08-29, jsbeeb `B-DFS1.2` (eight RAM banks, picks 4-7) and a Master. [Paradroid layer-13-compatibility.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-13-compatibility.md)
+- **ROMSEL (`&FE30`) is WRITE-ONLY on a Model B: read ROMSHAD (`&F4`) instead.** A test that read
+  `&FE30` back to see which bank was paged got `&FE` on jsbeeb's `B-DFS1.2` and the right answer
+  (4) on its Master, which has a readable copy. The MOS keeps its own copy in ROMSHAD on both, and
+  that is the byte an IRQ handler saves and restores anyway.
+  Measured: 2026-09-11, jsbeeb, `lib/test/run_test.6502` after `load_bank`.
 - **Take the four highest-numbered RAM banks**: the banks that matter to other people sit low, and
   on a machine with exactly 4-7 the answer is unchanged.
   Decided: 2026-08-29 (KC). [Paradroid layer-13-compatibility.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-13-compatibility.md)

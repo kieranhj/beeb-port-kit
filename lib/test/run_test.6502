@@ -1,0 +1,138 @@
+\ ******************************************************************
+\ *	run_test.6502 - load_bank, uninstall_irq and keydown_inkey, RUN
+\ ******************************************************************
+\ *	test_lib.6502 proves these assemble. This runs the three lib
+\ *	routines nothing had ever run in the kit's own form (the 2026-09-11
+\ *	audit, after unpack_andy was found broken the day a port first
+\ *	called it). Model B or Master. From the kit's root:
+\ *
+\ *	  python -c "import sys; sys.path.insert(0,'template/tools'); import zx02; \
+\ *	    open('lib/test/build/andy.zx02','wb').write(zx02.compress(bytes((i*37+11)&255 for i in range(64))))"
+\ *	  baron -o lib/test/build/run.ssd --title RUNT --opt 3 lib/test/run_test.6502
+\ *
+\ *	SHIFT+BREAK it, then read the results (all written by RUNT):
+\ *	  &0900-&093F  bank 4's &8000-&803F after load_bank: PASS = the
+\ *	               pattern (i*37+11 AND 255)
+\ *	  &0A00-&0A01  zxdst after load_bank: PASS = 40 80 (ended at &8040)
+\ *	  &0A02        ROMSHAD as load_bank left it: 4 (it leaves the bank
+\ *	               paged - the caller puts the language ROM back).
+\ *	               ROMSHAD, because ROMSEL (&FE30) is write-only on a
+\ *	               Model B: jsbeeb's B read &FE there, its Master 4
+\ *	  &0A04-&0A08  the MOS clock (OSWORD 1) before install_irq
+\ *	  &0A09-&0A0D  the clock after 50 fields under our handler: PASS =
+\ *	               barely moved, because the MOS's tick is not running
+\ *	  &0A0E-&0A12  the clock after uninstall_irq and ~1 s of busy wait:
+\ *	               PASS = moved on by ~100 centiseconds - the MOS got
+\ *	               its interrupt back
+\ *	  &0A13        VSyncs our hook counted while installed: 50
+\ *	  &0A20        keydown_inkey(-66, A) in a loop: 0 while A is held
+\ *	               (Z set = pressed), non-zero when not
+\ *	  &0A21        the loop's counter, rising
+\ ******************************************************************
+
+INCLUDE "../beeb.h.6502"
+
+MASTER        = 0
+IRQ_UNINSTALL = 1
+LOADER_STAGE  = &3000
+
+SECTION zeropage, org = &70, guard = &90
+.zxsrc  SKIP 2
+.zxdst  SKIP 2
+.zxofs  SKIP 1
+.zxbit  SKIP 1
+.zxwrk  SKIP 2
+ENDSECTION
+
+COPY_TO = &0900
+RESULT  = &0A00
+TEST_BANK = 4                   ; RAM on jsbeeb's B (0-7) and Master (4-7)
+
+SECTION RunT, org = &1900, guard = &2400, filename = "RUNT", exec = test_main
+.test_main
+{
+    lda ROMSHAD : sta lang_bank ; BASIC's bank, to put back
+
+    \\ ---- 1. load_bank: the stream into bank 4 --------------------
+    lda #LO(bank_file)
+    ldy #HI(bank_file)
+    ldx #TEST_BANK
+    jsr load_bank
+    lda zxdst   : sta RESULT
+    lda zxdst+1 : sta RESULT+1
+    lda ROMSHAD : sta RESULT+2  ; what load_bank left paged. ROMSHAD, not
+                                ; ROMSEL: &FE30 is write-only on a Model B
+                                ; (jsbeeb read &FE there; the Master, 4)
+    ldx #63                     ; bank 4 is still paged: copy it out
+.copy
+    lda SWRAM_BASE,X
+    sta COPY_TO,X
+    dex
+    bpl copy
+    lda lang_bank               ; and put BASIC back before anything
+    sta ROMSHAD                 ; can page a ROM by ROMSHAD
+    sta ROMSEL
+
+    \\ ---- 2. install_irq, 50 fields, uninstall_irq -----------------
+    ldx #LO(RESULT+4) : ldy #HI(RESULT+4) : lda #1 : jsr osword
+    lda #0 : sta vs_count
+    jsr install_irq
+.wait50
+    lda vs_count
+    cmp #50
+    bcc wait50
+    ldx #LO(RESULT+9) : ldy #HI(RESULT+9) : lda #1 : jsr osword
+    lda vs_count : sta RESULT+&13
+    jsr uninstall_irq
+    ldy #16                     ; ~1 s: 16 x 65,536 x ~5 cycles
+.outer
+    ldx #0
+.mid
+    lda #0
+.inner
+    sec : sbc #1
+    bne inner
+    dex
+    bne mid
+    dey
+    bne outer
+    ldx #LO(RESULT+&0E) : ldy #HI(RESULT+&0E) : lda #1 : jsr osword
+
+    \\ ---- 3. keydown_inkey(A), for ever -----------------------------
+.keys
+    ldx #&BE                    ; INKEY -66 = A
+    jsr keydown_inkey
+    sta RESULT+&20              ; 0 = pressed
+    inc RESULT+&21
+    jmp keys
+}
+
+\ the two hooks irq.6502 calls: count VSyncs, ignore T1
+.irq_vsync_hook
+    inc vs_count
+    rts
+.irq_timer_hook
+    rts
+
+.vs_count  EQUB 0
+.lang_bank EQUB 0
+.bank_file EQUS "BANKD", 13
+
+INCLUDE "../zx02depack.6502"
+INCLUDE "../irq.6502"
+INCLUDE "../keydown.6502"
+INCLUDE "../loader.6502"
+
+.zx_unpack
+    ZX02_DEPACKER
+ENDSECTION
+
+\ The stream load_bank reads: its catalogue address is ignored, because
+\ load_stream gives OSFILE its own (LOADER_STAGE).
+SECTION BankD, org = &5000, filename = "BANKD"
+INCBIN "build/andy.zx02"
+ENDSECTION
+
+SECTION Boot, org = &7E00, guard = &7F00, filename = "!BOOT"
+    EQUS "*RUN RUNT", 13
+ENDSECTION

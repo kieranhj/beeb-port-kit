@@ -67,6 +67,10 @@ the day it was written. The first port to call it, 1942, found it put its stream
 |---|---|---|
 | `test/probe_test.6502` | `swram_probe.6502` on a real boot, every path by poking the ROM type table | `hardware-facts.md` §5 has the table |
 | `test/andy_test.6502` (Master) | `unpack_andy` puts a 64-byte pattern at `&8100` in ANDY and puts ROMSEL back | `&0900` holds the pattern and `&0A00` reads `40 81 <bank>` |
+| `test/run_test.6502` | the three the 2026-09-11 audit found had never run: `load_bank` (a stream into sideways bank 4), `install_irq`/`uninstall_irq` (the MOS clock stops and restarts), `keydown_inkey` (a key held through the emulator) | `&0900` holds the pattern, `&0A00` = `40 80`, `&0A02` = 4; the clock is frozen across 50 fields and moves after the uninstall; `&0A13` = 50; `&0A20` = 0 with the key held, `&80` without |
+
+Between them, every routine in `lib/` has now been run, not just assembled, except the ZX0
+depacker (stepped in py65 by the bench below, and it is what both shipping discs use).
 
 Each file's header has its build line. **A routine with no runtime test should say so in its
 header**, so the first caller knows it's first.
