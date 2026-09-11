@@ -33,7 +33,8 @@ probe is 809 bytes in its own disc file, which the game never keeps.
 
 ## The configurations
 
-"Test it in" names what can actually run the configuration. **jsbeeb** is the one Claude drives
+"Test it in" names what can actually run the configuration. The `beeb-target-matrix` skill runs
+every jsbeeb row a port has claimed, one fresh machine each, and says how to set each one up. **jsbeeb** is the one Claude drives
 through the MCP. **b2**, **b-em** and **MAME** are run by hand, or by Claude through their
 command lines. "Paradroid" is its release on `main` (2026-09-11). "Edge" is Master-only, so
 "n/a" means a B configuration.
