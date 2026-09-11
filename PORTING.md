@@ -264,8 +264,10 @@ atomically inside the VSync handler, and that was the one bug still open when th
 Take the interrupt vector, service VSync and T1 yourself, and give the MOS nothing. No MOS tick, no
 OS sound, no OSBYTE keyboard. Consequences, all measured: the MOS's sound workspace at `&0800` is
 yours only while you hold the vector, so flush the buffers before handing back; and on a Master,
-HAZEL is the filing system's workspace, so if you take it, BREAK must be a power-on reset
-(`OSBYTE 200,3`) or the next boot finds no DFS.
+if you take all of HAZEL, as Edge does by unpacking over 8K from `&C000`, DFS's own pages
+included, BREAK must be a power-on reset (`OSBYTE 200,3`) or the next boot finds no DFS. The
+window `&C300-&DEFF` is a different case: DFS keeps working and a soft BREAK still finds it, with
+limits by call type (hardware-facts, HAZEL).
 
 **DFS does not need the MOS to service interrupts.** Both ports load everything before taking the
 vector and assumed that was why loading worked, but the assumption was never tested; measured now,
@@ -350,8 +352,9 @@ because they predate the measurement; `lib/zx0depack.6502` and `py/zx0.py` stay 
 format for a project and never mix them - nothing checks that the disc and the depacker agree. There is one depacker and it is resident;
 Paradroid had two copies for a while and loaded one of them twice a session. A stream may not be
 overtaken by its own output, so an in-place unpack needs a measured margin and the build should
-fail if it is violated. On a Master, load the file that takes HAZEL last and touch the disc never
-again.
+fail if it is violated. On a Master, a file unpacked over HAZEL's DFS pages is the last disc
+access; one kept inside `&C300-&DEFF` is not, provided later disc calls are OSFILE loads, saves or
+deletes (hardware-facts, HAZEL).
 
 The mode change is the first thing boot does if there is a loading picture and the last if there
 is not; either way every load is blanked (R8, and R10 for the cursor) and every screen is revealed

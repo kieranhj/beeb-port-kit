@@ -514,8 +514,10 @@ be a power-on reset.**
 Instance: Edge Grinder's music lives in HAZEL (`&C000-&DFFF`), the filing system's own workspace,
 so `MUSIC` is loaded last and nothing touches the disc after it; a soft BREAK leaves the wreckage
 in place - measured: no DFS banner, `*CAT` returns nothing - so `OSBYTE 200, 3` makes BREAK a
-power-on reset. Paradroid's low overlay at `&0E00-&10FF` is DFS's shared workspace and is copied
-down by the last filing-system call; do it earlier and the next `*LOAD` hangs in the 8271 poll.
+power-on reset. That is the whole 8K, DFS's own pages included. Keep to `&C300-&DEFF` and DFS and
+a soft BREAK both survive, within the limits in hardware-facts' HAZEL section. Paradroid's low
+overlay at `&0E00-&10FF` is DFS's shared workspace and is copied down by the last filing-system
+call; do it earlier and the next `*LOAD` hangs in the 8271 poll.
 Source: [CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md),
 [docs/memory-map.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/memory-map.md).
 

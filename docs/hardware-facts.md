@@ -427,8 +427,42 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
   must clear memory: a soft BREAK out of the game gave `Acorn MOS` with no DFS banner and `*CAT`
   returned nothing. `OSBYTE 200, X=3` at the top of the program makes BREAK a power-on reset (bit 1)
   and disables ESCAPE (bit 0); afterwards BREAK gave a clean `Acorn 1770 DFS` and SHIFT+BREAK
-  reloaded the game. Load HAZEL's contents LAST and touch the disc no more.
+  reloaded the game. Load HAZEL's contents LAST and touch the disc no more. This is Edge
+  unpacking over all 8K from `&C000`, DFS's own pages included; the window below is different.
   Measured: 2026-09-04, jsbeeb, before and after. [Edge layer-7-music.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-7-music.md)
+- **`&C300-&DEFF` is usable with DFS still working (pop-beeb's range), but how much of it depends
+  on what the program still asks of the filing system.** Every byte of the window was filled
+  with `page EOR offset` from main-RAM code (SEI, ACCCON Y on, copy down, Y off), then checked
+  after each kind of call:
+
+  | after | written inside `&C300-&DEFF` |
+  |---|---|
+  | OSFILE load (A = `&FF`), 8 KB file, 4 times | nothing |
+  | OSFILE save (A = 0) and delete (A = 6) | nothing |
+  | any `*` command (OSCLI) | `&DC00` up: the command line (4 bytes for `CAT`, 20 for `SAVE TMP 3000 +800`) |
+  | `OPENIN` + `BGET` | 32 bytes of `&C3` per open channel, plus one whole page per channel from `&C400` up: five channels took 159 bytes of `&C3` and all of `&C400-&C8FF` |
+  | soft BREAK | 10 bytes of `&C3`, 237 of `&DA` |
+
+  DFS worked throughout with the whole window overwritten, including `&D900-&DBFF`, which hold
+  DFS data at rest after boot (`&DB00` looks like a ROM-paging stub): two full loads, `BGET`,
+  save, delete, `*CAT`, and a soft BREAK that came back with the `Acorn 1770 DFS` banner and a
+  working `*CAT`. `&C000-&C2FF` and `&DF00-&DFFF` hold DFS data at rest and change during calls;
+  they were never overwritten and are not usable.
+  Choosing the window by what runs after HAZEL is loaded:
+  - **OSFILE loads, saves and deletes only**: all of `&C300-&DEFF`, 7K.
+  - **plus `*` commands**: lose `&DC`.
+  - **plus open files** (`OPENIN`, `BGET`, and presumably OSGBPB and `OPENOUT`, not tested): lose
+    `&C3` and a page per channel from `&C4`.
+  - **data that must survive a soft BREAK**: lose `&C3` and `&DA`.
+  1942-beeb uses `&C400-&D9FF`, which clears everything except open channels; it never opens one.
+  Measured: 2026-09-11, jsbeeb-mcp 3.4.0 / jsbeeb 1.25.0, Master 128 (MOS 3.20, Acorn 1770 DFS),
+  MODE 7. The OSFILE-load, `*CAT` and soft-BREAK figures match 1942-beeb's independent run the
+  same day byte for byte (1942-beeb `docs/hazel.md`, 20 OSFILE loads over its own disc). Channels,
+  saves and deletes are this run's alone.
+  **Not covered, and each could move the map:** real hardware; **MOS 3.5** - pop-beeb 1.2 moved off
+  `&DA` for "DFS versions in MOS 3.5+" and pokes `&DAD3`/`&DAD4` to keep DFS 2.45 believing it is
+  active (`disc/readme.txt`, `pop-beeb.asm`); **MMFS** - pop-beeb guards `&DAC0` because "Can't use
+  page `&DBxx` with MMFS FFS"; ADFS; writes through open channels. [pop-beeb](https://github.com/kieranhj/pop-beeb)
 - **OSFILE cannot write into HAZEL** (the MOS would be overwriting its own workspace from
   underneath itself); stage in RAM and copy or unpack up with Y set. Stated as the reason for the
   staging design. [Edge layer-7-music.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-7-music.md)
