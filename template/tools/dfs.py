@@ -209,6 +209,23 @@ def build_image(files, layout=(), title=b"", cycle=0, opt=3,
     return bytes(img)
 
 
+HOST = 0x30000                  # bits 16-17 of an 18-bit DFS address
+
+
+def to_host(files):
+    """Mark every file's load and exec address as the HOST's (&FFFFxxxx;
+    DFS keeps two of the high bits). The assemblers write 16-bit addresses,
+    and with a second processor attached 0 in those bits means the
+    PARASITE: Paradroid's detector loaded and ran over the Tube, probed the
+    parasite's RAM and refused to start ("FOUND 1"). Without a Tube the
+    bits are ignored. Measured, Paradroid on jsbeeb 2026-09-10: B + 65C02
+    and Master + 65C102 went from refused to playing. `files` is
+    name -> Entry, changed in place."""
+    for f in files.values():
+        f.load |= HOST
+        f.exec |= HOST
+
+
 def pad(img, size=DISC_200K):
     """The image zero-filled to a whole disc.
 

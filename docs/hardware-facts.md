@@ -485,6 +485,36 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
   DFS 2.26 and second processors remain untested.
   Reported: 2026-09-06, KC, real Master 128. [Paradroid layer-13-compatibility.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-13-compatibility.md)
 
+### Target configurations (paradroid-beeb issue #18)
+
+The template's boot, before and after four defaults: the host's addresses, OSBYTE 114,1, every
+CRTC register, and `claim_nmi`. Each result is a fresh jsbeeb machine, SHIFT+BREAK, then 400
+frames. It **plays** when the panel and strip are drawn, `frame_count`/`field_count` are
+advancing and `&0D00` reads `&40`.
+
+| Machine | Before | After |
+|---|---|---|
+| B, DFS 1.20 | plays | plays: `field_count` +50 and `frame_count` +25 over 50 frames, `&0D00` = `&40` |
+| B + 65C02 second processor | **black**. MODE 7 never left: `Game` loaded into the parasite | plays |
+| Master + 65C102 second processor | **black**, the same | plays |
+| Master after `*SHADOW` and a soft BREAK | **wrong picture**: a blue strip, no panel; ACCCON `&1B` (D and E set, the display in shadow) | plays; ACCCON `&18` |
+| Master after `*CONFIGURE TV 252,0` and a hard reset | plays | plays. **This test can't tell before from after**: the template already rewrote R7 and R8, which are what `*TV` moves |
+
+- **The second processor needs the host bits in TWO places.** The catalogue (`dfs.to_host`) is
+  not enough on its own when the loader passes its own address. With only the catalogue fixed,
+  both Tube machines reached MODE 1 and then hung in the first load. The B was at `&0701`
+  inside the Tube host code with S = `&0B`, just after writes to `&FE4B`-`&FE4E`. The Master
+  was at the MOS IRQ entry. `&0D00` still held DFS's code. `load_stream`'s OSFILE block
+  carried `&0000xxxx`, a parasite address. `&FF` in its bytes 2 and 3 fixed both machines.
+  Edge's loader has the same block, so a Master + 65C102 would presumably break it too. That
+  is inferred, not measured.
+- **OSBYTE 114 is safe to call on a Model B**: its OS 1.20 passes the unknown OSBYTE to the ROMs
+  and nothing claims it. It is `*FX 114` that says "Bad command", not the call (hexwab, #18).
+  The plain B plays with it in the boot.
+- **Not measured here**: a real second processor, a real `*SHADOW` machine, B+, other DFSs,
+  softloaded filing systems (Paradroid's ZMMFS handling), `!BOOT` without `*EXEC`.
+  Measured: 2026-09-11, jsbeeb (`B-DFS1.2`, `Master`, both with `tube`), the kit template. [paradroid-beeb #18](https://github.com/kieranhj/paradroid-beeb/issues/18)
+
 ---
 
 ## 5. Model B sideways RAM

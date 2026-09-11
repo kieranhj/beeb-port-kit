@@ -121,6 +121,9 @@ def main():
                       % (name, len(raw), len(packed), stream, dest,
                          info["headroom"]))
 
+    # Every file loads and runs in the HOST, second processor or not
+    # (dfs.to_host says why; the loader's own OSFILE block does the same).
+    dfs.to_host(img.files)
     out = dfs.build_image(img.files, LAYOUT, img.title, img.cycle, img.opt)
     write_atomic(out_path, out)
     if padded_path:

@@ -210,12 +210,32 @@ SECTION Game, org = CODE_ORG, guard = CODE_TOP, filename = "Game", exec = main
     CRTC 8, R8_BLANK
     CRTC 10, &20
 
+    \\ OSBYTE 114, X = 1: the NEXT mode change is not a shadow one, even
+    \\ on a Master or B+ set to *SHADOW - where VDU 22 alone leaves the
+    \\ display in shadow RAM while the game writes main (Paradroid measured
+    \\ ACCCON &1B for &18). A model B's OS 1.20 hands the unknown OSBYTE
+    \\ to the ROMs and nothing claims it: safe. It is *FX 114 that says
+    \\ "Bad command", not the call.
+    lda #114 : ldx #1 : ldy #0 : jsr osbyte
+
     lda #22
     jsr oswrch
-    lda #1                      ; MODE 1 (not 129: no shadow on a Master)
+    lda #1                      ; MODE 1, and not shadow: see above
     jsr oswrch
     CRTC 8, R8_BLANK
     CRTC 10, &20
+
+    \\ Every CRTC register the rupture and setup_display do not own, so
+    \\ nothing is inherited from *TV or a third-party OS. MOS 1.20's MODE 1
+    \\ row, measured by Paradroid off &C46E: 7F 50 62 28 .. .. .. .. 01 07
+    \\ 67 08 (R0-R11). R4-R7, R10, R12 and R13 are setup_display's; R8 is
+    \\ the blank above and the display-on in setup_display.
+    CRTC 0, &7F                     ; horizontal total: 128 characters
+    CRTC 1, PLAY_UNITS              ; displayed
+    CRTC 2, &62                     ; HSync position
+    CRTC 3, &28                     ; sync widths
+    CRTC 9, 7                       ; 8 scanlines a row
+    CRTC 11, 8                      ; cursor end
 
     \\ The one data file: its stream lands at LOADER_STAGE in the
     \\ blanked screen and unpacks up to PANEL_ADDR. Every disc access
@@ -227,6 +247,7 @@ SECTION Game, org = CODE_ORG, guard = CODE_TOP, filename = "Game", exec = main
     lda #LO(PANEL_ADDR)
     ldx #HI(PANEL_ADDR)
     jsr unpack_to
+    jsr claim_nmi               ; after the LAST load: the NMI is ours
 
     jsr fill_play               ; something in the strip to scroll
     jsr setup_display           ; the wrap, the B shape, display on

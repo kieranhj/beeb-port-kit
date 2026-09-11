@@ -97,12 +97,18 @@
 
     \\ OSFILE writes the file's catalogue addresses back into the block
     \\ after a load, so the next call would honour the last file's load
-    \\ address and land wherever that was. Reset load and exec = 0 (exec
-    \\ low byte 0 = "use the block's load address") every call.
-    lda #0
-    sta osfile_loadaddr
+    \\ address and land wherever that was. Reset load and exec every call
+    \\ (exec low byte 0 = "use the block's load address").
+    \\ THE LOAD ADDRESS IS &FFFFxxxx, THE HOST'S. With a second processor
+    \\ attached, &0000xxxx means the PARASITE: the DFS sends the file over
+    \\ the Tube and the host hangs in the Tube code (measured, jsbeeb B +
+    \\ 65C02 and Master + 65C102, 2026-09-11: PC in &0400-&07FF, the game
+    \\ never past its first load). Without a Tube the top bytes are ignored.
+    lda #&ff
     sta osfile_loadaddr+2
     sta osfile_loadaddr+3
+    lda #0
+    sta osfile_loadaddr
     sta osfile_execaddr
     lda stream_page
     sta osfile_loadaddr+1
@@ -192,6 +198,28 @@ IF MASTER
     rts
 }
 ENDIF
+
+\ ---- claim_nmi: take the NMI once the last load is done ------------
+\ OSBYTE 143 with X = 12 asks the paged ROMs to hand over the NMI, which
+\ the filing system gives up (its routine lives at NMI_CODE, &0D00); an
+\ RTI goes there so a stray NMI returns. Unlike *TAPE (OSBYTE 140) it
+\ does not unplug the filing system: it claims the NMI back if anything
+\ loads again, and nothing forces a *DISC afterwards on someone who
+\ booted from MMFS or ADFS. Only Econet is likely to mind. hexwab's
+\ method (paradroid-beeb issue #18); Paradroid, jsbeeb 2026-09-10:
+\ &0D00 reads &40 at the title and the game plays. Call it AFTER the
+\ last disc access. Clobbers A, X, Y.
+NMI_CODE = &0D00
+.claim_nmi
+{
+    lda #143
+    ldx #12
+    ldy #&ff
+    jsr osbyte
+    lda #&40                    ; RTI
+    sta NMI_CODE
+    rts
+}
 
 \ ---- the OSFILE parameter block -----------------------------------
 \ Boot-only data in both ports: read while the disc is loading and never

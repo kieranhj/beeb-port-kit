@@ -64,6 +64,7 @@ def main(argv):
         report.append("  %-7s %6d -> %6d  stream %#06x, %d B of headroom"
                       % (name, len(raw), len(packed), stream, info["headroom"]))
 
+    dfs.to_host(img.files)                          # load and run in the HOST, Tube or not
     out = dfs.build_image(img.files, LAYOUT, img.title, img.cycle, img.opt)
     out_path.write_bytes(out)
     if padded_path:
