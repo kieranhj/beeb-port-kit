@@ -24,7 +24,7 @@ These files are **[Baron](https://github.com/waitingforvsync/baron)** syntax as 
 (`.6502`, sections instead of `ORG`/`SAVE`, `ASSERT` as a macro in `beeb.h.6502`). The two
 shipping ports are BeebASM projects and their own copies are unaffected; a port that wants
 BeebASM reverses the table in `../docs/toolchain-baron.md`, which is six lines' work, or takes
-the files from this repository's history (branch `zx02-depacker`).
+the files from this repository's history (commit `5355d03`).
 
 The conversion changed no emitted byte: the test image below came out **byte-identical**
 (1,509 bytes) under both assemblers, and the template built on these files is byte-identical

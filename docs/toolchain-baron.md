@@ -98,4 +98,5 @@ A port that wants BeebASM reverses the table above. The whole delta measured on 
 lines - the `ASSERT` shim in `beeb.h`, the `TIME$` line in `boot_stamp` - plus the `SECTION`
 wrappers in whatever includes them, and the file extensions. Everything else, macros and all,
 assembles unchanged under both. The BeebASM `lib/` and template are in this repository's
-history: branch `zx02-depacker`, the commit before the Baron port.
+history: commit `5355d03`, the commit before the Baron port (it was the tip of a
+`zx02-depacker` branch, deleted 2026-09-11 once it was an ancestor of `master`).
