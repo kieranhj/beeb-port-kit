@@ -51,6 +51,10 @@ CC = cc
 # Set by the `release` and `master` targets through a recursive make.
 RELEASE = 0
 MASTER  = 0
+# The disc's boot option: 3 *EXECs !BOOT, the DEV build's stamped text
+# file; `release` passes 2, *RUN !BOOT, the stub boot_stamp.6502 builds
+# under BOOT_RUN (= RELEASE in main.6502). Set with RELEASE, never alone.
+BOOTOPT = 3
 STEM    = game
 TITLE   = GAME
 
@@ -92,7 +96,7 @@ all:
 debug: all
 
 release:
-	@$(MAKE) RELEASE=1 all
+	@$(MAKE) RELEASE=1 BOOTOPT=2 all
 	@echo "RELEASE build: every DEBUG_ flag off"
 
 master:
@@ -108,7 +112,7 @@ $(CONFIG):
 # Baron's own image. NOT bootable: the loader expects a compressed PANEL.
 # A failed assembly removes it, so a half-written image never looks current.
 $(RAW): $(SRC) $(CONFIG)
-	$(BARON) -o $(RAW) --title $(TITLE) --opt 3 \
+	$(BARON) -o $(RAW) --title $(TITLE) --opt $(BOOTOPT) \
 	    -D RELEASE=$(RELEASE) -D MASTER=$(MASTER) -v src/main.6502 \
 	    > $(LST) || { rm -f $(RAW); exit 1; }
 

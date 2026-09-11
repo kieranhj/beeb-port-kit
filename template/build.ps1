@@ -86,8 +86,11 @@ try {
     # project root. -v (the listing) goes to STDOUT and is captured. Baron is
     # silent on success and writes diagnostics to STDERR, so there is nothing to
     # trip $ErrorActionPreference; the exit code is what to check. -o writes the
-    # disc image, --opt 3 makes it *EXEC !BOOT on SHIFT+BREAK.
-    & $baron -o $raw --title $discTitle --opt 3 -D $relDef -D $masDef -v 'src\main.6502' |
+    # disc image. --opt 3 makes SHIFT+BREAK *EXEC !BOOT, the DEV build's
+    # stamped text file; a RELEASE is --opt 2, *RUN !BOOT, a stub that prints
+    # the same stamp and runs Game (boot_stamp.6502, BOOT_RUN).
+    $bootOpt = if ($Release) { '2' } else { '3' }
+    & $baron -o $raw --title $discTitle --opt $bootOpt -D $relDef -D $masDef -v 'src\main.6502' |
         Out-File -FilePath $listing -Encoding utf8
     if ($LASTEXITCODE -ne 0) {
         Remove-Item $raw -ErrorAction SilentlyContinue

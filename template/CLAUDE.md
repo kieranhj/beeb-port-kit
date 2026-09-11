@@ -59,7 +59,7 @@ is itself a claim to test: the belief that jsbeeb could not emulate the NuLA pal
 ```powershell
 .\build.ps1           # assemble into build/
 .\build.ps1 -Run      # and launch b2 (-Beebjit for beebjit); b-em is no longer used
-.\build.ps1 -Release  # every DEBUG_ flag off
+.\build.ps1 -Release  # every DEBUG_ flag off; boots by *RUN (a stub prints the stamp), not *EXEC
 .\build.ps1 -Master   # MASTER=1 -> build/game-master.ssd
 make                  # the same on any POSIX make; also release, master, run, clean, help
 ```

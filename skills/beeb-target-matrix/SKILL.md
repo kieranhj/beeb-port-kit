@@ -57,7 +57,10 @@ sideways RAM probe)
 5. **Check "plays", all three parts.** `screenshot`, then `read_memory` the counters, then
    `run_frames count: 50` and read them again. Then read what the boot should have left behind.
    On a Master, `read_memory` also reports ACCCON: `&18` when the main screen is displayed,
-   `&1B` when a `*SHADOW` machine's display went to shadow RAM.
+   `&1B` when a `*SHADOW` machine's display went to shadow RAM. **And `read_sound_state`**:
+   every channel should read `vol=15` (silent) unless the game is making a sound. The kit's `*RUN`
+   release boot left the BREAK beep sounding on a Model B, at 523 Hz and `vol=2`, with the picture
+   perfect and the counters running. Only the sound read caught it (2026-09-11).
 
 6. **A failure: read where it stopped before guessing.** `read_registers`, then `disassemble`
    around the PC. The kit's second-processor failure was a PC in the Tube host code at `&0700`,

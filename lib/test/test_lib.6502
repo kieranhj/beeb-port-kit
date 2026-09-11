@@ -21,6 +21,7 @@ LOADER_STAGE  = &3000           ; loader.6502: where streams stage
 SWR_HAND      = &0A00           ; swram_probe.6502: the five-byte answer
 SWR_MAGIC     = &A5
 DEBUG_ANY     = 0               ; boot_stamp.6502
+BOOT_RUN      = RELEASE         ; boot_stamp.6502: RELEASE=1 assembles the *RUN stub
 VERSION_LINE  = "beeb-port-kit lib test"
 BUILD_TIME    = "07 Sep 2026 00:00:00"   ; boot_stamp.6502: no TIME$ in Baron
 DEBUG_DUMMY   = 1               ; a flag to see one BOOT_FLAG line emitted

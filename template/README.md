@@ -28,7 +28,7 @@ sound.
 
 ```powershell
 .\build.ps1             # assemble into build/, then tools/make_disc.py
-.\build.ps1 -Release    # every DEBUG_ flag off, version line in !BOOT
+.\build.ps1 -Release    # every DEBUG_ flag off; !BOOT is a *RUN stub that prints the stamp
 .\build.ps1 -Master     # MASTER=1
 .\build.ps1 -Run        # and launch b2 on the image (-Beebjit for beebjit)
 make                    # the same on any POSIX make: make release, make master, make run, make help

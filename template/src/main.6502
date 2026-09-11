@@ -144,7 +144,13 @@ SCROLL_STEP = 8                 ; one CRTC unit = 4 MODE 1 pixels a frame
 \ ---- addresses ----------------------------------------------------
 CODE_ORG   = &1900              ; above DFS's workspace on a Model B (PAGE)
 CODE_TOP   = &3000              ; the screen
-BOOT_STAGE = &7E00              ; where !BOOT is ASSEMBLED, never loaded
+\ A RELEASE boots by *RUN (disc option 2, boot_stamp.6502's BOOT_RUN):
+\ !BOOT is then a stub that prints the stamp and *RUNs Game, so it is
+\ LOADED and run, at &0900 - a buffer page a disc game never uses, and
+\ not &7E00, which is MODE 7's screen. A DEV build keeps the *EXEC text
+\ file with its REM lines, assembled at &7E00 and never loaded there.
+BOOT_RUN   = RELEASE
+BOOT_STAGE = &7E00 - (&7E00 - &0900) * BOOT_RUN
 
 \ ******************************************************************
 \ *	Zero page, allocated by Baron. &00-&8F is ours; &90-&FF is the
@@ -469,7 +475,7 @@ ENDSECTION
 \ ******************************************************************
 \ *	!BOOT - stamped with what this build is (boot_stamp.6502)
 \ ******************************************************************
-SECTION Boot, org = BOOT_STAGE, guard = BOOT_STAGE + 256, filename = "!BOOT"
+SECTION Boot, org = BOOT_STAGE, guard = BOOT_STAGE + 256, filename = "!BOOT", exec = bootfile
 .bootfile
     BOOT_STAMP_HEAD "beeb-port-kit template"
     BOOT_FLAG MASTER, "MASTER: Master 128 build"       \ legal under RELEASE

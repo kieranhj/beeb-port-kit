@@ -34,6 +34,9 @@
 \ *	    builder's equivalent, or the file is never read.
 \ *
 \ *	THE INCLUDER DEFINES, before this file is included:
+\ *	  BOOT_RUN       0 or 1: an *EXEC text !BOOT, or a *RUN stub that
+\ *	                 prints the same stamp (below). The template sets it
+\ *	                 to RELEASE; it has no default (below says why)
 \ *	  RELEASE        0 or 1 (both ports pass it on the command line:
 \ *	                 beebasm has no IFDEF and refuses a symbol defined
 \ *	                 twice, so main.asm cannot carry a default)
@@ -76,26 +79,81 @@
 \ *	Fork this into your project; keep this header.
 \ ******************************************************************
 
+\ ---- BOOT_RUN: a *RUN !BOOT instead of an *EXEC one ----------------
+\ BOOT_RUN = 0 (the default if the includer does not define it): !BOOT
+\ is the text file above, *EXEC'd, disc option 3.
+\ BOOT_RUN = 1: !BOOT is a few bytes of 6502 that PRINT the same lines,
+\ without the "REM ", and then OSCLI "RUN <file>" - disc option 2, so
+\ the build must pass --opt 2 (the template does for RELEASE). Cleaner
+\ on screen, and it needs no language ROM. Two things change for the
+\ includer: the section needs exec = its first byte, and it must be
+\ assembled where it can RUN - NOT &7E00, which is MODE 7's screen, so
+\ printing the stamp would scroll over the code printing it. The
+\ template uses &0900. The text must fit 255 bytes (X indexes it).
+\ THE INCLUDER DEFINES BOOT_RUN, as it does RELEASE. A default here
+\ (IF NOT(DEFINED(BOOT_RUN)) : BOOT_RUN = 0) does not work in Baron: it
+\ is undefined on the first pass and defined on the next, so the block
+\ flips every pass and the assembly never settles - measured, "did not
+\ settle: 'bootfile_end' kept changing" (2026-09-11).
+
 \ ---- REM title [DEV build], REM VERSION_LINE under RELEASE ---------
+\ With BOOT_RUN the print loop comes first and the text follows it.
 MACRO BOOT_STAMP_HEAD title
+IF BOOT_RUN
+    ldx #0                      ; (not .print/.text: PRINT is a directive)
+.bs_loop
+    lda bs_text,x
+    beq bs_done
+    jsr osasci                  ; 13 goes out as CR and LF
+    inx
+    bne bs_loop
+.bs_done
+    txa                         ; the command starts at bs_text + X + 1:
+    sec                         ; past the 0 that ended the stamp
+    adc #LO(bs_text)
+    tax
+    lda #HI(bs_text)
+    adc #0
+    tay
+    jmp oscli                   ; RUN <file>: never returns
+.bs_text
+ENDIF
 IF RELEASE
     ASSERT DEBUG_ANY = 0        ; a release carries no debug at all
-    EQUS "REM ", title, 13
-    EQUS "REM ", VERSION_LINE, 13
+    IF BOOT_RUN
+        EQUS title, 13
+        EQUS VERSION_LINE, 13
+    ELSE
+        EQUS "REM ", title, 13
+        EQUS "REM ", VERSION_LINE, 13
+    ENDIF
 ELSE
-    EQUS "REM ", title, " DEV build", 13
+    IF BOOT_RUN
+        EQUS title, " DEV build", 13
+    ELSE
+        EQUS "REM ", title, " DEV build", 13
+    ENDIF
 ENDIF
 ENDMACRO
 
-\ ---- one REM per flag that is on ----------------------------------
+\ ---- one line per flag that is on ---------------------------------
 MACRO BOOT_FLAG flag, text
 IF flag
-    EQUS "REM ", text, 13
+    IF BOOT_RUN
+        EQUS text, 13
+    ELSE
+        EQUS "REM ", text, 13
+    ENDIF
 ENDIF
 ENDMACRO
 
-\ ---- REM BUILD <time>, *RUN <file> --------------------------------
+\ ---- BUILD <time>, then RUN <file> --------------------------------
 MACRO BOOT_STAMP_TAIL runfile
+IF BOOT_RUN
+    EQUS "BUILD ", BUILD_TIME, 13, 0
+    EQUS "RUN ", runfile, 13    ; OSCLI's command, after the 0
+ELSE
     EQUS "REM BUILD ", BUILD_TIME, 13
     EQUS "*RUN ", runfile, 13
+ENDIF
 ENDMACRO

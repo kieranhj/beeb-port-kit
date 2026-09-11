@@ -51,6 +51,13 @@
 \ *	    uninstall, not after: with our handler still installed the
 \ *	    MOS's sound IRQ is definitively not running, so it cannot be
 \ *	    halfway through a note as the pointers are reset under it.
+\ *	  - install_irq SILENCES THE SOUND CHIP, all four channels, because
+\ *	    the MOS's sound driver stops with its interrupt: a note it had
+\ *	    started would play until something else writes the chip. The
+\ *	    template's *RUN release boot is entered with interrupts off, and
+\ *	    left the BREAK beep sounding (523 Hz, attenuation 2) on jsbeeb's
+\ *	    Model B until this was added (2026-09-11). A port with its own
+\ *	    sound writes the chip after install anyway.
 \ *	  - THE HANDLER MUST NOT TOUCH A SIDEWAYS BANK unless it saves and
 \ *	    restores ROMSEL itself - and ROMSHAD (&F4) is the byte to save,
 \ *	    because the interrupted code writes ROMSHAD before ROMSEL, so
@@ -147,10 +154,29 @@ ENDIF
     ora #&40
     sta SYS_VIA_ACR
 
+    \\ SILENCE THE SOUND CHIP: attenuation 15 on all four channels. The
+    \\ MOS's sound driver runs off the interrupt just taken away, so any
+    \\ note it had started now plays until something writes the chip. A
+    \\ *RUN boot enters with interrupts off, and that left the BREAK beep
+    \\ at 523 Hz, attenuation 2, on a Model B for good (jsbeeb 2026-09-11;
+    \\ an *EXEC boot's beep had ended by then). Edge's sn_write, per byte.
+    ldy #3
+.sn_off
+    lda sn_off_bytes,y
+    ldx #255 : stx SND_DDRA     ; port A all out
+    sta SND_ORA
+    inx : stx SND_PORTB         ; latch line 0 low: the chip's write enable
+    lda SND_PORTB               ; (the read is the settle time)
+    ora #8 : sta SND_PORTB      ; line 0 high again
+    dey
+    bpl sn_off
+
     lda #&7f : sta SYS_VIA_IFR  ; clear anything pending
     lda #&c2 : sta SYS_VIA_IER  ; enable CA1 (VSync) + T1
     cli
     rts
+.sn_off_bytes
+    EQUB &9F, &BF, &DF, &FF     ; channels 0-2, then noise: volume off
 }
 
 IF IRQ_UNINSTALL

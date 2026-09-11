@@ -543,8 +543,18 @@ advancing and `&0D00` reads `&40`.
 - **OSBYTE 114 is safe to call on a Model B**: its OS 1.20 passes the unknown OSBYTE to the ROMs
   and nothing claims it. It is `*FX 114` that says "Bad command", not the call (hexwab, #18).
   The plain B plays with it in the boot.
+- **A `*RUN` boot (disc option 2) is entered with interrupts OFF, before any language starts.**
+  A breakpoint on the template's release `!BOOT` stub at `&0900` read P = `&35` (I set) on
+  `B-DFS1.2` and `Master` alike, with only the machine and DFS banners on screen. The stub still
+  prints (OSASCI) and `*RUN`s the game (the DFS loads with interrupts masked). But on the **Model
+  B the BREAK beep never ended**: after 400 frames channel 0 still sounded, 523 Hz at attenuation
+  2. The debug build's `*EXEC` boot, which starts BASIC with interrupts on, left every channel at
+  15. The Master was silent either way. The fix is `install_irq` writing attenuation 15 to all
+  four channels (Edge's `sn_write` sequence); afterwards the release B read 15 on channel 0 and
+  played. Measured: 2026-09-11, jsbeeb.
 - **Not measured here**: a real second processor, a real `*SHADOW` machine, B+, other DFSs,
-  softloaded filing systems (Paradroid's ZMMFS handling), `!BOOT` without `*EXEC`.
+  softloaded filing systems (Paradroid's ZMMFS handling), a real machine's BREAK beep under a
+  `*RUN` boot.
   Measured: 2026-09-11, jsbeeb (`B-DFS1.2`, `Master`, both with `tube`), the kit template. [paradroid-beeb #18](https://github.com/kieranhj/paradroid-beeb/issues/18)
 
 ---
