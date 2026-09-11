@@ -280,6 +280,17 @@ and five effects "written but have never run, because EDGEA uses none of them", 
 `--check` says when a song strays into one.
 Source: [docs/layer-7-music-arkos.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-7-music-arkos.md).
 
+**A library routine that has only ever been assembled is a path nothing has called.**
+Instance: the kit's `loader.6502` generalised Edge's `unpack_andy` and wrote down that it took
+its destination in X:A. Then it paged ANDY in through A and called `unpack_to`, which read A as
+the destination's low byte: `ROMSHAD OR &80`. `test_lib.6502` assembled it from the first day. The
+1942 port was the first thing ever to call it, and its in-play text code ran 135 bytes out of
+place, with a `BRK` in a table. Measured afterwards in the kit on jsbeeb's Master: a stream meant
+for `&8100` ended at `&81C9` with bank 9 paged. ANDY at `&8100` was untouched.
+Rule: a lib routine gets a disc that runs it (`lib/test/andy_test.6502`) or a header that says
+it has never run. The first port to call it should treat it as its own new code.
+Source: [1942-beeb BUGS.md #21](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md), `lib/README.md` "Proving it runs".
+
 ---
 
 ## 5. Instrumentation that lies

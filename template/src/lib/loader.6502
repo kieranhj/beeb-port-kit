@@ -48,6 +48,13 @@
 \ *	    way). The test HAS to be machine code: BASIC is itself the ROM
 \ *	    at &8000. The loader cannot write into ANDY while the filing
 \ *	    system runs, so its stream is loaded early and unpacked last.
+\ *	    THE MOS WRITES THREE OF ITS PAGES (1942 port, jsbeeb Master
+\ *	    2026-09-11): &80 on *KEY, &8800-&882F on EVERY MODE CHANGE AND
+\ *	    SOFT BREAK, &8F on VDU 23. Loads, *CAT and the sound leave it
+\ *	    alone. So all 4K is yours only if the unpack follows the last
+\ *	    mode change and nothing issues *KEY or VDU 23 afterwards; else
+\ *	    use &8100-&87FF and &8900-&8EFF. docs/hardware-facts.md, ANDY,
+\ *	    has the page map.
 \ *	  - MASTER ONLY. HAZEL (&C000-&DFFF, ACCCON bit 3) is the filing
 \ *	    system's workspace, but not all of it is in use. load_hazel
 \ *	    unpacks into HAZEL_FREE-HAZEL_TOP (&C300-&DEFF, 7K), which
@@ -163,12 +170,24 @@ IF MASTER
 \ (Edge does not: its caller's next instruction does).
 .unpack_andy
 {
+    \\ THE DESTINATION SURVIVES THE PAGING. This used to page ANDY in
+    \\ through A and then `jsr unpack_to`, which reads A:X as the
+    \\ destination - by when A held ROMSHAD OR &80, so a stream for &8100
+    \\ landed at &8187. Nothing had called it until the 1942 port's in-play
+    \\ text (its BUGS.md #21), whose code then ran 135 bytes out.
+    \\ 1942 stores zxdst here and jumps to zx_unpack; this parks the low
+    \\ byte in Y instead, because a port that assembles unpack_andy but
+    \\ never calls it (the template's MASTER build) would otherwise get
+    \\ Baron's "ZA_AUTO used in code unreachable" warning on every build.
+    \\ lib/test/andy_test.6502 runs it.
+    tay
     sei
     lda ROMSHAD
     pha
     ora #ANDY_ROMSEL
     sta ROMSHAD
     sta ROMSEL
+    tya
     jsr unpack_to
     pla
     sta ROMSHAD

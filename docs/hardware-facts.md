@@ -420,6 +420,38 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
 - **The loader cannot write into ANDY while the filing system is running**; Edge Grinder loads the
   ANDY stream before its last file and unpacks it afterwards.
   Established: Layer 7 (2026-09-04), jsbeeb. [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
+- **The MOS uses three of ANDY's sixteen pages, each only when one particular thing happens.**
+  Whether a port can use all 4K depends on whether its game ever does those things once ANDY is
+  filled. The page map:
+
+  | Page | Written by | Free for a game that... |
+  |---|---|---|
+  | `&80` | the soft-key buffer: `*KEY 1 HELLO` put "HELLO" at `&8022` | never issues `*KEY` after filling it |
+  | `&81`-`&87` | nothing tried (1,792 bytes) | always |
+  | `&88` | **`&8800`-`&882F` on every mode change and every soft BREAK**: 48 bytes of MODE 1's colour patterns and pixel masks. `&8830`-`&88FF` untouched | fills ANDY after its last mode change and reloads after a BREAK |
+  | `&89`-`&8E` | nothing tried (1,536 bytes) | always |
+  | `&8F` | user-defined characters: `VDU 23,224,...` wrote 8 bytes | never defines a character after filling it |
+
+  **None of these wrote to ANDY:** 26 OSFILE loads (every file on a disc, twice), `*CAT`, the
+  MOS sound for a second (`SOUND 1,-15,100,20`), PRINT, and half a second idle.
+  **So all 4K is usable** by a game that fills ANDY after its one mode change, never calls
+  `*KEY` or `VDU 23` afterwards, and reloads from disc after a BREAK. The kit template qualifies
+  (one `VDU 22`, before `install_irq`; nothing through the MOS's VDU afterwards). 1942 loads its
+  text code at `&8000` on that basis. A game that changes mode during play, or keeps the MOS's
+  VDU driver running for text, has `&81`-`&87` and `&89`-`&8E`: 3,328 bytes. It can use page
+  `&88` from `&8830`, and `&8F` if it never defines characters.
+  **Not measured, and each could move the map**: real hardware; MOS 3.5; ADFS and MMFS; any
+  user-defined character other than 224; the soft-key buffer's full length. **Two traps in the
+  measurement**: a fill over page `&80` corrupts the key buffer, so a later `*KEY` fails with "Bad
+  key" (test keys on a fresh machine first). jsbeeb's `run_until_prompt` also stops at BASIC's
+  `INKEY` (use `run_frames` for a timed wait). The routines and the BASIC that drove them are in
+  1942's `docs/andy.md`, ready to retype on a real machine.
+  Measured: 2026-09-11, jsbeeb Master 128 (MOS 3.20, 1770 DFS), from machine code in main RAM
+  paging ANDY as `unpack_andy` does, a fill and a check around each event. [1942-beeb docs/andy.md](https://github.com/kieranhj/1942-beeb/blob/main/docs/andy.md)
+- **Code that reads ANDY lives in main RAM**: with ANDY paged, the first 4K of the paged sideways
+  bank is hidden. The kit's IRQ never touches ROMSEL, so it can't unpage ANDY under a running
+  routine. An IRQ that pages anything has to save and restore ROMSEL, ANDY bit included.
+  Established: 2026-09-11, 1942 port. [1942-beeb docs/andy.md](https://github.com/kieranhj/1942-beeb/blob/main/docs/andy.md)
 
 ### HAZEL
 

@@ -104,8 +104,11 @@ shipped 4-pixel steps.
 
 What the Master gives you, measured in the Edge Grinder port: 20K of shadow RAM for a second
 screen or a staging area; ANDY (4K at `&8000`) and HAZEL (8K at `&C000`) as extra RAM at the cost
-of some MOS rules; four sideways banks you can assume are 4 to 7. What it costs: the B+, the B
-and the Electron.
+of some MOS rules; four sideways banks at 4 to 7, once its LK18 and LK19 links are set. What it
+costs: the B+, the B and the Electron. Of ANDY, the MOS writes three pages: on `*KEY`, on every
+mode change and soft BREAK, and on `VDU 23`. All 4K is yours only if you fill it after the last
+mode change and never call `*KEY` or `VDU 23` afterwards; `docs/hardware-facts.md`, ANDY, has
+the page map.
 
 **Then decide which configurations of that machine it will run on**, as decisions too: second
 processors, `*SHADOW`, sideways RAM that isn't at 4-7, a filing system softloaded into

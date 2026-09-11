@@ -1,0 +1,82 @@
+\ ******************************************************************
+\ *	andy_test.6502 - loader.6502's unpack_andy, RUN rather than assembled
+\ ******************************************************************
+\ *	test_lib.6502 proves every routine assembles; this proves one runs.
+\ *	unpack_andy had never been called until the 1942 port did, and it
+\ *	put the stream 135 bytes out (1942's BUGS.md #21): it paged ANDY in
+\ *	through A before unpack_to read A as the destination.
+\ *
+\ *	Master only. From the kit's root:
+\ *
+\ *	  python -c "import sys; sys.path.insert(0,'template/tools'); import zx02; \
+\ *	    open('lib/test/build/andy.zx02','wb').write(zx02.compress(bytes((i*37+11)&255 for i in range(64))))"
+\ *	  baron -o lib/test/build/andy.ssd --title ANDYT --opt 3 lib/test/andy_test.6502
+\ *
+\ *	then SHIFT+BREAK it on a Master. It unpacks the 64-byte pattern
+\ *	(i*37+11 AND 255) into ANDY at &8100, pages ANDY back in to copy
+\ *	&8100-&813F to &0900, and leaves zxdst at &0A00. PASS is: &0900
+\ *	holds the pattern, &0A00-&0A01 reads 40 81 (the unpack ended at
+\ *	&8140), and &0A02 reads the bank that was paged before the call
+\ *	(unpack_andy puts ROMSEL back).
+\ ******************************************************************
+
+INCLUDE "../beeb.h.6502"
+
+MASTER       = 1
+LOADER_STAGE = &3000
+
+SECTION zeropage, org = &70, guard = &90
+.zxsrc  SKIP 2
+.zxdst  SKIP 2
+.zxofs  SKIP 1
+.zxbit  SKIP 1
+.zxwrk  SKIP 2
+ENDSECTION
+
+ANDY_DEST = &8100
+COPY_TO   = &0900
+RESULT    = &0A00
+
+SECTION AndyT, org = &1900, guard = &2000, filename = "ANDYT", exec = test_main
+.test_main
+    lda #LO(stream) : sta zxsrc
+    lda #HI(stream) : sta zxsrc+1
+    lda #LO(ANDY_DEST)
+    ldx #HI(ANDY_DEST)
+    jsr unpack_andy
+
+    lda zxdst   : sta RESULT        ; where the unpack ended
+    lda zxdst+1 : sta RESULT+1
+    lda ROMSEL  : sta RESULT+2      ; what unpack_andy left paged
+
+    \\ Page ANDY in again, the same way, and copy what landed.
+    sei
+    lda ROMSHAD
+    pha
+    ora #ANDY_ROMSEL
+    sta ROMSEL
+    ldx #63
+.copy
+    lda ANDY_DEST,X
+    sta COPY_TO,X
+    dex
+    bpl copy
+    pla
+    sta ROMSEL
+    cli
+    rts
+
+INCLUDE "../zx02depack.6502"
+INCLUDE "../loader.6502"
+
+.zx_unpack
+    ZX02_DEPACKER
+
+.stream
+INCBIN "build/andy.zx02"
+ENDSECTION
+
+SECTION Boot, org = &7E00, guard = &7F00, filename = "!BOOT"
+    EQUS "*RUN ANDYT", 13
+    EQUS "P.~?&A00;~?&A01;~?&A02", 13
+ENDSECTION
