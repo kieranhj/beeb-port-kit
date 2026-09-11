@@ -552,6 +552,20 @@ advancing and `&0D00` reads `&40`.
   15. The Master was silent either way. The fix is `install_irq` writing attenuation 15 to all
   four channels (Edge's `sn_write` sequence); afterwards the release B read 15 on channel 0 and
   played. Measured: 2026-09-11, jsbeeb.
+- **OSBYTE 126 would not have stopped that beep: at a `*RUN` boot no ESCAPE is pending.** At
+  the stub's first instruction, `&FF` (the ESCAPE flag) read `&00` and `&0276` (ESCAPE effects)
+  read `&00` on `B-DFS1.2` and `Master` alike. On the B, channel 0 was already sounding at 523
+  Hz, attenuation 2; on the Master every channel was already silent. In OS 1.20, OSBYTE 126 at
+  `&E65C` does nothing without an ESCAPE: `BIT &FF : BPL` returns X=0. Only when one is pending,
+  and `&0276` is 0, does it `CLI`, close EXEC files and purge every buffer. Purging a sound buffer
+  goes `&E1AD` → `&ECA2`, whose first act is `JSR &EB03`, "silence the channel". So it silences
+  sound only as a side effect of an ESCAPE. The llm-beeb-wiki's `os/escape.md` agrees ("Stops
+  any sound currently playing", among the ESCAPE effects), and notes that `OSBYTE &E6, X=&FF`
+  turns those effects off. **Write the chip instead**, as `install_irq` now does: it doesn't
+  depend on the ESCAPE state or the effects setting. hexwab (paradroid-beeb #18) recommended
+  OSBYTE 126 for the boot beep; on this evidence it does nothing at this point in the boot.
+  Measured: 2026-09-11, jsbeeb, breakpoint at `&0900` on the template's release image. Code read
+  from `bbc-documents/B/os/os.txt` (OS 1.20). MOS 3.20 not disassembled.
 - **Not measured here**: a real second processor, a real `*SHADOW` machine, B+, other DFSs,
   softloaded filing systems (Paradroid's ZMMFS handling), a real machine's BREAK beep under a
   `*RUN` boot.
