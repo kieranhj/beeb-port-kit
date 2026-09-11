@@ -1,0 +1,14 @@
+# Line endings for files a POSIX shell or a C compiler reads. Git on Windows
+# (core.autocrlf=true) checks text out with CRLF; these keep LF on every
+# checkout, so a Windows clone runs the same Makefile a Unix one does.
+# ../docs/build-portability.md rule 17.
+Makefile            text eol=lf
+*.mk                text eol=lf
+*.sh                text eol=lf
+tools/zx02src/**    text eol=lf
+
+# Never text: the bytes are the data.
+*.bin               binary
+*.ssd               binary
+*.dsd               binary
+*.png               binary

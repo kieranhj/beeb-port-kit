@@ -85,6 +85,17 @@ test to run before asking anyone else to try a build.
     SHA256s, then says either "identical images" or which file differs. On the template,
     `make` and `build.ps1` with the same `SOURCE_DATE_EPOCH` give `26cf9e27...` (2026-09-11).
 
+17. **Line endings are fixed by `.gitattributes`, not by each clone's settings.** Git on
+    Windows (`core.autocrlf=true`, the installer's default) checks text out with CRLF.
+    Without the attributes, a clone of the kit on this machine got the template's `Makefile`
+    with 157 CRs and the vendored `zx02.c` with 245 (2026-09-11).
+    `template/.gitattributes` pins `Makefile`, `*.mk`, `*.sh` and `tools/zx02src/**` to LF
+    and marks the images and data as binary. Measured here, MSYS2's GNU Make 4.4.1 builds a
+    CRLF Makefile without complaint, and to the same image. The rule is for everything
+    that isn't MSYS2: a Windows checkout built from WSL or a Linux VM, another make, a shell
+    script (`$'\r': command not found`), and vendored source whose bytes should match
+    upstream's. None of those were tested here.
+
 ## Windows (MSYS2) problems, recorded so nobody has to find them again
 
 - MSYS2 clears `TMP`/`TEMP` in some shells, and gcc then tries to write to `C:\Windows\` and
