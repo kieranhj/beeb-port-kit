@@ -27,7 +27,10 @@ the original is the specification; deviations are agreed before they are built a
    Master is the choice when a measurement says the B cannot do it (Edge Grinder's 1-pixel
    scroll needed two 16K screens in a wrap region). The Electron is out of scope. RAM will be
    contended for the whole port, so `docs/memory-map.md` is kept current from Layer 0. Ask the
-   owner; it is decision 1.
+   owner; it is decision 1. Then go through the kit's `docs/target-portability.md` with the owner
+   and record a row for each configuration the port will or won't run on: second processors,
+   `*SHADOW`, sideways RAM not at 4-7, softloaded filing systems, no BASIC. "Not supported" is a
+   fine answer; "not considered" is not.
 
 3. **Copy the template and build it.** `template/` boots to a panel above a play area with a
    rupture, its own IRQ handler, direct keyboard and a compressed disc.

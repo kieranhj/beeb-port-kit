@@ -107,6 +107,13 @@ screen or a staging area; ANDY (4K at `&8000`) and HAZEL (8K at `&C000`) as extr
 of some MOS rules; four sideways banks you can assume are 4 to 7. What it costs: the B+, the B
 and the Electron.
 
+**Then decide which configurations of that machine it will run on**, as decisions too: second
+processors, `*SHADOW`, sideways RAM that isn't at 4-7, a filing system softloaded into
+sideways RAM, other DFSs, a machine with no BASIC. `docs/target-portability.md` lists them, with
+what each costs, which emulator can test it, and the kit's defaults that handle most of them for
+a few bytes of loader. Paradroid met them all at once in its last week, from a contributor's
+checklist (its issue #18). A port that decides on day one meets them one at a time.
+
 What Paradroid's Model B memory fight taught, and Edge Grinder's rules file says in as many words:
 **do not adopt the Model B contortions unless a measurement says you must.** The low overlay in
 DFS workspace, the snapshot of the filing system's workspace around a `*LOAD`, the in-place font
@@ -339,8 +346,9 @@ Put code beside the data it reads. "The constraint was code space, and moving co
 fixed it, repeatedly" (Paradroid). The rules, each learned the hard way: bank code may call main
 RAM, main RAM may call a bank only with it paged in, and nothing may page its own bank out. The
 interrupt handler touches no bank unless it saves and restores the selection itself. On a Model B,
-probe the banks at boot and take the highest four; do not assume 4 to 7. On a Master they are 4
-to 7.
+probe the banks at boot and take the highest four; do not assume 4 to 7 (`lib/swram_probe.6502`).
+On a Master they are 4 to 7 when its LK18 and LK19 links are set. Without them it has two, and
+the probe says which links to move.
 
 ### 5.7 The disc: compress everything, one resident depacker, load in order
 
