@@ -39,13 +39,16 @@
 \ *	                 twice, so main.asm cannot carry a default)
 \ *	  BUILD_TIME     the build's timestamp, as a string. BeebASM stamped
 \ *	                 this with TIME$; Baron has no TIME$, so the build
-\ *	                 script writes it - the template's build.ps1 and
-\ *	                 build.sh generate build/build_time.6502 holding one
-\ *	                 line, BUILD_TIME = "07 Sep 2026 15:47:31", and
-\ *	                 main.6502 includes it. NOT a -D: Windows PowerShell
-\ *	                 cannot hand a quoted string containing spaces to a
-\ *	                 native exe (measured 2026-09-07, three forms). Keep
-\ *	                 the file and a rebuild is byte-identical.
+\ *	                 script writes it - the template's tools/build_stamp.py
+\ *	                 (run by its Makefile and build.ps1) generates
+\ *	                 build/build_time.6502 holding one line,
+\ *	                 BUILD_TIME = "07 Sep 2026 15:47:31", and main.6502
+\ *	                 includes it. NOT a -D: Windows PowerShell cannot
+\ *	                 hand a quoted string containing spaces to a native
+\ *	                 exe (measured 2026-09-07, three forms). The time is
+\ *	                 the SOURCE's (SOURCE_DATE_EPOCH, else the last
+\ *	                 commit), so the same commit builds the same disc on
+\ *	                 any machine - ../docs/build-portability.md rule 13.
 \ *	  DEBUG_ANY      the OR of every DEBUG_ flag; the head macro ASSERTs
 \ *	                 it is 0 under RELEASE
 \ *	  VERSION_LINE   a string, printed under RELEASE (e.g. "v1.0 2026-09-06")

@@ -24,7 +24,7 @@
 // them and moves them whenever the code changes. Take them from the listing,
 // never from a doc:
 //
-//   python tools/listing.py symbols build/GAME.lst scroll field_count frame_count
+//   python tools/listing.py symbols build/game.lst scroll field_count frame_count
 //
 // MODEL is jsbeeb's ("B-DFS1.2" by default, "Master" for the MASTER=1 disc).
 // JSBEEB_SRC overrides where jsbeeb lives, as in probe_shot.mjs.

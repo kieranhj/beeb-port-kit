@@ -10,7 +10,7 @@ palettes came in, later the same day), and the result was measured in jsbeeb (`B
 |---|---|---|
 | `boot_stamp.6502` | `!BOOT` at `&7E00` | jsbeeb's screen text: `REM beeb-port-kit template DEV build` / `REM BUILD 07 Sep 2026 03:02:40` / `*RUN Game`; the Master build adds `REM MASTER: Master 128 build`; the RELEASE build's stamp read back from the catalogue carries the version line and no DEV |
 | `loader.6502` + `zx02depack.6502` | `PANEL` staged at `&3000`, unpacked to `&4A00` | `&4A00` read back after boot, 2,560 bytes, **identical to `src/data/panel.bin`** (md5 `480a1d5dda14e04ee9eee9637b9983e1`); `zxdst` left at `&5400`. Both models: `B-DFS1.2` and, with the `MASTER=1` disc, `Master` |
-| `make_disc.py` on `dfs.py` / `zx02.py` | `build/GAME.SSD`, 2,304 bytes, **unpadded** (jsbeeb needs no padding since its 1.9.0; booted on both models through the MCP to check, 2026-09-07) | `PANEL` 2,560 -> 79 bytes via `zx02.exe`, round-tripped through `zx02.decompress`; catalogue load/exec rewritten to `&3000`; layout `!BOOT`, `Game`, `PANEL`; 2,304-byte image, 204,800 padded. The overlap check refuses a stream over its output |
+| `make_disc.py` on `dfs.py` / `zx02.py` | `build/game.ssd`, 2,304 bytes, **unpadded** (jsbeeb needs no padding since its 1.9.0; booted on both models through the MCP to check, 2026-09-07) | `PANEL` 2,560 -> 79 bytes via `zx02.exe`, round-tripped through `zx02.decompress`; catalogue load/exec rewritten to `&3000`; layout `!BOOT`, `Game`, `PANEL`; 2,304-byte image, 204,800 padded. The overlap check refuses a stream over its output |
 | `irq.6502` | IRQ1V owned, CA1 + T1 | the field counter climbs by exactly 100 in 3,993,600 cycles |
 | `keydown.6502` | `keydown_int`, Z = 97, X = 66 | X held 50 fields: `scroll` 0 -> 200 (25 steps of 8). Z held 60 fields: 200 -> 10,200 (30 steps, wrapped by +10,240) |
 | the rupture | `src/rupture.6502` | screenshot: 4-row panel with its white edge lines over the 16-row strip; T1 sweep below |
@@ -177,12 +177,12 @@ from the request**, the kit's rule again). `scroll` 0 -> 200 in 50 fields of X.
 
 Upgraded from 3.3.0, which brought jsbeeb 1.24.1 -> 1.25.0 under the harnesses' feet. Re-ran
 `verify_dynamic.mjs` on both models: `{"fields":100,"frames":50,"scrollIdle":0,"scrollAfterX":200}`
-on `GAME.SSD` and `GAME-MASTER.SSD` alike, identical to the figures taken on 1.24.1. **The
+on `game.ssd` and `game-master.ssd` alike, identical to the figures taken on 1.24.1. **The
 upgrade changed nothing this template can see.**
 
 `tools/jsbeeb_src.mjs` now finds jsbeeb instead of hard-coding an npx cache path, and prints
 `[jsbeeb <version>] <path>` before it imports, so a harness run says which emulator produced it.
-The addresses are hex: `node tools/verify_dynamic.mjs build/GAME.SSD 00 0C 02`. Decimal reads the
+The addresses are hex: `node tools/verify_dynamic.mjs build/game.ssd 00 0C 02`. Decimal reads the
 wrong locations and returns zeros, which looks exactly like a regression.
 
 ## Not done

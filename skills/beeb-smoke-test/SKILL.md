@@ -9,7 +9,7 @@ The first thing after every build and the only check that trusts a screenshot: f
 boot", a screenshot is enough. Everything past that point is verified against the buffer
 (`beeb-buffer-oracle`), never the picture.
 
-**Image to boot:** the post-processed SSD the project ships (`build/GAME.SSD` in the kit template; `build/<NAME>-200K.SSD` in the two ports, which pad because they publish that file)
+**Image to boot:** the post-processed SSD the project ships (`build/game.ssd` in the kit template; `build/<NAME>-200K.SSD` in the two ports, which pad because they publish that file)
 **Never boot:** the assembler's own output (`*-RAW.SSD`, `*-raw.ssd`) - the loader expects the compressed layout the disc tool writes
 **Frames to run:** ~400 (about 8 s of emulated time; enough to clear the loader and reach the title)
 
@@ -20,7 +20,7 @@ boot", a screenshot is enough. Everything past that point is verified against th
    awkward one: it writes *progress* to stderr, so do not redirect that stream or
    `$ErrorActionPreference = 'Stop'` throws on a successful build.) The build command and
    the shipping image's name come from the project's `CLAUDE.md` ("Build" section), not from
-   memory: `.\build.ps1` in both ports, `tools/build.sh` from bash.
+   memory: `.\build.ps1` in both ports and the template, `make` on any POSIX system.
 
    ```powershell
    .\build.ps1

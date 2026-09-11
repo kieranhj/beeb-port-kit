@@ -5,8 +5,10 @@ ground-up rewrite of BeebASM (MIT, active - the sections design changed on 2026-
 and `template/` are both Baron. BeebASM is the legacy: the two shipping ports are BeebASM
 projects, and this file records exactly what differs so either direction is a short walk.
 
-Pin the version. `baron.exe` 0.3.0 lives in `..\..\Bin\` beside `beebasm.exe` (a local
-`template/bin\baron.exe` wins); binaries are on the project's releases page. The language is
+Pin the version. The builds find `baron` through `$BARON`, then `bin/`, then the PATH, never
+through a path written into the build (`docs/build-portability.md`). On this machine 0.3.0 is
+in `..\..\Bin\` beside `beebasm.exe`, named in the template's gitignored `local.ps1`.
+Binaries are on the project's releases page. The language is
 still moving, so a build that worked is worth keeping the exe for.
 
 ## Why
@@ -16,7 +18,7 @@ Measured on this kit, 2026-09-07, not taken from the READMEs:
 | | Result |
 |---|---|
 | All of `lib/` converted, then the template rebuilt on it | every byte of `Game` and `PANEL` unchanged again - the conversion is provably cosmetic |
-| The template built with Baron vs BeebASM | `Game` (1,087 bytes DEV, 1,138 MASTER) and `PANEL` **byte-identical**; `!BOOT` differs only in the timestamp; final `GAME.SSD` differs in those bytes alone |
+| The template built with Baron vs BeebASM | `Game` (1,087 bytes DEV, 1,138 MASTER) and `PANEL` **byte-identical**; `!BOOT` differs only in the timestamp; final `game.ssd` differs in those bytes alone |
 | Both discs booted in jsbeeb (`B-DFS1.2` and `Master`) | `&4A00` reads back identical to `src/data/panel.bin`, `zxdst` left at `&5400` - same as the BeebASM build |
 | All of `lib/` assembled under Baron (a ported `test_lib`) | 1,509-byte image **byte-identical**, at a cost of 6 changed lines across 8 files |
 | A forward-referenced zero-page symbol | assembled as **zero page** - BeebASM's pass-1 sizing trap does not exist |
@@ -46,7 +48,7 @@ So the bytes are the same bytes. What changes is the toolchain around them.
 |---|---|
 | `ORG` / `SAVE` / `GUARD` / `CLEAR` | `SECTION name, org=, guard=, filename=, exec=` ... `ENDSECTION`. The filename **is** the request to save. Two sections may share an address, so `PANEL`'s `CLEAR` is gone |
 | `ASSERT cond` | A two-line `MACRO ASSERT` in `beeb.h.6502` (`IF NOT(c) : ERROR ... : ENDIF`), so all 16 assertions in `main.6502` read exactly as they did. Baron reports the `ERROR` and adds `Note: Expanded from here` at the call, so an assertion still names its own line |
-| `TIME$` | Gone. `build.ps1` / `tools/build.sh` write `build/build_time.6502` - one line, `BUILD_TIME = "..."` - which `main.6502` includes. Not a `-D`: **Windows PowerShell cannot hand a quoted string containing spaces to a native exe** (three forms tried, all mangled). Keeping the file gives a byte-identical rebuild |
+| `TIME$` | Gone. `tools/build_stamp.py` (run by the `Makefile` and `build.ps1`) writes `build/build_time.6502` - one line, `BUILD_TIME = "..."` - which `main.6502` includes. Not a `-D`: **Windows PowerShell cannot hand a quoted string containing spaces to a native exe** (three forms tried, all mangled). The time is the source's (`SOURCE_DATE_EPOCH`, else the last commit), so a rebuild is byte-identical on any machine |
 | `INCLUDE` resolves from the working directory | Baron resolves it **relative to the including file**: `src/main.6502` says `INCLUDE "lib/irq.6502"`, not `"src/lib/irq.6502"`. Watch for this when forking a file into a different directory - a wrong path surfaced once as a confusing parse error downstream rather than "could not read" |
 | `CPU 0` | NMOS is the default; `cmos = TRUE` on a section enables the 65C02 |
 | `P%` | `*` (both spellings work) |

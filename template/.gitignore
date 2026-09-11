@@ -1,8 +1,11 @@
 # ---- Build output: the disc images, the padded copy, the listing ----
 build/
 
-# ---- Third-party tools (baron and zx02 live in ..\..\Bin; a local copy is optional) ----
+# ---- Tools: baron if you keep a copy here, and the zx02 the build compiles ----
 bin/
+
+# ---- This machine's tool paths, read by build.ps1 ----
+local.ps1
 
 # ---- Python ----
 __pycache__/

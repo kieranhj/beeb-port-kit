@@ -24,11 +24,13 @@
 \ *	  MASTER      0/1  the Master 128 path: loader.6502's load_hazel
 \ *	                   and unpack_andy assemble, and !BOOT says so. The
 \ *	                   template uses no shadow RAM, ANDY or HAZEL.
-\ *	Baron has no TIME$, so the build's timestamp comes from a file the
-\ *	build scripts write before assembling, build/build_time.6502, holding
-\ *	one line: BUILD_TIME = "07 Sep 2026 15:47:31". Assembling by hand
-\ *	without a prior build.ps1/build.sh run fails on that missing file -
-\ *	write it yourself, or run a build script. (It is not passed with -D
+\ *	Baron has no TIME$, so the build's timestamp comes from a file
+\ *	tools/build_stamp.py writes before assembling, build/build_time.6502,
+\ *	holding one line: BUILD_TIME = "07 Sep 2026 15:47:31" - the source's
+\ *	time (the last commit), not the clock's, so a commit builds the same
+\ *	disc everywhere. Assembling by hand without a prior make/build.ps1
+\ *	run fails on that missing file - run build_stamp.py first (CLAUDE.md
+\ *	"Build" has the line). (It is not passed with -D
 \ *	because Windows PowerShell cannot hand a quoted string with spaces to
 \ *	a native exe intact - MEASURED 2026-09-07, three quoting forms tried.)
 \ ******************************************************************

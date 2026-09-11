@@ -94,7 +94,7 @@ class Stream(unittest.TestCase):
         self.assertEqual(listing.opcode_stream(SAMPLE), listing.opcode_stream(edited))
 
 
-TEMPLATE_LST = Path(__file__).resolve().parents[2] / "template" / "build" / "GAME.lst"
+TEMPLATE_LST = Path(__file__).resolve().parents[2] / "template" / "build" / "game.lst"
 
 
 @unittest.skipUnless(TEMPLATE_LST.exists(), "template has not been built")

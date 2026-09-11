@@ -34,6 +34,7 @@ description do it.
 | `beeb-bss-bugs` | procedure 10 | A bug is "first boot only" or "only on hardware": seed RAM with `&A5` and soft-reset into the game; also proves a region free |
 | `beeb-cross-emulator` | procedure 11 | A bank switch, mid-frame CRTC change or displayed memory below `&3000` is about to be called done: what b-em and b2 must see, and how |
 | `beeb-identical-build` | procedures 12, 13 | A change is meant to be mechanical: compare images or catalogue files byte for byte, or diff the listings reduced to opcode streams |
+| `beeb-portable-build` | `docs/build-portability.md` | Before anyone else tries a build, or a tester reports a failure or a hash: fresh `make -j4`, a no-op rebuild, flag flips, a failing tool leaves no target, `make` and `build.ps1` compared byte for byte, the SHA256 to publish |
 | `beeb-start-port` | PORTING.md §2-4 | Starting a new port: the docs skeleton with the four rules, the template, `.mcp.json`, the proposal's transfers table, the identical-build proof for existing code |
 | `beeb-close-layer` | PORTING.md §3-4 | A layer works in the emulator: the doc, the decision rows, the plan, the bugs, the memory gauge with its date, every flag combination, the smoke test, the commit with the measurement |
 

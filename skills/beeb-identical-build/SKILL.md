@@ -35,11 +35,18 @@ change, stronger.
    ```
 
 4. **If they differ only where they should, compare per file.** Edge Grinder's `!BOOT` carries
-   the assembly time and a DEV stamp, so its disc always differs there. Extract the files that
-   must not have changed (`Edge`, `BANK0`, the data banks) from both catalogues and compare
-   those. Neither port ships the extractor; it is a few lines over the DFS catalogue (sectors 0
-   and 1: names at `&0008`, load/exec/length/start sector at `&0108`, eight bytes a file) - the
-   kit's `py/beeb_port_kit/dfs.py` reads one. Say in the commit which files were compared.
+   the assembly time and a DEV stamp, so its disc always differs there. The kit template's
+   does not: it stamps the last commit's time, so two builds of one commit are identical
+   images, and a `!BOOT` difference means the stamps differ. Pin the time with
+   `SOURCE_DATE_EPOCH` to take it out of the comparison. For the per-file check:
+
+   ```bash
+   python tools/dfs.py compare build-old/<name>.ssd build/<name>.ssd --ignore '!BOOT'
+   ```
+
+   (`python -m beeb_port_kit.dfs compare ...` from the kit, for a port that has not forked it.)
+   It prints both SHA256s, then says either "identical images" or which files differ, where,
+   and whether a load or exec address moved. Say in the commit which files were compared.
 
 5. **When addresses legitimately moved - a width change, a data removal, a relocation - diff
    the listing streams instead.** The reducer is checked in (`tools/listing.py`, forked from the

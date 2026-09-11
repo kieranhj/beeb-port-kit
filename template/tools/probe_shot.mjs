@@ -13,7 +13,7 @@
 // to that package's src/ directory if the default is stale, and JSBEEB_MODEL
 // to "Master" for the MASTER=1 build.
 //
-//   node tools/probe_shot.mjs build/GAME.SSD out.png [half|one|ruler]
+//   node tools/probe_shot.mjs build/game.ssd out.png [half|one|ruler]
 //     (no mode)  the disc as built
 //     half       units 0-39 of the panel's last line logical 1, 40-79 logical 0:
 //                shows the first palette group AND the logical-0 group in one frame

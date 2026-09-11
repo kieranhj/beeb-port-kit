@@ -235,10 +235,13 @@ def compress(raw, exe=None, name="stream", codec=zx02):
     verified by codec.decompress(); without, codec.compress() does it in
     Python (much slower on 16K, and never worse - see below).
 
-    The exe is the authority on speed, not on the bytes: the released
-    zx02.exe (v2) writes a trailing 0 on some inputs where zx02.py stops one
-    byte earlier. Both decode identically; the round-trip below is the check
-    that matters."""
+    The released zx02.exe (v2) writes a trailing 0 on some inputs where
+    zx02.py stops one byte earlier (1 file in 29 measured, 2026-09-11). Both
+    decode identically and the round-trip below is the correctness check -
+    but a BUILD must use one of them, always: choosing whichever is installed
+    makes the disc depend on the machine. The template builds the reference
+    from vendored source and passes it as `exe` (docs/build-portability.md
+    rule 14)."""
     raw = bytes(raw)
     if exe is None:
         packed = codec.compress(raw)
@@ -425,3 +428,66 @@ def check_stream(name, stream, packed, dest, raw, top=None, in_place=False,
         margin = stream - need
     return {"headroom": None if top is None else top - stream - n,
             "in_place_margin": margin}
+
+
+# --- comparing two images -------------------------------------------------
+
+def compare(a, b, ignore=()):
+    """How two images differ, file by file: a list of lines, empty when they
+    hold the same files. A file on one side only, different contents, a
+    different load or exec address, a different title or boot option are
+    all reported; files named in `ignore` are skipped (a !BOOT stamped with
+    the wall clock, when the two builds did not share a stamp).
+
+    Per file, because two images holding the same files can still differ as
+    bytes - another layout order, another sector count - and the files are
+    what the machine loads."""
+    ia, ib = read_image(a), read_image(b)
+    out = []
+    if ia.title != ib.title:
+        out.append(f"title: {ia.title!r} vs {ib.title!r}")
+    if ia.opt != ib.opt:
+        out.append(f"boot option: {ia.opt} vs {ib.opt}")
+    for name in list(ia.files) + [n for n in ib.files if n not in ia.files]:
+        if name in ignore:
+            continue
+        fa, fb = ia.files.get(name), ib.files.get(name)
+        if fa is None or fb is None:
+            out.append(f"{name}: only in the {'second' if fa is None else 'first'} image")
+            continue
+        if fa.data != fb.data:
+            at = next((i for i, (x, y) in enumerate(zip(fa.data, fb.data)) if x != y),
+                      min(len(fa.data), len(fb.data)))
+            out.append(f"{name}: contents differ ({len(fa.data)} vs "
+                       f"{len(fb.data)} bytes, first at +{at:#x})")
+        if (fa.load, fa.exec) != (fb.load, fb.exec):
+            out.append(f"{name}: load/exec {fa.load:#x}/{fa.exec:#x} vs "
+                       f"{fb.load:#x}/{fb.exec:#x}")
+    return out
+
+
+def _main(argv):
+    """python -m beeb_port_kit.dfs compare A.ssd B.ssd [--ignore NAME]...
+
+    Prints each image's SHA256, then either "identical images" or every
+    per-file difference. Exit status 0 when every file not ignored matches."""
+    import hashlib
+    if len(argv) < 3 or argv[0] != "compare":
+        raise SystemExit(_main.__doc__)
+    a, b, rest = Path(argv[1]), Path(argv[2]), argv[3:]
+    ignore = [rest[i + 1] for i in range(len(rest) - 1) if rest[i] == "--ignore"]
+    for p in (a, b):
+        print(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p}")
+    if a.read_bytes() == b.read_bytes():
+        print("identical images")
+        return 0
+    diffs = compare(a, b, ignore)
+    print("\n".join(diffs) if diffs else
+          "the images differ as bytes, but every file"
+          + (" not ignored" if ignore else "") + " matches")
+    return 1 if diffs else 0
+
+
+if __name__ == "__main__":
+    import sys
+    raise SystemExit(_main(sys.argv[1:]))

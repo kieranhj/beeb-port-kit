@@ -14,7 +14,7 @@ shipped ports do and what most ports want. This example is the other shape, kept
 than replacing it, because a scanline vertical scroll wants the frame the other way round:
 
 ```
-build\VSCROLL.SSD        SHIFT+BREAK, or *RUN VScroll
+build\vscroll.ssd        SHIFT+BREAK, or *RUN VScroll
     cursor UP / DOWN     scroll the view one SCANLINE a field, at 50 Hz
 ```
 
@@ -96,7 +96,7 @@ anything in the IRQ path before that write changes.**
 
 ## Measured
 
-All 2026-09-08, jsbeeb 1.25.0, `B-DFS1.2`, on `build/VSCROLL.SSD` at `T1_PHASE = 31`:
+All 2026-09-08, jsbeeb 1.25.0, `B-DFS1.2`, on `build/vscroll.ssd` at `T1_PHASE = 31`:
 
 | What | Result |
 |---|---|
@@ -150,8 +150,8 @@ What it does buy, against the panel-first shape:
 ```powershell
 cd examples\vscroll
 .\build.ps1
-python ..\..\tools\listing.py symbols build\VSCROLL.lst     # crtc_live, line_live, ypos
-node tools\verify_vscroll.mjs build\VSCROLL.SSD 02 0D 10
+python ..\..\tools\listing.py symbols build\vscroll.lst     # crtc_live, line_live, ypos
+node tools\verify_vscroll.mjs build\vscroll.ssd 02 0D 10
 ```
 
 **The addresses are HEX and they move on every edit** - Baron allocates the zero page, so take

@@ -800,7 +800,7 @@ again.*
 - **`TIME$` stamps the assembly time**, useful in `!BOOT` so any disc image can be dated.
   [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
 - **The symbol dump** (BeebASM only - Baron has none, so the kit parses the listing instead:
-  `python -m beeb_port_kit.listing symbols build/GAME.lst NAME`, and
+  `python -m beeb_port_kit.listing symbols build/game.lst NAME`, and
   waitingforvsync/baron#5): `beebasm -i src/main.asm -do build/symbols.ssd -D RELEASE=0 -d | tr ',' '\n'
   | grep "'name'"` prints every global label as `'name':decimal`, the quick way to find a variable's
   address for an emulator poke. `-do` is there only to stop the loose files. [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md)
@@ -902,7 +902,7 @@ again.*
   declared dependency guarantees that fix. Anything at or past those boots a 2,304-byte image as
   happily as a 204,800-byte one.
   Measured: 2026-09-07, jsbeeb MCP (jsbeeb-mcp 3.3.0, jsbeeb 1.24.1). The kit template's
-  unpadded `GAME.SSD` (2,304 bytes) booted on `B-DFS1.2` and `Master`: `!BOOT` EXECed, `PANEL`
+  unpadded `game.ssd` (2,304 bytes) booted on `B-DFS1.2` and `Master`: `!BOOT` EXECed, `PANEL`
   unpacked to `&4A00` byte-identical to its source, 100 fields in 100 frames, 50 loop passes in
   those, `scroll` 0 -> 200 under 50 fields of X.
   **Padding to 200K (204,800 bytes) remains a PUBLISHING convention**: a published size that

@@ -27,7 +27,7 @@ not on the machine.
 |---|---|---|
 | `zx02.py` | **What a new port compresses with.** Daniel Serpell's ZX02 - his 6502-tuned fork of ZX0 - and a decompressor, in Python: the default stream (forwards, positive offsets, 8-bit gamma ending on a 0), the one `lib/zx02depack.6502` decodes. `compress()` matches the reference `zx02.exe` (which pads a trailing zero on some inputs); `decompress()` is the oracle every stream is round-tripped through before a disc is written. Why it, and not ZX0: half the depacker, 2.14x the decode speed, +0.11% on the packed size, measured over 43 real files from both ports - the module header has the numbers | new in the kit, from [dmsc/zx02](https://github.com/dmsc/zx02) (MIT) |
 | `zx0.py` | Einar Saukas's ZX0 compressor and a decompressor, in Python: the default v2 stream (forwards, inverted new-offset MSB), the one `lib/zx0depack.6502` decodes. `compress()` is byte-identical to the reference `zx0.exe`, and slow; `decompress()` is the oracle both ports run every stream through before writing a disc. **Kept because the two shipping discs are ZX0 discs**; `dfs.compress(..., codec=zx0)` selects it | `tools/zx0.py`, byte-identical in [paradroid-beeb](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/zx0.py) and [edge-beeb](https://github.com/kieranhj/edge-beeb/blob/master/tools/zx0.py) |
-| `listing.py` | Baron's `-v` listing: `symbols()` (every label and every `ZA_AUTO` allocation as `name -> [address]`, because Baron has no symbol dump and a zero-page address allocated by the assembler exists nowhere else) and `opcode_stream()` (one entry per emitted instruction - opcode and operand length, no operand values - for `docs/verification.md`'s procedure 13, proving a change that moved addresses altered no instruction). `python -m beeb_port_kit.listing symbols build/GAME.lst NAME` from the command line | new with Baron; the reducer both ports wrote inline and neither kept |
+| `listing.py` | Baron's `-v` listing: `symbols()` (every label and every `ZA_AUTO` allocation as `name -> [address]`, because Baron has no symbol dump and a zero-page address allocated by the assembler exists nowhere else) and `opcode_stream()` (one entry per emitted instruction - opcode and operand length, no operand values - for `docs/verification.md`'s procedure 13, proving a change that moved addresses altered no instruction). `python -m beeb_port_kit.listing symbols build/game.lst NAME` from the command line | new with Baron; the reducer both ports wrote inline and neither kept |
 | `dfs.py` | Acorn DFS `.ssd` images: read the catalogue (`read_image` -> `Image` of `Entry`), lay files out in boot ACCESS order (`build_image`), pad to 200K, and the two checks a compressed disc needs before it is written: `check_stream` (a stream may not overlap its own output, and may not run past the screen it stages under) and `in_place_delta` (the margin a stream that unpacks over itself needs, measured by walking the decode) | the generic half of `tools/make_disc.py` in [paradroid-beeb](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/make_disc.py) (`in_place_delta`) and [edge-beeb](https://github.com/kieranhj/edge-beeb/blob/master/tools/make_disc.py) (the overlap refusal) |
 | `modes.py` | BBC bitmap modes 0/1/2/4/5: `pack_byte`/`unpack_byte` under the one rule (bit k of pixel n at `P*k + (P-1-n)`), the ports' own names `mode1_byte`, `unpack_mode1`, `mode2_byte`, `mode2_unpack`; the eight physical colours and their luma; `dither_pair`, Rich Talbot-Watkins's rule for approximating a richer palette with two MODE 2 colours checkerboarded; `render`/`unrender` between screen memory and a PIL image | [paradroid-beeb `export_bbc.py`](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/export_bbc.py), [`verify_bbc.py`](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/verify_bbc.py); [edge-beeb `bbc.py`](https://github.com/kieranhj/edge-beeb/blob/master/tools/bbc.py) |
 | `c64.py` | The C64 side: Pepto's palette, hires and multicolour byte decoding, 24x21 sprite blocks, 8x8 charsets, flat tables, and two source readers - `parse_c64_table` (the `!byte`/`.byte` operands under a label in an ACME/TASS source, with `$xx + n` sums and named constants) and `parse_listing` (an IDA `.BYTE` listing into a 64K image, with the running offset a continuation line needs) | [edge-beeb `bbc.py`](https://github.com/kieranhj/edge-beeb/blob/master/tools/bbc.py), [`export_waves.py`](https://github.com/kieranhj/edge-beeb/blob/master/tools/export_waves.py); [paradroid-beeb `export_bbc.py`](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/export_bbc.py), [`rip_graphics.py`](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/rip_graphics.py), [`export_title.py`](https://github.com/kieranhj/paradroid-beeb/blob/main/tools/export_title.py) |
@@ -71,22 +71,30 @@ COMPRESSED = {"BANK0": (DEPK_STREAM, 0x8000),         # name: (stream address, u
 STREAM_TOP = {DEPK_STREAM: 0x8000}                    # what a stream may not run past
 LAYOUT = ["!BOOT", "GAME", "BANK0", "BANK1"]          # boot ACCESS order, so the head never seeks back
 
-exe = dfs.find_exe(["bin/zx02.exe"])                  # None -> zx02.py does it, slowly
-img = dfs.read_image("build/GAME-RAW.SSD")            # the assembler's own image
+exe = "bin/zx02"                                      # ONE compressor, always - see below
+img = dfs.read_image("build/game-raw.ssd")            # the assembler's own image
 for name, (stream, dest) in COMPRESSED.items():
     entry = img.files[name]
     packed = dfs.compress(entry.data, exe, name)      # ZX02, round-tripped through zx02.decompress()
     dfs.check_stream(name, stream, packed, dest, entry.data, top=STREAM_TOP[stream])
     entry.replace(packed, load=stream, exec=stream)   # the catalogue now says where it stages
 out = dfs.build_image(img.files, LAYOUT, img.title, img.cycle, img.opt)
-open("build/GAME.SSD", "wb").write(out)
-open("build/GAME-200K.SSD", "wb").write(dfs.pad(out))  # only when publishing: see pad()
+open("build/game.ssd", "wb").write(out)
+open("build/game-200k.ssd", "wb").write(dfs.pad(out))  # only when publishing: see pad()
 ```
 
 `check_stream` raises `DiscError` if the stream would run past `top` or overlap its own output.
 For a stream that must unpack over itself (Paradroid's font, which lands at `&3700` and unpacks
 to `&3000`), pass `in_place=True`: it then requires `stream >= dest + in_place_delta(packed)`,
 the margin measured by walking that particular stream's decode.
+
+**Pick one compressor and always use it.** `compress(raw, None)` runs `zx02.py`, which ends one
+byte short of the reference on some inputs. A build that uses whichever is installed makes a
+disc that depends on the machine. The template builds the reference from vendored source
+(`template/tools/zx02src/`, `../docs/build-portability.md` rule 14).
+
+**Comparing two images:** `python -m beeb_port_kit.dfs compare a.ssd b.ssd [--ignore !BOOT]`
+prints both SHA256s, then says either "identical images" or which file differs and how.
 
 **The assembler's own image is not bootable** once the loader expects compressed streams. Hand the image
 this writer produces to the emulator, never the raw one.

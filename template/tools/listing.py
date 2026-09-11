@@ -7,7 +7,7 @@ exists because two things the kit's procedures lean on lost their BeebASM
 one-liners.
 
 FORKED into beeb-port-kit/template 2026-09-07, unchanged - it has no
-package-relative imports, so `python tools/listing.py symbols build/GAME.lst`
+package-relative imports, so `python tools/listing.py symbols build/game.lst`
 works from the project root.
 
 WHY IT EXISTS.

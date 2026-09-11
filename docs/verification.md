@@ -33,8 +33,8 @@ a `ZA_AUTO` variable's address is chosen by the assembler and moves when the cod
 the listing is the only place it exists at all.
 
 ```bash
-python -m beeb_port_kit.listing symbols build/GAME.lst score      # any substring
-python -m beeb_port_kit.listing symbols build/GAME.lst            # everything
+python -m beeb_port_kit.listing symbols build/game.lst score      # any substring
+python -m beeb_port_kit.listing symbols build/game.lst            # everything
 ```
 
 That prints `name = &addr` for every label and every `[auto]` allocation. It is `py/listing.py`
@@ -81,7 +81,7 @@ microseconds - double them to compare with anything in either `docs/`.
 The first thing after every build, and the only procedure here that trusts a screenshot - for
 "did it boot", a screenshot is enough.
 
-1. Build, then take the **post-processed** image - the kit template's `build/GAME.SSD`, or the
+1. Build, then take the **post-processed** image - the kit template's `build/game.ssd`, or the
    ports' `build/EDGE-200K.SSD` / `build/PARADROID-200K.SSD`, which are padded because those
    projects publish that file. The assembler's own output (`EDGE-RAW.SSD`, `PARADROID-raw.ssd`) is
    not bootable in either port - the loader expects the compressed layout that
@@ -107,7 +107,7 @@ The first thing after every build, and the only procedure here that trusts a scr
 
 ```
 create_machine  model: "Master"                       # or "B-DFS1.2"
-boot_disc       session_id, image_path: "<abs path>/build/GAME.SSD"   (whatever the project ships)
+boot_disc       session_id, image_path: "<abs path>/build/game.ssd"   (whatever the project ships)
 run_frames      count: 400
 screenshot
 ```
@@ -578,8 +578,8 @@ The procedure:
    launched b-em; b-em is no longer used.) From the tools' own help:
 
    ```
-   beebjit -0 build\GAME.SSD -autoboot                 # -master for a Master 128, -swram 4 per bank
-   b2 -0 build\GAME.SSD -b                             # -c CONFIG for a saved machine configuration
+   beebjit -0 build\game.ssd -autoboot                 # -master for a Master 128, -swram 4 per bank
+   b2 -0 build\game.ssd -b                             # -c CONFIG for a saved machine configuration
    ```
 2. For a *phase* question, use **b2** and look at the window. b2's debug build carries an HTTP
    API on port 48075 (documented in
@@ -656,8 +656,8 @@ and [layer-15-endgame.md](https://github.com/kieranhj/paradroid-beeb/blob/main/d
 **The reducer is checked in now**, which it never was in either port - `py/listing.py`:
 
 ```bash
-python -m beeb_port_kit.listing stream build-old/GAME.lst > old.txt
-python -m beeb_port_kit.listing stream build/GAME.lst     > new.txt
+python -m beeb_port_kit.listing stream build-old/game.lst > old.txt
+python -m beeb_port_kit.listing stream build/game.lst     > new.txt
 diff old.txt new.txt && echo "stream identical, $(wc -l < new.txt) entries"
 ```
 

@@ -1,6 +1,6 @@
 # The memory map, and what is left in it
 
-Figures are from the build listing of 2026-09-07 (`build/GAME.lst`, the `PRINT` block at its
+Figures are from the build listing of 2026-09-07 (`build/game.lst`, the `PRINT` block at its
 end). They go stale the moment anything grows: take live numbers from the listing.
 
 ## Main RAM, BBC Model B

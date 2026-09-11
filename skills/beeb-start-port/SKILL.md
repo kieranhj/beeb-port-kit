@@ -37,7 +37,11 @@ the original is the specification; deviations are agreed before they are built a
    cd <project>; .\build.ps1
    ```
 
-   Then `beeb-smoke-test` on the target model. Do not start the game until the template boots.
+   or `make` anywhere with a POSIX make. Put this machine's tool paths in `local.ps1`
+   (gitignored), never in the build. Then `beeb-smoke-test` on the target model. Do not start
+   the game until the template boots. Keep the build portable from day one
+   (`docs/build-portability.md`): rename `GAME`/`game` to the port's name in lowercase for
+   host files, and before asking anyone else to build it, run `beeb-portable-build`.
 
 4. **Write the docs skeleton** - the seven artefacts of PORTING.md §3, each with its rule in
    its header:
