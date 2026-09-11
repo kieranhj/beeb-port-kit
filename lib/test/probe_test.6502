@@ -1,0 +1,35 @@
+\ ******************************************************************
+\ *	probe_test.6502 - swram_probe.6502 as a disc that boots
+\ ******************************************************************
+\ *	Not a game: PARSWR on its own, and a !BOOT that runs it and then
+\ *	prints the handover, so the probe can be booted in an emulator and
+\ *	its report read off the screen. Assemble from the kit's root with
+\ *
+\ *	  baron -o lib/test/build/probe.ssd --title PROBE --opt 3 lib/test/probe_test.6502
+\ *
+\ *	then SHIFT+BREAK it. To drive the other paths on a machine that
+\ *	has plenty of RAM, poke the ROM type table (&02A1 + bank) before
+\ *	*RUN PARSWR: one non-zero RAM bank of four gives the ROM-image
+\ *	fourth bank, two give the refusal (and on a Master 128 the LK18/
+\ *	LK19 line). docs/hardware-facts.md section 5 has what it printed.
+\ ******************************************************************
+
+INCLUDE "../beeb.h.6502"
+
+SWR_HAND  = &0A00               ; Paradroid's: the printer buffer
+SWR_MAGIC = &A5
+
+\ PARSWR at &1900, as Paradroid's: out of DFS's exec buffer at &1100.
+SECTION Probe, org = &1900, guard = &1D00, filename = "PARSWR", exec = SwrMain
+INCLUDE "../swram_probe.6502"
+ENDSECTION
+
+\ !BOOT: run the probe, then show what it left - the magic byte and the
+\ four banks. A refusal closes the exec file, so the dump never comes.
+BOOT_STAGE = &7E00
+SECTION Boot, org = BOOT_STAGE, guard = BOOT_STAGE + 256, filename = "!BOOT"
+    EQUS "*RUN PARSWR", 13
+    EQUS "P.~?&A00;~?&A01;~?&A02;~?&A03;~?&A04", 13
+ENDSECTION
+
+PRINT "PARSWR ", ~swr_start, "-", ~swr_end, " (", swr_end - swr_start, " bytes)"

@@ -1,5 +1,5 @@
 \ ******************************************************************
-\ *	swram_probe.6502 - MODEL B ONLY: find the sideways RAM before loading
+\ *	swram_probe.6502 - find the sideways RAM before loading
 \ ******************************************************************
 \ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, plain 6502.
 \ *
@@ -7,35 +7,46 @@
 \ *	*RUNs BEFORE the game: it probes the sixteen sideways slots, takes
 \ *	the highest four RAM banks it finds, leaves them as a five-byte
 \ *	table (a magic byte, then four bank numbers, lowest first) at
-\ *	SWR_HAND, prints what it found and RTSes back to BASIC so the exec
-\ *	file feeds the next line. Too few banks, or a Solidisk-style board,
-\ *	and it prints why and closes the EXEC so the game is never run.
+\ *	SWR_HAND, prints every bank it found and the four it took, and
+\ *	RTSes back to BASIC so the exec file feeds the next line. Too few
+\ *	banks, or a Solidisk-style board, and it prints why and closes the
+\ *	EXEC so the game is never run.
 \ *
-\ *	MODEL B ONLY. A Master's own sideways RAM is banks 4-7 and its
-\ *	cartridge slots 0-3 are empty on a stock machine (Edge, jsbeeb: a
-\ *	pattern written to slot 7 survives a page out and back, the same
-\ *	write to slot 3 vanishes), so Edge assumes 4-7 and never probes. A
-\ *	Model B board is jumpered to whichever banks its owner liked, so
-\ *	4-7 was only ever a guess there.
+\ *	WRITTEN FOR THE MODEL B, whose board is jumpered to whichever banks
+\ *	its owner liked, so 4-7 was only ever a guess there. It runs on a
+\ *	Master too: Paradroid probes both, and a Master 128 short of banks
+\ *	is told about its links. Edge, Master-only, assumes 4-7 and never
+\ *	probes (jsbeeb: a pattern written to slot 7 survives a page out and
+\ *	back, the same write to slot 3 vanishes).
 \ *
-\ *	WHERE IT CAME FROM. Paradroid's, shipped as-is:
+\ *	WHERE IT CAME FROM. Paradroid's, as of 7f91e77 (2026-09-11):
 \ *	  https://github.com/kieranhj/paradroid-beeb/blob/main/src/swram.asm
 \ *	The method is stnicc-beeb's (Bitshifters, src/loader.bas)
-\ *	transliterated, with three additions that file's own header
-\ *	explains below. Two edits for the kit: the MOS entry names are
-\ *	beeb.h.6502's lower-case ones (osasci, oscli) and the CLEAR/ORG/SAVE
+\ *	transliterated, with the additions the body's own header explains.
+\ *	Edits for the kit: the MOS entry names are beeb.h.6502's lower-case
+\ *	ones (osasci, oscli, osbyte), the paging names are its constants,
+\ *	"Paradroid needs" became "This game needs", and the CLEAR/ORG/SAVE
 \ *	wrapper is the includer's - Paradroid's is
 \ *	  CLEAR SWR_ADDR, SWR_ADDR + &400 : ORG SWR_ADDR
 \ *	  INCLUDE "lib/swram_probe.6502"
 \ *	  SAVE "PARSWR", swr_start, swr_end, swr_start
 \ *	placed AFTER the main image's SAVE, because &1900 is inside that
-\ *	image and the bytes would otherwise land on it.
+\ *	image and the bytes would otherwise land on it. In Baron that is a
+\ *	SECTION with filename = "PARSWR" (lib/test/probe_test.6502).
 \ *
-\ *	WHAT WAS MEASURED, and when (Paradroid, 2026-08-29, Layer 13b):
-\ *	  - jsbeeb B-DFS1.2: banks 0-7 RAM, 8-15 ROM, and the probe reports
-\ *	    4 5 6 7 on it. The port's own measurements were all taken with
-\ *	    those four, and the handover is ordered so a machine that has
-\ *	    them comes out the same.
+\ *	REFRESHED 2026-09-11 from Paradroid's paradroid-beeb issue #18 work
+\ *	(hexwab's list): every bank found is listed on every exit, not just
+\ *	the four taken; mixed case, because MODE 7 has lower case; a Master
+\ *	128 that is short is told "(Set LK18 and LK19 west?)"; OSBYTE 114,1
+\ *	on success so the game's mode change is never a shadow one; and a
+\ *	ROM image in sideways RAM (ZMMFS) can be the fourth bank - which
+\ *	puts two duties on the game, below.
+\ *
+\ *	WHAT WAS MEASURED, and when:
+\ *	  - Paradroid, 2026-08-29, Layer 13b, jsbeeb B-DFS1.2: banks 0-7
+\ *	    RAM, 8-15 ROM, and the probe takes 4 5 6 7 on it. The port's own
+\ *	    measurements were all taken with those four, and the handover is
+\ *	    ordered so a machine that has them comes out the same.
 \ *	  - Sixteen DISTINCT probe values catch a board that aliases bank N
 \ *	    to N+8; one value per bank does not.
 \ *	  - stnicc's stage 1 saved bank 0's byte sixteen times (its inner
@@ -44,6 +55,13 @@
 \ *	    handed back.
 \ *	  - Solidisk is detected and REFUSED (KC): the game writes sideways
 \ *	    RAM through ROMSEL alone.
+\ *	  - The ZMMFS path, Paradroid 2026-09-10, jsbeeb Master with a fake
+\ *	    ROM image planted in bank 7 and marked in the ROM type table
+\ *	    (jsbeeb cannot run MMFS): refused "FOUND 3" before, played after,
+\ *	    the image's last service call 12 (the NMI claim). No real ZMMFS
+\ *	    machine has run it.
+\ *	  - This file as it stands: lib/test/probe_test.6502 on jsbeeb,
+\ *	    2026-09-11 - see docs/hardware-facts.md section 5.
 \ *
 \ *	THE INCLUDER DEFINES, before this file is included:
 \ *	  SWR_HAND    where the five-byte answer goes. Paradroid: &0A00,
@@ -52,18 +70,29 @@
 \ *	  SWR_MAGIC   the byte that says the table is valid (Paradroid &A5);
 \ *	              the game's start checks it and falls back to its
 \ *	              assembled defaults when a bare *RUN skipped this
-\ *	  and the CLEAR/ORG/SAVE wrapper above. It uses zero page &70-&8F,
-\ *	  the user area, which BASIC does not.
+\ *	  and the wrapper above. It uses zero page &70-&8F, the user area,
+\ *	  which BASIC does not.
+\ *
+\ *	THE GAME'S TWO DUTIES, because the fourth bank may be a ROM image:
+\ *	  1. Fill the LAST bank of the handover (SWR_HAND+4) only after the
+\ *	     game's last filing-system call - the image may BE the filing
+\ *	     system. Paradroid loads that bank's file last and claims the
+\ *	     NMI (loader.6502's claim_nmi) before unpacking into it.
+\ *	  2. Zero that bank's byte in the ROM type table (ROMTYPE,X) before
+\ *	     writing into it, so the MOS never offers it another service
+\ *	     call. Do it on every machine: it is a no-op where the bank was
+\ *	     clean, and it means ordinary machines test the same path.
+\ *	A game that cannot do both should drop SwrImage's call below.
 \ *
 \ *	Fork this into your project; keep this header.
 \ ******************************************************************
 \ ============================================================
 \ PARSWR - sideways RAM detection, the pre-load step
 \ ============================================================
-\ Runs from !BOOT, BEFORE *RUN PARA, and hands the game the four bank
-\ numbers it should use. Everything here is dead by the time the game
-\ starts: it detects, it reports, it writes five bytes and it returns to
-\ BASIC, which reads the next !BOOT line.
+\ Runs from !BOOT, BEFORE *RUN of the game, and hands the game the four
+\ bank numbers it should use. Everything here is dead by the time the
+\ game starts: it detects, it reports, it writes five bytes and it
+\ returns to BASIC, which reads the next !BOOT line.
 \
 \ THE METHOD IS stnicc-beeb's (src/loader.bas in the Bitshifters repo),
 \ transliterated. Its three stages exist to survive two things a naive
@@ -89,6 +118,11 @@
 \      how you hang a machine that was working. Skipping them also means
 \      we never CHOOSE one and blow it away at boot, which matters
 \      more - a DFS in sideways RAM would take the next *LOAD with it.
+\      THE ONE EXCEPTION (Paradroid issue #18 item 9, KC 2026-09-10):
+\      with exactly three clean banks, a RAM bank holding a ROM image
+\      becomes the fourth, because the game fills that slot only after
+\      its last load. That is how ZMMFS - MMFS softloaded into sideways
+\      RAM - plays. See SwrImage, and the game's duties in the header.
 \
 \   2. IT SAVES THE RIGHT BYTE. stnicc's stage 1 reads its original at
 \      &8008 with the bank from the END of the inner loop selected, so it
@@ -134,11 +168,21 @@ swStr     = &70                 \ the message pointer, OVER swValues: the
                                 \ bank behind us. Held to the restore.
   LDA #0
   STA swSolid
+  STA swImage
   JSR SwrProbe
 
   LDA swCount
   CMP #4
   BCS swr_found
+
+\ ---- three: is the fourth a ROM image in sideways RAM? ------
+\ Only at exactly three, so a machine with four clean banks never has
+\ its images touched. See SwrImage.
+  CMP #3
+  BNE swr_notimg
+  JSR SwrImage
+  BCS swr_found
+.swr_notimg
 
 \ ---- not four: is it a board we deliberately do not drive? ----
   LDA #&FF                      \ the Solidisk pass. Only ever reached
@@ -154,12 +198,14 @@ swStr     = &70                 \ the message pointer, OVER swValues: the
   CMP #4
   BCC swr_short                 \ genuinely short, either way
 
+  JSR SwrList
   LDX #LO(swMsgSolid)
   LDY #HI(swMsgSolid)
   JSR SwrPrint
   JMP SwrAbort
 
 .swr_short
+  JSR SwrList
   LDX #LO(swMsgShort)
   LDY #HI(swMsgShort)
   JSR SwrPrint
@@ -167,15 +213,30 @@ swStr     = &70                 \ the message pointer, OVER swValues: the
   JSR SwrDigit
   LDA #13
   JSR osasci
+\ ON A MASTER 128 IT IS TWO JUMPERS, and saying so beats a bare refusal
+\ (hexwab, Paradroid issue #18; his wording from Stunt Car). LK18 and
+\ LK19 give the Master its other two banks. OSBYTE 0 with X non-zero
+\ returns the OS in X, and 3 is the Master 128 alone - not the Compact
+\ or the ET, whose sideways RAM is not those links.
+  LDA #0
+  LDX #&FF
+  JSR osbyte
+  CPX #3
+  BNE swr_nolinks
+  LDX #LO(swMsgLinks)
+  LDY #HI(swMsgLinks)
+  JSR SwrPrint
+.swr_nolinks
   JMP SwrAbort
 
 \ ---- four or more: hand the top four to the game ------------
 \ swBanks is highest first, so this fills the handover lowest first and
 \ the game's four come out ascending - 4,5,6,7 on a machine that has
 \ them, which is what every measurement in Paradroid's docs/ was taken
-\ on.
+\ on. A ROM image taken by SwrImage is swBanks[0], so it comes out LAST.
 .swr_found
   JSR SwrRestore
+  JSR SwrList
   LDX #3
   LDY #0
 .swr_hand
@@ -201,6 +262,25 @@ swStr     = &70                 \ the message pointer, OVER swValues: the
   BNE swr_show
   LDA #13
   JSR osasci
+  LDA swImage                   \ and say so if the last one is a ROM
+  BEQ swr_noimg                 \ image we are about to use
+  LDX #LO(swMsgImage)
+  LDY #HI(swMsgImage)
+  JSR SwrPrint
+.swr_noimg
+
+\ ---- and the game's VDU 22 will be a NORMAL screen -----------
+\ hexwab and KC, Paradroid issue #18: on a B+ or a Master set to
+\ *SHADOW, MODE 1 comes up with the DISPLAY in shadow RAM while the game
+\ writes main RAM at &3000-&7FFF - measured on jsbeeb's Master: ACCCON
+\ &1B, D set, X clear, and nothing the game drew was on screen. OSBYTE
+\ 114 with X=1 tells the MOS the NEXT mode change is non-shadow. On a
+\ model B's OS 1.20 an unknown OSBYTE is offered to the ROMs and
+\ ignored. A game that also does this itself (the kit template does,
+\ before its VDU 22) loses nothing: the second call is the same state.
+  LDA #114
+  LDX #1
+  JSR osbyte
   RTS
 
 \ ---- the failure exit --------------------------------------
@@ -312,6 +392,59 @@ swStr     = &70                 \ the message pointer, OVER swValues: the
   BPL sp_tr
   RTS
 
+\ ============================================================
+\ SwrImage - a ROM image in sideways RAM, as the fourth bank
+\ ============================================================
+\ hexwab and KC, Paradroid issue #18 item 9 (2026-09-10). A filing
+\ system can be softloaded into sideways RAM: ZMMFS, on a model B, is
+\ MMFS in a ROM socket whose bootloader copies it into the highest free
+\ RAM bank at power-up and CTRL-BREAK and writes its type into ROMTYPE
+\ (MMFS's bootstrap.asm). Stage 0 skips every bank with a type, so a
+\ machine with four banks and ZMMFS found three and was refused.
+\ Such a bank CAN be used, provided it is filled after the last filing
+\ call - the game's two duties in the header. So: the highest bank that
+\ has a ROM type AND is RAM becomes the FOURTH slot. It need not be the
+\ filing system to be safe - any image is filled last - and on a soft
+\ BREAK afterwards ZMMFS's bootloader finds its copy damaged and makes
+\ it again.
+\ THE RAM TEST IS MMFS's OWN: flip &8006, the ROM type byte, read it
+\ back, flip it back. Interrupts are off (SwrMain), so nothing runs the
+\ image while its byte is wrong; a real ROM ignores the write.
+\ Exit C set with the bank in swBanks[0] (highest first, so the handover
+\ puts it last) and swCount 4; C clear if there is none.
+.SwrImage
+  LDX #15
+.si_bank
+  LDA ROMTYPE,X
+  BEQ si_next                   \ clean: SwrProbe has already had it
+  STX ROMSEL
+  LDA &8006
+  EOR #&FF
+  STA &8006
+  CMP &8006
+  PHP
+  EOR #&FF
+  STA &8006
+  PLP
+  BEQ si_got
+.si_next
+  DEX
+  BPL si_bank
+  CLC
+  RTS
+.si_got
+  LDY #2                        \ the three clean ones down one place
+.si_shift
+  LDA swBanks,Y
+  STA swBanks+1,Y
+  DEY
+  BPL si_shift
+  STX swBanks
+  INC swCount
+  DEC swImage                   \ 0 -> &FF
+  SEC
+  RTS
+
 \ ---- select bank X for WRITING ------------------------------
 \ ROMSEL always, because the read-back needs it too. The two latches
 \ only on the Solidisk pass - see the header.
@@ -323,6 +456,35 @@ swStr     = &70                 \ the message pointer, OVER swValues: the
   STX RAMSEL
 .ssw_x
   RTS
+
+\ ---- every bank the probe found, not just the four taken ----
+\ hexwab, Paradroid issue #18: on a board that misbehaves, what was
+\ FOUND is the useful half of the report. swBanks is highest first,
+\ swCount long - whichever pass ran last, so on a refusal it is that
+\ pass's view.
+.SwrList
+  LDX #LO(swMsgList)
+  LDY #HI(swMsgList)
+  JSR SwrPrint
+  LDA swCount
+  BNE sl_some
+  LDX #LO(swMsgNone)
+  LDY #HI(swMsgNone)
+  JSR SwrPrint
+.sl_some
+  LDY #0
+.sl_bank
+  CPY swCount
+  BEQ sl_done
+  LDA swBanks,Y
+  JSR SwrDigit                  \ osasci keeps Y
+  LDA #' '
+  JSR osasci
+  INY
+  BNE sl_bank
+.sl_done
+  LDA #13
+  JMP osasci
 
 \ ---- one hex digit of A, and a string at X/Y ----------------
 .SwrDigit
@@ -346,19 +508,31 @@ swStr     = &70                 \ the message pointer, OVER swValues: the
 .swp_x
   RTS
 
+\ Mixed case, not capitals (hexwab, Paradroid issue #18): MODE 7 has
+\ lower case and nothing here needs shouting.
+.swMsgList
+  EQUS "Sideways RAM found: ", 0
+.swMsgNone
+  EQUS "none", 0
 .swMsgOK
-  EQUS "DETECTED SWRAM BANKS: ", 0
+  EQUS "Using banks: ", 0
 .swMsgShort
-  EQUS 13, "THIS GAME NEEDS 4 x 16K SIDEWAYS RAM", 13, "BANKS - FOUND ", 0
+  EQUS 13, "This game needs 4 x 16K sideways RAM", 13, "banks - found ", 0
+.swMsgLinks
+  EQUS "(Set LK18 and LK19 west?)", 13, 0
+.swMsgImage
+  EQUS "(The last holds a ROM image, which", 13
+  EQUS "will be overwritten)", 13, 0
 .swMsgSolid
-  EQUS 13, "SIDEWAYS RAM FOUND, BUT ON A BOARD WITH", 13
-  EQUS "SOLIDISK-STYLE WRITE SELECT, WHICH THIS", 13
-  EQUS "GAME DOES NOT SUPPORT.", 13, 0
+  EQUS 13, "Sideways RAM found, but on a board with", 13
+  EQUS "Solidisk-style write select, which this", 13
+  EQUS "game does not support.", 13, 0
 .swCmdExec
   EQUS "EXEC", 13
 
 .swProbe  EQUB 0
 .swSolid  EQUB 0                \ &FF on the Solidisk pass
+.swImage  EQUB 0                \ &FF when the fourth bank is a ROM image
 .swCount  EQUB 0
 .swCand   SKIP 16               \ ROM type per bank; zero = probe it
 .swBanks  SKIP 16               \ the RAM banks found, highest first

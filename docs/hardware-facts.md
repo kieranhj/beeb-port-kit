@@ -535,6 +535,28 @@ advancing and `&0D00` reads `&40`.
 - **Take the four highest-numbered RAM banks**: the banks that matter to other people sit low, and
   on a machine with exactly 4-7 the answer is unchanged.
   Decided: 2026-08-29 (KC). [Paradroid layer-13-compatibility.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-13-compatibility.md)
+- **A ROM image in sideways RAM can be the fourth bank, if the game fills it last.** ZMMFS copies
+  MMFS into the highest free RAM bank and marks it in `&02A1`, so a B with four banks and ZMMFS
+  has three clean ones. With exactly three, `swram_probe.6502` takes the highest marked bank that
+  passes MMFS's own RAM test (flip `&8006`, read it back, flip it back). The game then owes two
+  things: fill that bank after its last filing-system call, and zero its `&02A1` byte first.
+  Built by Paradroid 2026-09-10 (issue #18 item 9).
+- **The kit's probe, on `lib/test/probe_test.6502`**, a fresh jsbeeb machine for each:
+
+  | Machine | Printed | Handover at `&0A00` |
+  |---|---|---|
+  | `B-DFS1.2` | `Sideways RAM found: 7 6 5 4 3 2 1 0` / `Using banks: 4 5 6 7` | `A5 04 05 06 07` |
+  | `Master` | `found: 7 6 5 4` / `Using banks: 4 5 6 7` | `A5 04 05 06 07` |
+  | `Master`, bank 7 marked as a ROM image | `found: 7 6 5 4` / `Using banks: 4 5 6 7` / `(The last holds a ROM image, which will be overwritten)` | `A5 04 05 06 07`; bank 7's `&8006` put back as it was (`&82`); its `&02A8` byte still `&82`, because zeroing it is the game's job |
+  | `Master`, banks 6 and 7 marked | `found: 5 4` / `...found 2` / `(Set LK18 and LK19 west?)` | untouched (`00`), so no magic byte |
+
+  **A test ROM image needs a service entry that returns.** Marking a `&02A1` byte makes the MOS
+  call that bank's `&8003` with every service call. A bank of zeros BRKs there, the BRK is
+  offered to the same bank as service call 6, and the machine loops at `&8003` before the
+  probe runs. `60` (RTS) at `&8003` and a type byte at `&8006` are enough; Paradroid planted a
+  full header. **A load from jsbeeb's 1770 DFS takes more than 50 frames**: a `*RUN` still in
+  DFS's NMI code at `&0D3F` is loading, not hung.
+  Measured: 2026-09-11, jsbeeb. The Solidisk refusal and a real ZMMFS machine are not tested.
 - **A bank-number handover at `&0A00` (the printer buffer) survives BASIC dispatching the next
   exec line, DFS loading over `&1100-&2FFF`, and MODE 1's clear of `&3000-&7FFF`.** It does NOT
   survive a program that unpacks tables over `&0400-&1BFF`; that is how the 4-7 assumption crept
