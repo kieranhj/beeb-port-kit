@@ -215,10 +215,32 @@ SECTION VScroll, org = CODE_ORG, guard = CODE_TOP, filename = "VScroll", exec = 
     CRTC 8, R8_BLANK            ; blank until there is something to show
     CRTC 10, &20                ; and hide the cursor, which R8 does not
 
+    \\ The kit's target defaults (../../../docs/target-portability.md), as
+    \\ in the template's main.6502. OSBYTE 114, X = 1: the next mode change
+    \\ is not a shadow one, even on a Master or B+ set to *SHADOW.
+    lda #114 : ldx #1 : ldy #0 : jsr osbyte
+
     lda #22 : jsr oswrch
-    lda #1  : jsr oswrch        ; MODE 1
+    lda #1  : jsr oswrch        ; MODE 1, and not shadow
     CRTC 8, R8_BLANK
     CRTC 10, &20
+
+    \\ Every CRTC register the rupture and setup_display do not own, so
+    \\ nothing is inherited from *TV or a third-party OS: MOS 1.20's MODE 1
+    \\ values, as the template writes them.
+    CRTC 0, &7F
+    CRTC 1, PLAY_UNITS
+    CRTC 2, &62
+    CRTC 3, &28
+    CRTC 9, 7
+    CRTC 11, 8
+
+    \\ The NMI is ours: this program never touches the disc again after its
+    \\ own *RUN. OSBYTE 143, X = 12 asks the filing system to hand it over,
+    \\ and an RTI at &0D00 answers a stray one - loader.6502's claim_nmi,
+    \\ inline because the example has no loader. Not *TAPE.
+    lda #143 : ldx #12 : ldy #&ff : jsr osbyte
+    lda #&40 : sta &0d00
 
     jsr fill_play
     jsr fill_panel

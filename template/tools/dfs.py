@@ -440,10 +440,21 @@ def compare(a, b, ignore=()):
 
 def _main(argv):
     """python tools/dfs.py compare A.ssd B.ssd [--ignore NAME]...
+    python tools/dfs.py host IMAGE.ssd
 
-    Prints each image's SHA256, then either "identical images" or every
-    per-file difference. Exit status 0 when every file not ignored matches."""
+    compare: prints each image's SHA256, then either "identical images" or
+    every per-file difference. Exit status 0 when every file not ignored
+    matches.
+    host: rewrites IMAGE in place with every catalogue load and exec
+    address the HOST's (to_host), for a disc built without make_disc.py."""
     import hashlib
+    if len(argv) == 2 and argv[0] == "host":
+        img = read_image(argv[1])
+        to_host(img.files)
+        Path(argv[1]).write_bytes(build_image(img.files, list(img.files),
+                                              img.title, img.cycle, img.opt))
+        print(f"{argv[1]}: {len(img.files)} files marked as the host's")
+        return 0
     if len(argv) < 3 or argv[0] != "compare":
         raise SystemExit(_main.__doc__)
     a, b, rest = Path(argv[1]), Path(argv[2]), argv[3:]

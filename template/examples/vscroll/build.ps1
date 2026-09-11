@@ -51,6 +51,12 @@ try {
         Remove-Item $ssd -ErrorAction SilentlyContinue
         throw "baron failed ($LASTEXITCODE) - see $listing"
     }
+
+    # Baron writes 16-bit catalogue addresses, and with a second processor
+    # attached those mean the PARASITE. There is no make_disc.py step here to
+    # fix them, so mark every file as the host's (dfs.to_host).
+    & python (Join-Path $tmpl 'tools\dfs.py') host $ssd
+    if ($LASTEXITCODE -ne 0) { throw "dfs.py host failed ($LASTEXITCODE)" }
 } finally { Pop-Location }
 
 "Built  $ssd"

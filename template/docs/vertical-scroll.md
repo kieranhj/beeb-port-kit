@@ -18,6 +18,15 @@ build\vscroll.ssd        SHIFT+BREAK, or *RUN VScroll
     cursor UP / DOWN     scroll the view one SCANLINE a field, at 50 Hz
 ```
 
+**It carries the kit's target defaults** (`../../docs/target-portability.md`), added 2026-09-11:
+OSBYTE 114,1 before its `VDU 22`, every CRTC register its rupture doesn't own written after it,
+the NMI claimed (inline, since the example has no loader), and host addresses on the disc
+(`build.ps1` runs `tools/dfs.py host`, because nothing else post-processes this image). The
+shared `irq.6502` silences the sound chip. Measured on jsbeeb: on a Model B with a second
+processor, the image from before showed a black screen and `field_count` stayed at 0; after,
+the B, the B with a second processor, and the Master all drew the strip and panel, with
+`&0D00` = `&40` and `field_count` rising.
+
 | | the template | this example |
 |---|---|---|
 | scroll | horizontal, one CRTC unit (4 px) a tick | **vertical, one scanline a field** |

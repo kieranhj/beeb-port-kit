@@ -96,5 +96,10 @@ disc that depends on the machine. The template builds the reference from vendore
 **Comparing two images:** `python -m beeb_port_kit.dfs compare a.ssd b.ssd [--ignore !BOOT]`
 prints both SHA256s, then says either "identical images" or which file differs and how.
 
+**Host addresses for a disc built without `make_disc.py`:** `python -m beeb_port_kit.dfs host
+image.ssd` rewrites the image in place with every catalogue load and exec address set to
+`&FFFFxxxx`. The assemblers write 16-bit addresses, which a second processor reads as the
+parasite's. The template's vscroll example does this in its `build.ps1`.
+
 **The assembler's own image is not bootable** once the loader expects compressed streams. Hand the image
 this writer produces to the emulator, never the raw one.
