@@ -10,8 +10,10 @@
 \ *	has the DFS ROM paged in at &8000 while it works, so a bank's bytes
 \ *	would land in the ROM socket, and on a Master HAZEL is the filing
 \ *	system's own workspace. So each stages in RAM and is unpacked from
-\ *	there. ALL OF IT RUNS BEFORE install_irq (irq.6502): the DFS needs
-\ *	the MOS's interrupt.
+\ *	there. ALL OF IT RUNS BEFORE install_irq (irq.6502) - not because
+\ *	the DFS needs the MOS's interrupt (measured 2026-09-09: it loads
+\ *	with IRQ1V taken, and with interrupts masked outright), but because
+\ *	a load costs whole frames.
 \ *
 \ *	WHERE IT CAME FROM.
 \ *	  https://github.com/kieranhj/edge-beeb/blob/master/src/main.asm
@@ -47,11 +49,21 @@
 \ *	    at &8000. The loader cannot write into ANDY while the filing
 \ *	    system runs, so its stream is loaded early and unpacked last.
 \ *	  - MASTER ONLY. HAZEL (&C000-&DFFF, ACCCON bit 3) is the filing
-\ *	    system's workspace. Load into it LAST and touch the disc never
-\ *	    again; and BREAK must then be a power-on reset, because a soft
-\ *	    break leaves the wreckage in place - measured: no DFS banner,
-\ *	    *CAT returns nothing. OSBYTE 200, X = 3 at the top of main makes
-\ *	    BREAK a power-on reset (bit 1) and disables ESCAPE (bit 0):
+\ *	    system's workspace, but not all of it is in use. load_hazel
+\ *	    unpacks into HAZEL_FREE-HAZEL_TOP (&C300-&DEFF, 7K), which
+\ *	    OSFILE loads, saves and deletes never write, so the disc stays
+\ *	    usable after it (jsbeeb Master, MOS 3.20, 1770 DFS,
+\ *	    2026-09-11). What does write into the window afterwards: any *
+\ *	    command (&DC), an open file (&C3, and a page each from &C4), a
+\ *	    soft BREAK (&C3 and &DA) - which does find the DFS again. Not
+\ *	    measured: MOS 3.5, MMFS, real hardware. docs/hardware-facts.md,
+\ *	    HAZEL, has the map.
+\ *	    Edge unpacked over all 8K from &C000 instead, DFS's own pages
+\ *	    included. A load like that must be the last disc access, and
+\ *	    BREAK must then be a power-on reset, because a soft break leaves
+\ *	    the wreckage in place - measured: no DFS banner, *CAT returns
+\ *	    nothing. OSBYTE 200, X = 3 at the top of main makes BREAK a
+\ *	    power-on reset (bit 1) and disables ESCAPE (bit 0):
 \ *	        lda #200 : ldx #3 : ldy #0 : jsr osbyte
 \ *	    Do it FIRST, before anything can be broken into.
 \ *
@@ -159,11 +171,12 @@ IF MASTER
     rts
 }
 
-\ ---- load_hazel: A/Y = filename, unpacked into HAZEL at &C000 ------
+\ ---- load_hazel: A/Y = filename, unpacked into HAZEL at &C300 ------
 \ Stages at LOADER_STAGE and unpacks with ACCCON's Y bit set over the
-\ unpack. THIS IS THE LAST DISC ACCESS: HAZEL is the filing system's
-\ workspace, and BREAK must be a power-on reset from here on - see the
-\ header.
+\ unpack, into the window the DFS leaves alone (HAZEL_FREE, &C300 up to
+\ HAZEL_TOP, &DF00). OSFILE loads may follow it; * commands and open
+\ files write into the window - see the header. The unpacked stream
+\ must end by HAZEL_TOP: nothing checks it at run time.
 .load_hazel
 {
     ldx #HI(LOADER_STAGE)
@@ -171,8 +184,8 @@ IF MASTER
     lda ACCCON
     ora #ACCCON_Y
     sta ACCCON
-    lda #LO(HAZEL_BASE)
-    ldx #HI(HAZEL_BASE)
+    lda #LO(HAZEL_FREE)
+    ldx #HI(HAZEL_FREE)
     jsr unpack_to
     lda ACCCON
     and #255-ACCCON_Y

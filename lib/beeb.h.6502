@@ -126,6 +126,8 @@ ACCCON_TST  = &40           ; (unused, unmeasured)
 ACCCON_IRR  = &80           ; (unused, unmeasured)
 HAZEL_BASE  = &C000
 HAZEL_BIT   = ACCCON_Y      ; Edge's name for it
+HAZEL_FREE  = &C300         ; the window OSFILE leaves alone, &C300-&DEFF:
+HAZEL_TOP   = &DF00         ; docs/hardware-facts.md, HAZEL (loader.6502)
 
 \ ---- the System VIA, &FE40 ------------------------------------
 SYS_VIA_ORB   = &FE40       ; port B: low nibble is the addressable latch,
