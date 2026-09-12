@@ -55,8 +55,8 @@ the palette switched per cycle; the game owning the interrupt vector outright, k
 straight from the VIA; sprites in slots with a save area that mirrors screen geometry, the mask
 taken from the data byte, pre-shifted copies in sideways RAM; every file compressed on disc
 with one resident depacker (both ports used ZX0; a new port uses ZX02 - half the code and twice
-the speed for +0.11% on size, measured); a release build flag and a boot stamp naming every debug
-flag.
+the speed for +0.11% on size, measured); a release build flag and a build stamp - a disc file, `INFO`, that the boot shows and `*TYPE`
+reads back - naming every debug flag.
 
 **What the person does**: chooses the game and the machine, answers the decisions, plays every
 build on a second emulator and on hardware, reports what looks wrong, and owns taste calls like a

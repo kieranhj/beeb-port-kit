@@ -58,7 +58,8 @@ the original is the specification; deviations are agreed before they are built a
      and "take live figures from the listing, never from this page" -
      `python tools/listing.py symbols build/<NAME>.lst NAME` is the one-liner for that.
    - `docs/layer-0-toolchain.md`: this layer's notes, started now.
-   - `!BOOT` stamping the assembly time and every debug flag (the template does this; keep it).
+   - the build stamp - assembly time and every debug flag - as the disc file `INFO`, shown at
+     boot and readable later with `*TYPE INFO` (the template does this; keep it).
 
 5. **Configure the emulator as an MCP server.** Write `.mcp.json` at the project root with the
    JSON above, then `/mcp` to connect; the first connection of a session can time out - reconnect

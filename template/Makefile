@@ -51,9 +51,10 @@ CC = cc
 # Set by the `release` and `master` targets through a recursive make.
 RELEASE = 0
 MASTER  = 0
-# The disc's boot option: 3 *EXECs !BOOT, the DEV build's stamped text
-# file; `release` passes 2, *RUN !BOOT, the stub boot_stamp.6502 builds
-# under BOOT_RUN (= RELEASE in main.6502). Set with RELEASE, never alone.
+# The disc's boot option: 3 *EXECs !BOOT, the DEV build's text file, which
+# *TYPEs the build stamp out of INFO; `release` passes 2, *RUN !BOOT, the
+# stub boot_stamp.6502 builds under BOOT_RUN (= RELEASE in main.6502), which
+# prints the same stamp itself. Set with RELEASE, never alone.
 BOOTOPT = 3
 STEM    = game
 TITLE   = GAME

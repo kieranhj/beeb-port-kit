@@ -11,7 +11,8 @@
 \ *	have a PALETTE each - four physical colours and the other four, all
 \ *	eight MODE 1 colours at once; the panel image ships
 \ *	ZX02-compressed and is loaded and unpacked by the kit's loader;
-\ *	!BOOT is stamped with the build time and flags. Nothing else.
+\ *	the build stamps itself into INFO, a disc file the boot shows and
+\ *	*TYPE INFO reads back. Nothing else.
 \ *
 \ *	Geometry is Paradroid's (panel &4A00, strip &5800-&7FFF, 10K wrap,
 \ *	R1 = 80) because its T1 constants were measured for it; the frame
@@ -20,9 +21,10 @@
 \ *	Build symbols, passed with -D on every invocation. Baron has
 \ *	DEFINED(), so a default could live here; the build scripts pass all
 \ *	three every time anyway, so that a build says what it is:
-\ *	  RELEASE     0/1  every DEBUG_ flag off, version line in !BOOT
+\ *	  RELEASE     0/1  every DEBUG_ flag off, version line in the stamp,
+\ *	                   and the disc boots by *RUN (BOOT_RUN) not *EXEC
 \ *	  MASTER      0/1  the Master 128 path: loader.6502's load_hazel
-\ *	                   and unpack_andy assemble, and !BOOT says so. The
+\ *	                   and unpack_andy assemble, and the stamp says so. The
 \ *	                   template uses no shadow RAM, ANDY or HAZEL.
 \ *	Baron has no TIME$, so the build's timestamp comes from a file
 \ *	tools/build_stamp.py writes before assembling, build/build_time.6502,
@@ -41,7 +43,7 @@ INCLUDE "../build/build_time.6502"      ; BUILD_TIME, written by the build scrip
 ASSERT (RELEASE = 0) OR (RELEASE = 1)
 ASSERT (MASTER = 0) OR (MASTER = 1)
 
-\ ---- debug flags: add every new one to DEBUG_ANY and to !BOOT ------
+\ ---- debug flags: add every new one to DEBUG_ANY and to BUILD_STAMP -
 DEBUG_ANY     = 0
 VERSION_LINE  = "template v0.0 2026-09-07"
 
@@ -148,9 +150,11 @@ CODE_TOP   = &3000              ; the screen
 \ !BOOT is then a stub that prints the stamp and *RUNs Game, so it is
 \ LOADED and run, at &0900 - a buffer page a disc game never uses, and
 \ not &7E00, which is MODE 7's screen. A DEV build keeps the *EXEC text
-\ file with its REM lines, assembled at &7E00 and never loaded there.
+\ file, four * commands assembled at &7E00 and never loaded there; one
+\ of them is *TYPE INFO, and INFO is the stamp itself as a disc file.
 BOOT_RUN   = RELEASE
 BOOT_STAGE = &7E00 - (&7E00 - &0900) * BOOT_RUN
+INFO_STAGE = &7E00              ; INFO is ASSEMBLED here and never loaded
 
 \ ******************************************************************
 \ *	Zero page, allocated by Baron. &00-&8F is ours; &90-&FF is the
@@ -473,13 +477,39 @@ ASSERT panel_end - panel_start = PANEL_BYTES
 ENDSECTION
 
 \ ******************************************************************
-\ *	!BOOT - stamped with what this build is (boot_stamp.6502)
+\ *	What this build is: INFO, and the !BOOT that shows it
+\ *	(boot_stamp.6502)
+\ *
+\ *	The stamp is written ONCE, here, and both files use it - INFO,
+\ *	which `*TYPE INFO` reads back at any prompt, and, under BOOT_RUN,
+\ *	the boot stub's own copy. Two stamps that could drift would be
+\ *	worse than one that scrolls past.
 \ ******************************************************************
-SECTION Boot, org = BOOT_STAGE, guard = BOOT_STAGE + 256, filename = "!BOOT", exec = bootfile
-.bootfile
+MACRO BUILD_STAMP
     BOOT_STAMP_HEAD "beeb-port-kit template"
     BOOT_FLAG MASTER, "MASTER: Master 128 build"       \ legal under RELEASE
-    BOOT_STAMP_TAIL "Game"
+    BOOT_STAMP_TIME
+ENDMACRO
+
+SECTION Info, org = INFO_STAGE, guard = INFO_STAGE + 256, filename = "INFO"
+.infofile
+    BUILD_STAMP
+.infofile_end
+ENDSECTION
+
+\ A DEV build's !BOOT is *BASIC / CLS / *TYPE INFO / *RUN Game, *EXEC'd
+\ (--opt 3). A RELEASE's is the stub: it prints the stamp itself,
+\ because it IS the boot and nothing has *TYPEd anything yet, then
+\ OSCLIs RUN Game (--opt 2, and no language ROM needed). The IF is here
+\ rather than in boot_stamp.6502 because a Baron macro can only call
+\ one defined before it, and BUILD_STAMP is built from that file's.
+SECTION Boot, org = BOOT_STAGE, guard = BOOT_STAGE + 256, filename = "!BOOT", exec = bootfile
+.bootfile
+    BOOT_FILE_HEAD
+IF BOOT_RUN
+    BUILD_STAMP
+ENDIF
+    BOOT_FILE_TAIL "Game"
 .bootfile_end
 ENDSECTION
 
@@ -488,5 +518,5 @@ PRINT "beeb-port-kit template"
 PRINT "CODE  &", ~start, "-&", ~end, " (", end - start, " bytes), FREE to &", ~CODE_TOP, " = ", (CODE_TOP - end)
 PRINT "ZP    allocated by Baron from &00-&8F; -v lists each choice"
 PRINT "T1_I1 =", T1_I1, " T1_I2 =", T1_I2, " T1_I3 =", T1_I3, " T1_I4 =", T1_I4
-PRINT "!BOOT ", bootfile_end - bootfile, " bytes"
+PRINT "!BOOT ", bootfile_end - bootfile, " bytes, INFO ", infofile_end - infofile, " bytes"
 PRINT "------"

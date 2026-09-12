@@ -11,7 +11,7 @@ must be proved to have done nothing else. Both are faster than the oracle and, f
 change, stronger.
 
 **Baseline:** build the OLD tree first and keep its image and listing somewhere the new build will not overwrite
-**Always differs:** `!BOOT`, which stamps the assembly time - so compare per file, not per image, when it does
+**Always differs:** whatever carries the assembly time - `INFO` (the kit's build stamp as a disc file) and, in a `*RUN`-boot release, the `!BOOT` stub that prints its own copy - so compare per file, not per image, when it does
 **Listing:** `build/<NAME>.lst`, from the assembler's `-v`
 
 ## Steps
@@ -36,12 +36,13 @@ change, stronger.
 
 4. **If they differ only where they should, compare per file.** Edge Grinder's `!BOOT` carries
    the assembly time and a DEV stamp, so its disc always differs there. The kit template's
-   does not: it stamps the last commit's time, so two builds of one commit are identical
-   images, and a `!BOOT` difference means the stamps differ. Pin the time with
-   `SOURCE_DATE_EPOCH` to take it out of the comparison. For the per-file check:
+   stamp is `INFO`, a disc file, and carries the last commit's time, so two builds of one
+   commit are identical images, and a difference in `INFO` (or in a release `!BOOT`, whose stub
+   prints the same bytes) means the stamps differ. Pin the time with `SOURCE_DATE_EPOCH` to
+   take it out of the comparison. For the per-file check:
 
    ```bash
-   python tools/dfs.py compare build-old/<name>.ssd build/<name>.ssd --ignore '!BOOT'
+   python tools/dfs.py compare build-old/<name>.ssd build/<name>.ssd --ignore INFO --ignore '!BOOT'
    ```
 
    (`python -m beeb_port_kit.dfs compare ...` from the kit, for a port that has not forked it.)

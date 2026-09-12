@@ -88,17 +88,36 @@ INCLUDE "../swram_probe.6502"
 .test_end
 ENDSECTION
 
-\ ---- !BOOT, at a scratch address --------------------------------
-BOOT_STAGE = &7E00
-SECTION Boot, org = BOOT_STAGE, guard = BOOT_STAGE + 256, filename = "BOOT"
-.bootfile
+\ ---- the stamp, written once, and the two files that carry it ----
+\ INFO is the stamp as a disc file (*TYPE INFO); !BOOT either *TYPEs
+\ it (the text shape) or prints its own copy (the BOOT_RUN stub).
+MACRO BUILD_STAMP
     BOOT_STAMP_HEAD "Lib test"
     BOOT_FLAG DEBUG_DUMMY, "DEBUG_DUMMY: a flag that is on"
     BOOT_FLAG DEBUG_ANY,   "never printed"
-    EQUS "*RUN PARSWR", 13
-    BOOT_STAMP_TAIL "Game"
+    BOOT_STAMP_TIME
+ENDMACRO
+
+INFO_STAGE = &7E00              ; assembled here, never loaded here
+SECTION Info, org = INFO_STAGE, guard = INFO_STAGE + 256, filename = "INFO"
+.infofile
+    BUILD_STAMP
+.infofile_end
+ENDSECTION
+
+\ &7E00 for the text file, &0900 for the stub, which RUNS.
+BOOT_STAGE = &7E00 - (&7E00 - &0900) * BOOT_RUN
+SECTION Boot, org = BOOT_STAGE, guard = BOOT_STAGE + 256, filename = "BOOT", exec = bootfile
+.bootfile
+    BOOT_FILE_HEAD
+IF BOOT_RUN
+    BUILD_STAMP                 ; the stub's own copy of the same bytes
+ELSE
+    EQUS "*RUN PARSWR", 13      ; the probe first; the stub shape has
+ENDIF                           ; room for one command, so this is the
+    BOOT_FILE_TAIL "Game"       ; text shape's alone
 .bootfile_end
 ENDSECTION                      \ written as BOOT, to read the stamp back
 
 PRINT "test image ", ~test_start, "-", ~test_end, " (", test_end - test_start, " bytes)"
-PRINT "!BOOT ", bootfile_end - bootfile, " bytes"
+PRINT "!BOOT ", bootfile_end - bootfile, " bytes, INFO ", infofile_end - infofile, " bytes"

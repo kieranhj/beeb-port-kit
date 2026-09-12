@@ -18,7 +18,7 @@ end). They go stale the moment anything grows: take live numbers from the listin
 | `&4A00-&53FF` | 2,560 | the panel, 4 rows, rupture cycle A | 0 |
 | `&5400-&57FF` | 1,024 | between the panel and the strip. Displayed by nothing | 1,024 |
 | `&5800-&7FFF` | 10,240 | the play strip, 16 rows, the 10K hardware ring, rupture cycle B | 0 |
-| `&7E00-&7EFF` | | where `!BOOT` is **assembled** (inside the strip, which does not exist at assembly time); never loaded there | - |
+| `&7E00-&7EFF` | | where `INFO` and, in a DEV build, `!BOOT` are **assembled** (inside the strip, which does not exist at assembly time); never loaded there. A RELEASE `!BOOT` is a stub that RUNS, so it is assembled at `&0900` instead - `&7E00` is MODE 7's screen and the stamp it prints would scroll over the code printing it | - |
 | `&8000-&BFFF` | 16K | sideways ROM/RAM, paged by `ROMSEL`. Unused here; `../lib/swram_probe.6502` finds the RAM banks on a B | - |
 
 ## Master 128 (`MASTER=1`)

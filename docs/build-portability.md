@@ -65,8 +65,8 @@ test to run before asking anyone else to try a build.
 
 ## The same disc everywhere
 
-13. **The build is reproducible by default.** The template's `!BOOT` timestamp is the
-    source's time, not the clock's: `$SOURCE_DATE_EPOCH`, then the last commit's time (with
+13. **The build is reproducible by default.** The template's build-stamp timestamp - in `INFO`,
+    and in the release `!BOOT` stub that reprints it - is the source's time, not the clock's: `$SOURCE_DATE_EPOCH`, then the last commit's time (with
     `+` when the tree is dirty). Paradroid's `!BOOT` carried the wall clock, so when the
     OpenBSD tester reported a SHA256 nobody could say whether their build was wrong or just
     built later. The build prints the image's SHA256; publish it with the commit.

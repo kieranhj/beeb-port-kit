@@ -67,7 +67,8 @@ next session re-litigating them.
    -opt 3 -D ...` instead, where the `-do` exists only to stop loose `SAVE` files.
 
    Adapt the symbol names to the project's. Add any new `DEBUG_` flag to `DEBUG_ANY` and to
-   the `!BOOT` stamp; `RELEASE` asserts `DEBUG_ANY = 0`.
+   the build stamp (the template's `BUILD_STAMP` macro, which fills `INFO` and the release
+   boot alike); `RELEASE` asserts `DEBUG_ANY = 0`.
 
 7. **The smoke test passes on the release build too** (`.\build.ps1 -Release`, then
    `beeb-smoke-test`). A DEV-only feature that the release build silently lacks is found here

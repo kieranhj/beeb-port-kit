@@ -93,7 +93,8 @@ byte short of the reference on some inputs. A build that uses whichever is insta
 disc that depends on the machine. The template builds the reference from vendored source
 (`template/tools/zx02src/`, `../docs/build-portability.md` rule 14).
 
-**Comparing two images:** `python -m beeb_port_kit.dfs compare a.ssd b.ssd [--ignore !BOOT]`
+**Comparing two images:** `python -m beeb_port_kit.dfs compare a.ssd b.ssd [--ignore INFO --ignore !BOOT]`
+(`INFO` is the kit's build stamp as a disc file, and a release `!BOOT` reprints it, so both carry the time)
 prints both SHA256s, then says either "identical images" or which file differs and how.
 
 **Host addresses for a disc built without `make_disc.py`:** `python -m beeb_port_kit.dfs host

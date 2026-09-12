@@ -53,8 +53,8 @@ compiler if the build compiles its compressor, the project's assembler
    ```
 
    The pass is `identical images`. "Every file matches but the images differ" means a layout
-   or catalogue difference. A difference in `!BOOT` alone means the two scripts stamp
-   different times.
+   or catalogue difference. A difference in the stamp alone - `INFO`, and the `!BOOT` stub that
+   reprints it on a release - means the two scripts stamp different times.
 
 7. **Boot it.** `beeb-smoke-test` on the image from step 2, on every model the project builds.
 

@@ -62,8 +62,9 @@ COMPRESSED = {
 # the address a stream staged at each staging address may not reach
 STREAM_TOP = {LOADER_STAGE: PANEL_ADDR}
 
-# boot access order: !BOOT, the code, then the data in the order it is loaded
-LAYOUT = ["!BOOT", "Game", "PANEL"]
+# boot access order: !BOOT, INFO (the boot *TYPEs it, so it goes next and the
+# head is already there), the code, then the data in the order it is loaded
+LAYOUT = ["!BOOT", "INFO", "Game", "PANEL"]
 
 ROOT = Path(__file__).resolve().parent.parent
 

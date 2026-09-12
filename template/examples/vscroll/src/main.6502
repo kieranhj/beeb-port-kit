@@ -510,6 +510,13 @@ ENDSECTION
 
 \ ******************************************************************
 \ *	!BOOT - plain, because this example has no data files to stage
+\ *
+\ *	NOT the kit's boot_stamp.6502 shape, on purpose: there is no
+\ *	build stamp here to put in an INFO file (no build_stamp.py, no
+\ *	BUILD_TIME, no RELEASE), and these REM lines are the controls,
+\ *	not a record of what the build is. A real port takes the
+\ *	template's shape instead - INFO, *TYPEd by a dev !BOOT and
+\ *	reprinted by the release stub (../../../src/main.6502).
 \ ******************************************************************
 SECTION Boot, org = BOOT_STAGE, guard = BOOT_STAGE + 256, filename = "!BOOT"
 .bootfile

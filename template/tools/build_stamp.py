@@ -7,7 +7,7 @@ when its contents change.
 
 writes two files into BUILD_DIR:
   build_time.6502  one line, BUILD_TIME = "...", which main.6502 INCLUDEs for
-                   the !BOOT stamp (Baron has no TIME$);
+                   the build stamp - INFO and the boot (Baron has no TIME$);
   CONFIG_NAME      the time and every NAME=VALUE flag (RELEASE=0, MASTER=0),
                    one per line. The Makefile makes the raw image depend on
                    this file, so a new stamp or a changed flag reassembles and

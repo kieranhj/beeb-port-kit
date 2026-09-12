@@ -169,7 +169,7 @@ Both ports run on the same seven files. Each earned its place by a failure it ca
 | `docs/layer-N-*.md` | Working notes per layer: what was measured, what was tried, what was costed and rejected | The rejected options are the valuable half. "Do not re-litigate the blitter unrolls" saved the RAM pass from repeating itself |
 | `BUGS.md` | Defects with evidence, numbered | Fixed entries are never deleted; they record what was ruled out. Paradroid #5 and #6 is the model entry: two correct measurements supporting a wrong conclusion, and why |
 | `docs/memory-map.md` | Every region, what is in it, how much is free, measured from the listing | Kept reasonably current through the whole port, because RAM is contended through the whole port. Every free-space figure says the date it was measured. "Take live figures from the build output, never from this paragraph" |
-| `!BOOT` | Stamps the assembly time and names every debug flag that is on | A build cannot lie about itself. Add every flag to the stamp and to `DEBUG_ANY`; assert `DEBUG_ANY = 0` under `RELEASE` |
+| `INFO`, and `!BOOT` | The stamp - assembly time, version line, every debug flag that is on - is a **disc file**, `INFO`, which the boot shows and `*TYPE INFO` reads back at any prompt. `!BOOT` *TYPEs it in a dev build, and a release stub prints its own copy | A build cannot lie about itself, and the question "which build is this?" is usually asked of a disc image someone was given a week ago, not of a screen that is still scrolling. Write the stamp ONCE (one macro, both files) or they drift. Add every flag to it and to `DEBUG_ANY`; assert `DEBUG_ANY = 0` under `RELEASE` |
 
 Commit slicing follows the same shape: one mechanism per commit, with the measurement in the
 body ("byte-identical over 40 passes", "0 of 10,240", before-and-after cycles). Doc-sync commits
@@ -198,7 +198,7 @@ records what was tried and rejected.
 | 9 | **Loader and disc.** Compression, load order, boot blanking, the loading screen | Boot time measured; the disc is the release layout | [edge L9](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-9-loader.md), [paradroid loader](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/loader-compression.md) |
 | 10 | **Art.** The hand-authored pass and the pipeline for it. See section 8 | The artist's sheets go in through a validated path | [edge L8](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-8-art-pipeline.md), [paradroid L14](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-14-visual.md) |
 | 11 | **Balance, memory, compatibility.** Verify before tuning; the RAM pass; real hardware; other machines | Plays like the original by measurement; runs on the machines it claims | [paradroid L12](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-12-balance.md), [L13](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-13-compatibility.md), [ram pass](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/ram-pass.md) |
-| 12 | **Release.** Release build, redefinable keys, pause, the padded disc, publication | Version line in `!BOOT`, every debug flag off, tested on hardware | [edge L9h](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-9h-keyredef.md), [paradroid L11f](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-11f-frontend.md) |
+| 12 | **Release.** Release build, redefinable keys, pause, the padded disc, publication | Version line in the stamp (`INFO`), every debug flag off, a `*RUN` boot, tested on hardware | [edge L9h](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-9h-keyredef.md), [paradroid L11f](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-11f-frontend.md) |
 
 The order is not sacred. Paradroid moved doors and lifts ahead of the droid layers when it helped.
 What is sacred is finishing a layer, with its doc, before the next one starts.
@@ -427,8 +427,8 @@ Rules that came out of using it:
 - The disc tool round-trips every compressed stream through a Python decompressor before it will
   write the image, refuses a stream that overlaps its own output, and lays files out in boot
   order.
-- The build stamps `!BOOT` with the time and the flags, and the release build is a
-  command-line symbol. (BeebASM had no `IFDEF` and no choice; Baron has `DEFINED()`, and the
+- The build stamps `INFO` - a disc file the boot shows and `*TYPE` reads back - with the time
+  and the flags, and the release build is a command-line symbol. (BeebASM had no `IFDEF` and no choice; Baron has `DEFINED()`, and the
   kit still passes the flags every time so that a build says what it is.)
 
 The reusable halves of these tools are in this kit's [`py/`](py/) directory. Fork them.
@@ -486,7 +486,11 @@ Do not add sound effects the original does not have.
 
 - `RELEASE` is a build symbol passed on every invocation; `DEV` is its complement; every
   `DEBUG_` flag is folded into `DEBUG_ANY`, which is asserted zero under `RELEASE`.
-- `!BOOT` prints the version line in a release and the flag list otherwise.
+- The stamp (`INFO`, and what the boot prints) carries the version line in a release and the
+  flag list otherwise. **A release disc boots by `*RUN`, `*OPT 4,2`** - `!BOOT` is then a stub
+  that prints the stamp and runs the game, and needs no language ROM; a dev disc keeps the
+  `*EXEC` text file, which is the one a debugging session edits by hand (`lib/boot_stamp.6502`,
+  `docs/target-portability.md` 16).
 - Every debug key needs CTRL once the play keys are redefinable.
 - Pad the SSD to 200K before publishing; a published size that differs from the last publish is
   a useful signal that the wrong file went out.

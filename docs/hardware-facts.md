@@ -719,6 +719,13 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
 - **`*FX 4,1` stops the cursor keys doing cursor editing; `*FX 229,1` stops BASIC eating ESCAPE**
   when measuring keys from a BASIC session.
   Measured: Layer 3 (Paradroid), 2026-09-06 (Edge). [Paradroid layer-3-scroll.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-3-scroll.md) [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
+- **`*TYPE <file>` prints a text file at any prompt, and needs no language ROM**: it is the
+  filing system's own command, through OSASCI. That is what makes the build stamp worth keeping
+  as a disc file (`INFO`) rather than only as a boot message - the disc can be asked what it is
+  a week later. Works on DFS 1.20 and the Master's 1770 DFS; a boot that `*TYPE`s it costs one
+  line of `!BOOT` and the sector `INFO` occupies.
+  Measured: 2026-09-11, jsbeeb `B-DFS1.2` and `Master` - the kit template's dev disc, typed at
+  the BASIC prompt and again from its `!BOOT`. [Paradroid b5ffa94](https://github.com/kieranhj/paradroid-beeb/blob/main/src/main.asm)
 - **DFS filenames are seven characters.**
   [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md)
 

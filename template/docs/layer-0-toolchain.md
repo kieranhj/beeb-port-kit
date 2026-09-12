@@ -8,9 +8,9 @@ palettes came in, later the same day), and the result was measured in jsbeeb (`B
 
 | Piece | Where | Proof |
 |---|---|---|
-| `boot_stamp.6502` | `!BOOT` at `&7E00` | jsbeeb's screen text: `REM beeb-port-kit template DEV build` / `REM BUILD 07 Sep 2026 03:02:40` / `*RUN Game`; the Master build adds `REM MASTER: Master 128 build`; the RELEASE build's stamp read back from the catalogue carries the version line and no DEV |
+| `boot_stamp.6502` | `INFO` and `!BOOT`, both assembled at `&7E00` (the RELEASE stub at `&0900`) | jsbeeb, 2026-09-11, both models: the DEV disc boots `*BASIC` / `CLS` / `*TYPE INFO` / `*RUN Game` and the file prints `beeb-port-kit template DEV build` / `BUILD 11 Sep 2026 22:10:18+`; `*TYPE INFO` at a BASIC prompt prints the same two lines (DFS 1.20), the `MASTER=1` build adds `MASTER: Master 128 build`, and the RELEASE disc (option 2) is *RUN: its stub prints `beeb-port-kit template` / `template v0.0 2026-09-07` / `BUILD ...`, byte for byte what its `INFO` holds, then runs the game |
 | `loader.6502` + `zx02depack.6502` | `PANEL` staged at `&3000`, unpacked to `&4A00` | `&4A00` read back after boot, 2,560 bytes, **identical to `src/data/panel.bin`** (md5 `480a1d5dda14e04ee9eee9637b9983e1`); `zxdst` left at `&5400`. Both models: `B-DFS1.2` and, with the `MASTER=1` disc, `Master` |
-| `make_disc.py` on `dfs.py` / `zx02.py` | `build/game.ssd`, 2,304 bytes, **unpadded** (jsbeeb needs no padding since its 1.9.0; booted on both models through the MCP to check, 2026-09-07) | `PANEL` 2,560 -> 79 bytes via `zx02.exe`, round-tripped through `zx02.decompress`; catalogue load/exec rewritten to `&3000`; layout `!BOOT`, `Game`, `PANEL`; 2,304-byte image, 204,800 padded. The overlap check refuses a stream over its output |
+| `make_disc.py` on `dfs.py` / `zx02.py` | `build/game.ssd`, 2,560 bytes (2,304 before `INFO`), **unpadded** (jsbeeb needs no padding since its 1.9.0; booted on both models through the MCP to check, 2026-09-07) | `PANEL` 2,560 -> 79 bytes via `zx02.exe`, round-tripped through `zx02.decompress`; catalogue load/exec rewritten to `&3000`; layout `!BOOT`, `INFO`, `Game`, `PANEL`; 2,560-byte image, 204,800 padded. The overlap check refuses a stream over its output |
 | `irq.6502` | IRQ1V owned, CA1 + T1 | the field counter climbs by exactly 100 in 3,993,600 cycles |
 | `keydown.6502` | `keydown_int`, Z = 97, X = 66 | X held 50 fields: `scroll` 0 -> 200 (25 steps of 8). Z held 60 fields: 200 -> 10,200 (30 steps, wrapped by +10,240) |
 | the rupture | `src/rupture.6502` | screenshot: 4-row panel with its white edge lines over the 16-row strip; T1 sweep below |
@@ -131,7 +131,7 @@ from the request**, the kit's rule again). `scroll` 0 -> 200 in 50 fields of X.
   assemble, from `build.ps1` and `tools/build.sh`. Why, and the whole BeebASM delta:
   `../../docs/toolchain-baron.md`.
 - `RELEASE` and `MASTER` passed every time (Baron has `DEFINED()`, so this is now a choice, not
-  BeebASM's no-`IFDEF` workaround). The `!BOOT` timestamp comes from the generated
+  BeebASM's no-`IFDEF` workaround). The stamp's timestamp comes from the generated
   `build/build_time.6502`, not `TIME$`: **Windows PowerShell cannot pass a quoted string with
   spaces to a native exe** - three forms tried, all mangled - so it is a file, not a `-D`.
   Keeping that file makes a rebuild byte-identical.
@@ -157,7 +157,7 @@ from the request**, the kit's rule again). `scroll` 0 -> 200 in 50 fields of X.
   a hang (fields 0, frames 0, scroll 0 in the harness below). Put it back and the numbers
   return. The warning is the tool telling you before the disc does.
 - The scratch `ORG` bookkeeping (`code_p%`, `boot_p%`) and the `CLEAR` for `PANEL` are gone:
-  `PANEL` and `!BOOT` are `SECTION`s of their own, and two sections may share an address.
+  `PANEL`, `INFO` and `!BOOT` are `SECTION`s of their own, and two sections may share an address.
 - `dfs.py` forked with two changes: `import zx02` for the package-relative import, and the ZX0
   codec dropped (this is a ZX02 port; the kit's copy still carries both). Its API needed no
   adapting (`read_image`, `compress`, `check_stream`, `build_image`, `pad`).
