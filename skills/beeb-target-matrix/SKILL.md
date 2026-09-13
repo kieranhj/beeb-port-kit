@@ -17,7 +17,7 @@ the wrong picture under `*SHADOW`, after weeks of passing its smoke test.
 kept aside, so a pass can be shown to be a fix rather than a test that can't fail
 **"Plays" means all three:** the picture is right; the frame counters are moving (read them
 twice, a few frames apart; addresses from `tools/listing.py symbols`); and whatever the boot
-leaves behind is there (`&0D00` = `&40` after `claim_nmi`, the handover at `&0A00` after the
+leaves behind is there (`&0D00` = `&40` after `claim_nmi`, `&B0-&CF` still what you seeded it with after `release_fs`, the handover at `&0A00` after the
 sideways RAM probe)
 
 ## Steps

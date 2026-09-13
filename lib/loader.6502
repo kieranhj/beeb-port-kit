@@ -218,16 +218,70 @@ IF MASTER
 }
 ENDIF
 
-\ ---- claim_nmi: take the NMI once the last load is done ------------
-\ OSBYTE 143 with X = 12 asks the paged ROMs to hand over the NMI, which
-\ the filing system gives up (its routine lives at NMI_CODE, &0D00); an
-\ RTI goes there so a stray NMI returns. Unlike *TAPE (OSBYTE 140) it
-\ does not unplug the filing system: it claims the NMI back if anything
-\ loads again, and nothing forces a *DISC afterwards on someone who
-\ booted from MMFS or ADFS. Only Econet is likely to mind. hexwab's
-\ method (paradroid-beeb issue #18); Paradroid, jsbeeb 2026-09-10:
-\ &0D00 reads &40 at the title and the game plays. Call it AFTER the
-\ last disc access. Clobbers A, X, Y.
+\ ---- the contract with the filing system ---------------------------
+\ hexwab, paradroid-beeb issue #18, 2026-09-13 - and the kit had this
+\ WRONG until then, so read it before using either routine below.
+\ TWO PROBLEMS, TWO ANSWERS, and the loader's answer does not do for
+\ the game:
+\   A LOADER still has to load, so it cannot shut the filing system
+\   down. It borrows the workspace (&0E00 up to OSHWM), and the price
+\   is that it must OWN THE MACHINE while it does: claim the NMI, and
+\   let NO OS code run at all - no OS call, no MOS interrupt handler.
+\   Regaining control is the only way the filing system could discover
+\   the theft, and the NMI is the one route it keeps.
+\   A GAME THAT HAS FINISHED LOADING asks the filing system to go away:
+\   release_fs (OSBYTE 140) has it detach every hook it holds and tell
+\   whatever hardware it was driving to stop raising NMIs. ONLY THEN is
+\   the workspace ours - &B0-&CF in the zero page and &0E00 to OSHWM -
+\   and only then is an OS call safe after taking it.
+\ A filing system is ENTITLED to hook OSBYTE, OSWORD and the vectors,
+\ and to find its workspace intact when one of them is called. Acorn's
+\ DFS hooks none of them, which is the only reason a game that skips
+\ OSBYTE 140 runs at all: Paradroid did, and hexwab's Opus 1770 with
+\ DDOS 3.45 hung at the deck plan (REAL HARDWARE, 2026-09-13). If the
+\ game makes any OS call after the workspace is buried - the usual ones
+\ are OSBYTE 229 for ESCAPE, OSBYTE &0F to flush the buffers, OSBYTE 19
+\ for VSync - it needs release_fs first.
+\ THE PRICE IS THAT NOTHING MAY LOAD AGAIN. Call it after the LAST load
+\ on every path. A port that loads between levels keeps the filing
+\ system and owns the machine instead, which means no OS calls either.
+\ AND THE DISC MUST BOOT BY *RUN, NOT *EXEC, if the game lives in
+\ &1100-&1900: that is DFS's random-access buffer area, and running
+\ there works only because *LOAD - and *RUN, which is *LOAD plus a jump
+\ - never touch it. *EXEC does, and so does CLOSING an exec file, which
+\ is an implicit *EXEC. Paradroid's dev disc went black with the CPU
+\ inside the DNFS ROM at &ACB1 for exactly that reason, and closing the
+\ file politely first (OSBYTE 119) hung identically - the close was
+\ itself a write into the region it was meant to make safe.
+\ boot_stamp.6502 builds a *RUN !BOOT for that reason.
+
+\ ---- release_fs: the filing system detaches ------------------------
+\ OSBYTE 140 is what *TAPE ends up calling, without the OSCLI in the
+\ middle - less to go wrong, and no command string to carry. It selects
+\ the tape filing system, so a machine booted from MMFS or ADFS comes
+\ back to its own on the next BREAK, not to *DISC.
+\ Call it AFTER THE LAST LOAD and BEFORE anything writes the filing
+\ system's workspace, then claim_nmi. Clobbers A, X, Y.
+.release_fs
+{
+    lda #140                    ; *TAPE, without the OSCLI
+    ldx #0
+    ldy #0
+    jmp osbyte
+}
+
+\ ---- claim_nmi: take the NMI as well -------------------------------
+\ OSBYTE 143 with X = 12 asks the paged ROMs to hand over the NMI,
+\ which the filing system gives up (its routine lives at NMI_CODE,
+\ &0D00); an RTI goes there so a stray NMI returns. After release_fs
+\ this is belt-and-braces, hexwab's own word for it: the filing system
+\ has already stood its NMI hardware down, so what is left is a STRAY
+\ NMI - noise, not an intentional interrupt - and eight bytes is a
+\ cheap answer to an unrecoverable jump through a page of stale 6502.
+\ Without release_fs - a loader that must keep the filing system - it
+\ is not optional: it is the whole of owning the machine.
+\ Paradroid, jsbeeb 2026-09-10: &0D00 reads &40 at the title and the
+\ game plays. Clobbers A, X, Y.
 NMI_CODE = &0D00
 .claim_nmi
 {

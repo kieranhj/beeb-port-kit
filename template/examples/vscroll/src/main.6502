@@ -235,10 +235,14 @@ SECTION VScroll, org = CODE_ORG, guard = CODE_TOP, filename = "VScroll", exec = 
     CRTC 9, 7
     CRTC 11, 8
 
-    \\ The NMI is ours: this program never touches the disc again after its
-    \\ own *RUN. OSBYTE 143, X = 12 asks the filing system to hand it over,
-    \\ and an RTI at &0D00 answers a stray one - loader.6502's claim_nmi,
-    \\ inline because the example has no loader. Not *TAPE.
+    \\ Loading is done - this program never touches the disc again after
+    \\ its own *RUN - so the filing system is asked to detach, and the NMI
+    \\ is claimed on top of that: loader.6502's release_fs and claim_nmi,
+    \\ inline because the example has no loader. OSBYTE 140 is *TAPE
+    \\ without the OSCLI in the middle; until it runs, &0E00 up to OSHWM
+    \\ and &B0-&CF are the filing system's, and so is any OS call we make.
+    \\ loader.6502's header has the contract and why both calls are here.
+    lda #140 : ldx #0 : ldy #0 : jsr osbyte
     lda #143 : ldx #12 : ldy #&ff : jsr osbyte
     lda #&40 : sta &0d00
 

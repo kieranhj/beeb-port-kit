@@ -257,7 +257,13 @@ SECTION Game, org = CODE_ORG, guard = CODE_TOP, filename = "Game", exec = main
     lda #LO(PANEL_ADDR)
     ldx #HI(PANEL_ADDR)
     jsr unpack_to
-    jsr claim_nmi               ; after the LAST load: the NMI is ours
+    \ THE LAST LOAD IS DONE, so the filing system is asked to detach
+    \ (OSBYTE 140) and the NMI is claimed on top of it - loader.6502's
+    \ header has the contract and why both calls are here. Nothing may
+    \ load after this line, and until it runs the OS calls this boot
+    \ makes are the filing system's to answer.
+    jsr release_fs
+    jsr claim_nmi
 
     jsr fill_play               ; something in the strip to scroll
     jsr setup_display           ; the wrap, the B shape, display on

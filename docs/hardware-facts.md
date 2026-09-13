@@ -520,7 +520,8 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
 ### Target configurations (paradroid-beeb issue #18)
 
 The template's boot, before and after four defaults: the host's addresses, OSBYTE 114,1, every
-CRTC register, and `claim_nmi`. Each result is a fresh jsbeeb machine, SHIFT+BREAK, then 400
+CRTC register, and `claim_nmi` (joined 2026-09-13 by `release_fs`, OSBYTE 140, which the
+results below predate). Each result is a fresh jsbeeb machine, SHIFT+BREAK, then 400
 frames. It **plays** when the panel and strip are drawn, `frame_count`/`field_count` are
 advancing and `&0D00` reads `&40`.
 
