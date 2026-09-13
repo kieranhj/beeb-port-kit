@@ -110,6 +110,15 @@ mode change and soft BREAK, and on `VDU 23`. All 4K is yours only if you fill it
 mode change and never call `*KEY` or `VDU 23` afterwards; `docs/hardware-facts.md`, ANDY, has
 the page map.
 
+**Decide on day one whether the game ever reads the disc after it starts** - levels loaded
+between waves, music streamed off the disc, a saved high-score table. It decides how the game
+and the filing system share the machine, and it is expensive to change late. A game that loads
+ONCE calls `OSBYTE 140` when the last load is done, the filing system detaches, and its
+workspace and zero page become the game's. A game that keeps loading can never call it (there
+is no way back from the tape filing system): it keeps the filing system live, owns the machine,
+and makes NO OS call at all for as long as it runs. `lib/loader.6502`'s header has the contract
+and `docs/hardware-facts.md` the evidence - a port that got this wrong hung on real hardware.
+
 **Then decide which configurations of that machine it will run on**, as decisions too: second
 processors, `*SHADOW`, sideways RAM that isn't at 4-7, a filing system softloaded into
 sideways RAM, other DFSs, a machine with no BASIC. `docs/target-portability.md` lists them, with

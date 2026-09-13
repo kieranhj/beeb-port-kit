@@ -236,8 +236,9 @@ SECTION VScroll, org = CODE_ORG, guard = CODE_TOP, filename = "VScroll", exec = 
     CRTC 11, 8
 
     \\ Loading is done - this program never touches the disc again after
-    \\ its own *RUN - so the filing system is asked to detach, and the NMI
-    \\ is claimed on top of that: loader.6502's release_fs and claim_nmi,
+    \\ its own *RUN, which is the whole reason OSBYTE 140 is legal here -
+    \\ so the filing system is asked to detach, and the NMI is claimed on
+    \\ top of that: loader.6502's release_fs and claim_nmi,
     \\ inline because the example has no loader. OSBYTE 140 is *TAPE
     \\ without the OSCLI in the middle; until it runs, &0E00 up to OSHWM
     \\ and &B0-&CF are the filing system's, and so is any OS call we make.

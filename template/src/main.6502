@@ -256,11 +256,15 @@ SECTION Game, org = CODE_ORG, guard = CODE_TOP, filename = "Game", exec = main
     lda #LO(PANEL_ADDR)
     ldx #HI(PANEL_ADDR)
     jsr unpack_to
-    \ THE LAST LOAD IS DONE, so the filing system is asked to detach
-    \ (OSBYTE 140) and the NMI is claimed on top of it - loader.6502's
-    \ header has the contract and why both calls are here. Nothing may
-    \ load after this line, and until it runs the OS calls this boot
-    \ makes are the filing system's to answer.
+    \ THE LAST LOAD IS DONE - and the template has exactly one, which is
+    \ what makes this legal - so the filing system is asked to detach
+    \ (OSBYTE 140) and the NMI is claimed on top of it. loader.6502's
+    \ header has the contract: release_fs selects the TAPE filing system
+    \ and there is no way back, so a port that loads between levels,
+    \ streams off the disc or saves anything DROPS THIS LINE and keeps
+    \ the machine to itself instead - which means no OS call, ever.
+    \ Nothing may load after this line, and until it runs the OS calls
+    \ this boot makes are the filing system's to answer.
     jsr release_fs
     jsr claim_nmi
 

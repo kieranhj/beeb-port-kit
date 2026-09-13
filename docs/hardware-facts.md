@@ -651,7 +651,12 @@ jobs**:
   without the OSCLI in the middle - while the workspace is **still intact**. The filing system
   detaches every hook it holds and tells whatever hardware it was driving to stop raising NMIs.
   Only then is the workspace yours, `&B0-&CF` in the zero page included, and only then is an OS
-  call safe afterwards. The price: **nothing may load again**.
+  call safe afterwards. **The price is that nothing may load again, and that is what decides
+  which of the two answers is yours**: `OSBYTE 140` selects the TAPE filing system and there is
+  no safe way to put the previous one back, so it is only for a port that reads the disc at boot
+  and never again. One that loads between levels, streams off the disc or saves anything is the
+  loader case for its whole life - it keeps the filing system, owns the machine, and makes no OS
+  call at all. That constrains the design, so settle it early.
 
 A filing system is *entitled* to hook `OSBYTE`, `OSWORD` and the vectors and to find its workspace
 intact when one of them is called. Acorn's DFS hooks none of them, which is the only reason a game

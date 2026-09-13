@@ -242,9 +242,19 @@ ENDIF
 \ game makes any OS call after the workspace is buried - the usual ones
 \ are OSBYTE 229 for ESCAPE, OSBYTE &0F to flush the buffers, OSBYTE 19
 \ for VSync - it needs release_fs first.
-\ THE PRICE IS THAT NOTHING MAY LOAD AGAIN. Call it after the LAST load
-\ on every path. A port that loads between levels keeps the filing
-\ system and owns the machine instead, which means no OS calls either.
+\ THE PRICE IS THAT NOTHING MAY LOAD AGAIN, AND THAT DECIDES WHICH OF
+\ THE TWO ANSWERS IS YOURS. OSBYTE 140 selects the TAPE filing system:
+\ it is only for a port that reads the disc ONCE, at boot, and never
+\ again - which is what both of the kit's ports do, and what the
+\ template does. A port that loads between levels, streams music or
+\ audio off the disc, saves a high-score table or writes a save game
+\ MUST NOT CALL IT: there is no safe way to put the previous filing
+\ system back. That port is the loader case for its whole life - it
+\ keeps the filing system, owns the machine, and makes NO OS call at
+\ all, which constrains the design, so settle it early rather than at
+\ the end. A port that loads once but has not decided yet: leave the
+\ call out and keep the NMI claim, and take the zero page and &0E00
+\ only when the decision is made.
 \ AND THE DISC MUST BOOT BY *RUN, NOT *EXEC, if the game lives in
 \ &1100-&1900: that is DFS's random-access buffer area, and running
 \ there works only because *LOAD - and *RUN, which is *LOAD plus a jump
@@ -256,10 +266,15 @@ ENDIF
 \ boot_stamp.6502 builds a *RUN !BOOT for that reason.
 
 \ ---- release_fs: the filing system detaches ------------------------
+\ ONLY FOR A PORT THAT NEVER TOUCHES THE DISC AGAIN. This selects the
+\ TAPE filing system and there is no safe way back: if the game loads
+\ between levels, streams off the disc, or saves anything, do not call
+\ this at all - own the machine instead (above).
 \ OSBYTE 140 is what *TAPE ends up calling, without the OSCLI in the
-\ middle - less to go wrong, and no command string to carry. It selects
-\ the tape filing system, so a machine booted from MMFS or ADFS comes
-\ back to its own on the next BREAK, not to *DISC.
+\ middle - less to go wrong, and no command string to carry. Selecting
+\ tape is also why it is not rude to someone who booted from MMFS or
+\ ADFS: it is not a *DISC, and their filing system is back on the next
+\ BREAK.
 \ Call it AFTER THE LAST LOAD and BEFORE anything writes the filing
 \ system's workspace, then claim_nmi. Clobbers A, X, Y.
 .release_fs
