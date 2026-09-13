@@ -527,8 +527,10 @@ so `MUSIC` is loaded last and nothing touches the disc after it; a soft BREAK le
 in place - measured: no DFS banner, `*CAT` returns nothing - so `OSBYTE 200, 3` makes BREAK a
 power-on reset. That is the whole 8K, DFS's own pages included. Keep to `&C300-&DEFF` and DFS and
 a soft BREAK both survive, within the limits in hardware-facts' HAZEL section. Paradroid's low
-overlay at `&0E00-&10FF` is DFS's shared workspace and is copied down by the last filing-system
-call; do it earlier and the next `*LOAD` hangs in the 8271 poll.
+overlay at `&0E00-&10FF` is DFS's shared workspace and is copied down after the last filing-system
+call; do it earlier and the next `*LOAD` hangs in the 8271 poll. **And the workspace is only yours
+once `OSBYTE 140` has had the filing system detach** - or while you own the machine outright and
+make no OS call at all (`hardware-facts.md` "The MOS and DFS", `lib/loader.6502`).
 Source: [CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md),
 [docs/memory-map.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/memory-map.md).
 

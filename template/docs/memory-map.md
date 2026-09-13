@@ -12,7 +12,7 @@ end). They go stale the moment anything grows: take live numbers from the listin
 | `&0100-&01FF` | | stack | - |
 | `&0200-&03FF` | | MOS vectors and workspace; `IRQ1V` (`&0204`) is ours outright | - |
 | `&0400-&0DFF` | | language and MOS workspace: ours once `*RUN` has handed over and the MOS tick is gone (`&0800-&0BFF` is the sound/serial/soft-key space both ports reclaimed). Unused here | all of it, unverified for this program |
-| `&0E00-&18FF` | 2,816 | DFS's workspace on a Model B (PAGE = `&1900`). Live until the last load returns; free after `install_irq`. Unused here | after boot |
+| `&0E00-&18FF` | 2,816 | DFS's workspace on a Model B (PAGE = `&1900`): shared workspace to `&10FF`, random-access buffers above it. Live until `release_fs` (OSBYTE 140) has the filing system detach, which the boot calls after its last load; free after that. Unused here. **Another filing system's workspace may end higher** - OSHWM is what says so (`../../docs/hardware-facts.md`) | after boot |
 | `&1900-&1DBD` | 1,213 | the code image (1,264 under `MASTER=1`; 1,036 before the two palettes): `main`, the loop, `setup_display`, `fill_play`, the rupture, the forked lib, the depacker, the OSFILE block | `&1243` = 4,675 to `&3000` |
 | `&3000-&49FF` | 6,656 | the screen's top: **`LOADER_STAGE`** at boot (the `PANEL` stream, 54 bytes, blanked by R8). Displayed by nothing once the rupture runs | all of it in play |
 | `&4A00-&53FF` | 2,560 | the panel, 4 rows, rupture cycle A | 0 |

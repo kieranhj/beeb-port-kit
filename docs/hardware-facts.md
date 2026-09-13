@@ -638,8 +638,30 @@ advancing and `&0D00` reads `&40`.
 
 ## 6. The MOS and DFS: workspace you can reclaim, and the traps
 
+**READ THIS BEFORE THE TABLE (hexwab, paradroid-beeb #18, 2026-09-13).** Most of the table below
+is workspace the filing system still owns, and there are **two ways to take it, for two different
+jobs**:
+
+- **A loader**, which still has to load, cannot shut the filing system down. It borrows the
+  workspace and must **own the machine** while it does: claim the NMI (`OSBYTE 143,12,255`, `RTI`
+  at `&0D00`) and let **no OS code run at all** - no OS call, no MOS interrupt handler. Regaining
+  control is the only way the filing system could discover the theft, and the NMI is the route it
+  keeps.
+- **A game that has finished loading** calls **`OSBYTE 140`** - what `*TAPE` ends up calling,
+  without the OSCLI in the middle - while the workspace is **still intact**. The filing system
+  detaches every hook it holds and tells whatever hardware it was driving to stop raising NMIs.
+  Only then is the workspace yours, `&B0-&CF` in the zero page included, and only then is an OS
+  call safe afterwards. The price: **nothing may load again**.
+
+A filing system is *entitled* to hook `OSBYTE`, `OSWORD` and the vectors and to find its workspace
+intact when one of them is called. Acorn's DFS hooks none of them, which is the only reason a game
+that skips `OSBYTE 140` appears to work - see the Opus DDOS entry below. `lib/loader.6502` has the
+contract in full; `release_fs` and `claim_nmi` are the two calls.
+
 | Range | What it is | Yours when | Trap |
 |---|---|---|---|
+| `&00A8-&00AF` | the MOS's own zero-page scratch | after `OSBYTE 140` | not the filing system's, so 140 is not the whole story: an OS call may use it |
+| `&00B0-&00CF` | the FILING SYSTEM's zero page | after `OSBYTE 140`, and not before | Paradroid used it without the call and ran only because Acorn's DFS did not mind |
 | `&0100-&017F` | bottom half of the stack page | measured untouched through play, deck load, console and game over including `*LOAD`s | not loadable from disc; paths not exercised invalidate the measurement |
 | `&0400-&07FF` | language workspace | after `*RUN` (Edge, verified by sentinel) | Paradroid's briefing lives here; the ceiling is `&0800` |
 | `&0800-&08FF` | MOS sound: `&800-&83F` workspace, `&840-&87F` channel queues, `&8C0-&8FF` envelopes | only while you own IRQ1V | see below |
@@ -647,10 +669,10 @@ advancing and `&0D00` reads `&40`.
 | `&0A00` | printer buffer | survives BASIC exec, DFS loads, `VDU 22` | inside pdloader's tables |
 | `&0C00-&0CFF` | user-defined characters | once the MOS is not printing | |
 | `&0D00-&0D5F` | NMI routine (DFS) | never while the disc is in use | |
-| `&0D9F+` | extended vector table; DFS 1.2's FILEV route into its ROM | after the last filing call | trample it and the next call crashes |
+| `&0D9F+` | extended vector table: the route ANY sideways ROM takes when it claims a vector, filing system or not | never safely, if you make OS calls afterwards | `OSBYTE 140` does NOT make it yours - it is the MOS's, not the filing system's. Paradroid buries it and is still carrying the question (#18, open) |
 | `&0DF0-&0DFF` | ROM private workspace | excluded | |
-| `&0E00-&10FF` | DFS shared workspace | dead from the last `*LOAD` on | nothing may be LOADED there |
-| `&1100-&18FF` | DFS random-access buffers, untouched by `*LOAD`/OSFILE | immediately; worth 2K below `PAGE = &1900` | `!BOOT`'s exec buffer, while the exec file is open |
+| `&0E00-&10FF` | DFS shared workspace | after `OSBYTE 140`, or while you own the machine | nothing may be LOADED there. **And it need not end where DFS's does**: OSHWM is the only thing that says where this machine's filing system stops |
+| `&1100-&18FF` | DFS random-access buffers, untouched by `*LOAD`/OSFILE | immediately - Paradroid RUNS here; worth 2K below `PAGE = &1900` | **`*EXEC` writes here** and so does closing an exec file, so a game living here must boot by `*RUN`. Acorn-DFS-specific either way: put code as high as you can afford |
 
 Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Layer 2 onward.
 [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md),
@@ -727,6 +749,28 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   line of `!BOOT` and the sector `INFO` occupies.
   Measured: 2026-09-11, jsbeeb `B-DFS1.2` and `Master` - the kit template's dev disc, typed at
   the BASIC prompt and again from its `!BOOT`. [Paradroid b5ffa94](https://github.com/kieranhj/paradroid-beeb/blob/main/src/main.asm)
+- **A filing system may hook `OSBYTE`, `OSWORD` and the vectors, and expects its workspace intact
+  when it does.** Paradroid buried the workspace and then called `OSBYTE 229` per game start,
+  `OSBYTE &0F` at the game over and `OSBYTE 19` at every rupture align, with no `OSBYTE 140`
+  anywhere: fine on Acorn's DFS, which hooks none of them, and **it hung at the deck plan on an
+  Opus 1770 with DDOS 3.45**. That is the only real-hardware evidence either way, and it is why
+  `OSBYTE 140` is not optional for a game that calls the OS at all.
+  Reported: 2026-09-13, hexwab, real hardware. [Paradroid layer-13-compatibility.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-13-compatibility.md)
+- **`*EXEC` writes into `&1100-&1900`, and so does CLOSING an exec file.** A game running there -
+  Paradroid at `&1100`, the kit's template higher at `&1900` - survives only because `*LOAD`, and
+  `*RUN` which is `*LOAD` plus a jump, never touch the buffer area. Adding `OSBYTE 140` to
+  Paradroid's boot hung the `*EXEC`-booted dev disc dead: black screen, CPU inside the DNFS ROM at
+  `&ACB1` with `ROMSEL` 14, while the `*RUN` release disc was fine. Putting `OSBYTE 119` in front
+  to close the exec file politely hung identically - the close is itself a write into the region
+  it was meant to make safe. **Boot by `*RUN`** (`lib/boot_stamp.6502` builds only that shape).
+  Measured: 2026-09-13, jsbeeb `B-DFS1.2`. [Paradroid 61500a8](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-13-compatibility.md)
+- **Nothing guarantees filing-system workspace stops at `&1900`.** `&1900` is Acorn DFS's `PAGE`
+  on a Model B; another filing system's OSHWM can be higher (and MMFS in sideways RAM puts it
+  *lower*, at `&0E00`). hexwab: *"The safe thing to do is put our code as high as you can; read
+  OSHWM to know which workspace regions to save."* Neither port checks, and neither does the kit -
+  reading OSHWM at boot and refusing loudly, the way `swram_probe.6502` refuses too few banks, is
+  the cheap guard and is **not built yet**.
+  hexwab, 2026-09-13, paradroid-beeb #18. Not measured.
 - **DFS filenames are seven characters.**
   [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md)
 
