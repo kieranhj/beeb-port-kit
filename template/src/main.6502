@@ -11,8 +11,8 @@
 \ *	have a PALETTE each - four physical colours and the other four, all
 \ *	eight MODE 1 colours at once; the panel image ships
 \ *	ZX02-compressed and is loaded and unpacked by the kit's loader;
-\ *	the build stamps itself into INFO, a disc file the boot shows and
-\ *	*TYPE INFO reads back. Nothing else.
+\ *	the build stamps itself into INFO, a disc file that *TYPE INFO
+\ *	reads back and that !BOOT prints a copy of. Nothing else.
 \ *
 \ *	Geometry is Paradroid's (panel &4A00, strip &5800-&7FFF, 10K wrap,
 \ *	R1 = 80) because its T1 constants were measured for it; the frame
@@ -21,8 +21,7 @@
 \ *	Build symbols, passed with -D on every invocation. Baron has
 \ *	DEFINED(), so a default could live here; the build scripts pass all
 \ *	three every time anyway, so that a build says what it is:
-\ *	  RELEASE     0/1  every DEBUG_ flag off, version line in the stamp,
-\ *	                   and the disc boots by *RUN (BOOT_RUN) not *EXEC
+\ *	  RELEASE     0/1  every DEBUG_ flag off, version line in the stamp
 \ *	  MASTER      0/1  the Master 128 path: loader.6502's load_hazel
 \ *	                   and unpack_andy assemble, and the stamp says so. The
 \ *	                   template uses no shadow RAM, ANDY or HAZEL.
@@ -146,14 +145,14 @@ SCROLL_STEP = 8                 ; one CRTC unit = 4 MODE 1 pixels a frame
 \ ---- addresses ----------------------------------------------------
 CODE_ORG   = &1900              ; above DFS's workspace on a Model B (PAGE)
 CODE_TOP   = &3000              ; the screen
-\ A RELEASE boots by *RUN (disc option 2, boot_stamp.6502's BOOT_RUN):
-\ !BOOT is then a stub that prints the stamp and *RUNs Game, so it is
-\ LOADED and run, at &0900 - a buffer page a disc game never uses, and
-\ not &7E00, which is MODE 7's screen. A DEV build keeps the *EXEC text
-\ file, four * commands assembled at &7E00 and never loaded there; one
-\ of them is *TYPE INFO, and INFO is the stamp itself as a disc file.
-BOOT_RUN   = RELEASE
-BOOT_STAGE = &7E00 - (&7E00 - &0900) * BOOT_RUN
+\ EVERY disc boots by *RUN, dev and release alike (disc option 2):
+\ !BOOT is a stub that prints the stamp and *RUNs Game, so it is LOADED
+\ and run, at &0900 - a buffer page a disc game never uses, and not
+\ &7E00, which is MODE 7's screen. *EXEC is not an option: it writes
+\ into &1100-&1900, DFS's buffer area, which is why Paradroid's dev
+\ disc died the moment it asked the filing system to detach
+\ (boot_stamp.6502 and lib/loader.6502 have the two halves of it).
+BOOT_STAGE = &0900
 INFO_STAGE = &7E00              ; INFO is ASSEMBLED here and never loaded
 
 \ ******************************************************************
@@ -487,8 +486,8 @@ ENDSECTION
 \ *	(boot_stamp.6502)
 \ *
 \ *	The stamp is written ONCE, here, and both files use it - INFO,
-\ *	which `*TYPE INFO` reads back at any prompt, and, under BOOT_RUN,
-\ *	the boot stub's own copy. Two stamps that could drift would be
+\ *	which `*TYPE INFO` reads back at any prompt, and the boot stub's
+\ *	own copy of the same bytes. Two stamps that could drift would be
 \ *	worse than one that scrolls past.
 \ ******************************************************************
 MACRO BUILD_STAMP
@@ -503,18 +502,13 @@ SECTION Info, org = INFO_STAGE, guard = INFO_STAGE + 256, filename = "INFO"
 .infofile_end
 ENDSECTION
 
-\ A DEV build's !BOOT is *BASIC / CLS / *TYPE INFO / *RUN Game, *EXEC'd
-\ (--opt 3). A RELEASE's is the stub: it prints the stamp itself,
-\ because it IS the boot and nothing has *TYPEd anything yet, then
-\ OSCLIs RUN Game (--opt 2, and no language ROM needed). The IF is here
-\ rather than in boot_stamp.6502 because a Baron macro can only call
-\ one defined before it, and BUILD_STAMP is built from that file's.
+\ !BOOT prints the stamp itself - it IS the boot, so nothing has *TYPEd
+\ anything yet - and then OSCLIs RUN Game. --opt 2 on every build, and
+\ no language ROM needed.
 SECTION Boot, org = BOOT_STAGE, guard = BOOT_STAGE + 256, filename = "!BOOT", exec = bootfile
 .bootfile
     BOOT_FILE_HEAD
-IF BOOT_RUN
     BUILD_STAMP
-ENDIF
     BOOT_FILE_TAIL "Game"
 .bootfile_end
 ENDSECTION

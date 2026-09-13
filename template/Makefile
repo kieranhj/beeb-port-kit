@@ -51,11 +51,11 @@ CC = cc
 # Set by the `release` and `master` targets through a recursive make.
 RELEASE = 0
 MASTER  = 0
-# The disc's boot option: 3 *EXECs !BOOT, the DEV build's text file, which
-# *TYPEs the build stamp out of INFO; `release` passes 2, *RUN !BOOT, the
-# stub boot_stamp.6502 builds under BOOT_RUN (= RELEASE in main.6502), which
-# prints the same stamp itself. Set with RELEASE, never alone.
-BOOTOPT = 3
+# The disc's boot option, 2 on every build: SHIFT+BREAK *RUNs !BOOT, the
+# stub boot_stamp.6502 assembles, which prints the build stamp and runs the
+# game. Never 3: an *EXEC boot writes into DFS's &1100-&1900 (lib/loader.6502
+# has the contract) and needs a language ROM to type into.
+BOOTOPT = 2
 STEM    = game
 TITLE   = GAME
 
@@ -97,7 +97,7 @@ all:
 debug: all
 
 release:
-	@$(MAKE) RELEASE=1 BOOTOPT=2 all
+	@$(MAKE) RELEASE=1 all
 	@echo "RELEASE build: every DEBUG_ flag off"
 
 master:

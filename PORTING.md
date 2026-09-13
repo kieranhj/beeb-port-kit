@@ -487,10 +487,10 @@ Do not add sound effects the original does not have.
 - `RELEASE` is a build symbol passed on every invocation; `DEV` is its complement; every
   `DEBUG_` flag is folded into `DEBUG_ANY`, which is asserted zero under `RELEASE`.
 - The stamp (`INFO`, and what the boot prints) carries the version line in a release and the
-  flag list otherwise. **A release disc boots by `*RUN`, `*OPT 4,2`** - `!BOOT` is then a stub
-  that prints the stamp and runs the game, and needs no language ROM; a dev disc keeps the
-  `*EXEC` text file, which is the one a debugging session edits by hand (`lib/boot_stamp.6502`,
-  `docs/target-portability.md` 16).
+  flag list otherwise. **Every disc boots by `*RUN`, `*OPT 4,2`** - `!BOOT` is a stub that
+  prints the stamp and runs the game. Never `*EXEC`: it needs a language ROM, and it writes
+  into `&1100-&1900`, so it cannot coexist with `OSBYTE 140` or with a game that lives there
+  (`lib/boot_stamp.6502`, `lib/loader.6502`, `docs/target-portability.md` 16).
 - Every debug key needs CTRL once the play keys are redefinable.
 - Pad the SSD to 200K before publishing; a published size that differs from the last publish is
   a useful signal that the wrong file went out.

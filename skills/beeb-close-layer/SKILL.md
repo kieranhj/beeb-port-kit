@@ -64,7 +64,7 @@ next session re-litigating them.
 
    `--check` assembles and validates while writing nothing, which is what this loop wants; the
    `PRINT` figures still come out. A BeebASM project runs `beebasm -i src/main.asm -do /tmp/o.ssd
-   -opt 3 -D ...` instead, where the `-do` exists only to stop loose `SAVE` files.
+   -opt 2 -D ...` instead, where the `-do` exists only to stop loose `SAVE` files.
 
    Adapt the symbol names to the project's. Add any new `DEBUG_` flag to `DEBUG_ANY` and to
    the build stamp (the template's `BUILD_STAMP` macro, which fills `INFO` and the release

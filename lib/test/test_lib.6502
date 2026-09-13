@@ -6,8 +6,8 @@
 \ *
 \ *	  baron -p lib/test/build -D RELEASE=0 lib/test/test_lib.6502
 \ *
-\ *	from the kit's root (and again with -D RELEASE=1 for the other
-\ *	branch of the boot stamp). It writes TEST and BOOT into that
+\ *	from the kit's root (and again with -D RELEASE=1 for the boot
+\ *	stamp's other branch). It writes TEST, INFO and BOOT into that
 \ *	directory. Baron is silent on success and reports every error in
 \ *	one run; check the exit code.
 \ ******************************************************************
@@ -21,7 +21,6 @@ LOADER_STAGE  = &3000           ; loader.6502: where streams stage
 SWR_HAND      = &0A00           ; swram_probe.6502: the five-byte answer
 SWR_MAGIC     = &A5
 DEBUG_ANY     = 0               ; boot_stamp.6502
-BOOT_RUN      = RELEASE         ; boot_stamp.6502: RELEASE=1 assembles the *RUN stub
 VERSION_LINE  = "beeb-port-kit lib test"
 BUILD_TIME    = "07 Sep 2026 00:00:00"   ; boot_stamp.6502: no TIME$ in Baron
 DEBUG_DUMMY   = 1               ; a flag to see one BOOT_FLAG line emitted
@@ -89,8 +88,8 @@ INCLUDE "../swram_probe.6502"
 ENDSECTION
 
 \ ---- the stamp, written once, and the two files that carry it ----
-\ INFO is the stamp as a disc file (*TYPE INFO); !BOOT either *TYPEs
-\ it (the text shape) or prints its own copy (the BOOT_RUN stub).
+\ INFO is the stamp as a disc file (*TYPE INFO); !BOOT is the stub,
+\ which prints its own copy of the same bytes.
 MACRO BUILD_STAMP
     BOOT_STAMP_HEAD "Lib test"
     BOOT_FLAG DEBUG_DUMMY, "DEBUG_DUMMY: a flag that is on"
@@ -105,17 +104,14 @@ SECTION Info, org = INFO_STAGE, guard = INFO_STAGE + 256, filename = "INFO"
 .infofile_end
 ENDSECTION
 
-\ &7E00 for the text file, &0900 for the stub, which RUNS.
-BOOT_STAGE = &7E00 - (&7E00 - &0900) * BOOT_RUN
+\ &0900: the stub RUNS, and &7E00 is MODE 7's screen.
+BOOT_STAGE = &0900
 SECTION Boot, org = BOOT_STAGE, guard = BOOT_STAGE + 256, filename = "BOOT", exec = bootfile
 .bootfile
     BOOT_FILE_HEAD
-IF BOOT_RUN
-    BUILD_STAMP                 ; the stub's own copy of the same bytes
-ELSE
-    EQUS "*RUN PARSWR", 13      ; the probe first; the stub shape has
-ENDIF                           ; room for one command, so this is the
-    BOOT_FILE_TAIL "Game"       ; text shape's alone
+    BUILD_STAMP                 ; the stub prints the stamp itself
+    BOOT_FILE_TAIL "Game"       ; one command: a project that wants the
+                                ; probe first writes its own tail
 .bootfile_end
 ENDSECTION                      \ written as BOOT, to read the stamp back
 
