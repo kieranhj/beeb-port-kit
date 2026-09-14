@@ -64,6 +64,7 @@ BUILD   = build
 RAW     = $(BUILD)/$(STEM)-raw.ssd
 SSD     = $(BUILD)/$(STEM).ssd
 LST     = $(BUILD)/$(STEM).lst
+SYMS    = $(BUILD)/$(STEM).symbols.json
 CONFIG  = $(BUILD)/$(STEM).config
 
 # Host filenames are lowercase (b2 refuses a disc called .SSD - "unknown
@@ -114,8 +115,9 @@ $(CONFIG):
 # A failed assembly removes it, so a half-written image never looks current.
 $(RAW): $(SRC) $(CONFIG)
 	$(BARON) -o $(RAW) --title $(TITLE) --opt $(BOOTOPT) \
-	    -D RELEASE=$(RELEASE) -D MASTER=$(MASTER) -v src/main.6502 \
-	    > $(LST) || { rm -f $(RAW); exit 1; }
+	    -D RELEASE=$(RELEASE) -D MASTER=$(MASTER) \
+	    --symbols $(SYMS) -v src/main.6502 \
+	    > $(LST) || { rm -f $(RAW) $(SYMS); exit 1; }
 
 # The image that boots. make_disc.py writes it through a temporary file and
 # prints its SHA256 - the number to compare with another machine's.

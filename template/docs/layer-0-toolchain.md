@@ -111,7 +111,7 @@ else moves.
 
 **The allocator changed no behaviour** (2026-09-07, `tools/verify_dynamic.mjs` against both
 builds, both models - it takes the addresses as arguments precisely because they move, and
-`tools/listing.py symbols` is where they come from): 100 fields in 100 frames, 50 loop passes in those 100 fields (the
+`tools/listing.py symbols build/game.symbols.json` is where they come from): 100 fields in 100 frames, 50 loop passes in those 100 fields (the
 25 Hz lock), `scroll` unmoved when idle, `scroll` 0 -> 200 under 50 fields of X, and `&4A00`
 still byte-identical to `src/data/panel.bin`. Identical to the hand-allocated build, which is
 the only gate that means anything once the addresses have moved.

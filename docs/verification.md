@@ -26,25 +26,27 @@ so rather than filling the gap from imagination.
 
 ## Before you start: three conventions
 
-**Addresses come from the listing, every time.** Builds keep the assembler's `-v` listing in
-`build/`; main-RAM addresses shift on every build, and a breakpoint or a memory read against a
-stale one measures nothing. **Under Baron this is not optional**: with zero-page allocation on,
-a `ZA_AUTO` variable's address is chosen by the assembler and moves when the code changes, so
-the listing is the only place it exists at all.
+**Addresses come from the build, every time.** Builds keep Baron's symbol dump
+(`--symbols build/game.symbols.json`) and its `-v` listing in `build/`; main-RAM addresses shift
+on every build, and a breakpoint or a memory read against a stale one measures nothing. **Under
+Baron this is not optional**: with zero-page allocation on, a `ZA_AUTO` variable's address is
+chosen by the assembler and moves when the code changes, so the build's own output is the only
+place it exists at all.
 
 ```bash
-python -m beeb_port_kit.listing symbols build/game.lst score      # any substring
-python -m beeb_port_kit.listing symbols build/game.lst            # everything
+python -m beeb_port_kit.listing symbols build/game.symbols.json score   # any substring
+python -m beeb_port_kit.listing symbols build/game.symbols.json         # everything
 ```
 
-That prints `name = &addr` for every label and every `[auto]` allocation. It is `py/listing.py`
-in this kit, and it exists because Baron has no symbol dump - BeebASM's `-d` had no successor
-(asked for upstream: waitingforvsync/baron#5), and Baron's listing puts a label on its own line
-with the address on the *next* line that carries one, so it wants a parser rather than a grep.
-Two things the listing cannot give you either way: a computed constant's value (the listing
-echoes `PLAY_R7 = 34 - FRAME_DROP_ROWS - PANEL_CYC_ROWS` unevaluated, so `PRINT` the ones you
-care about, as the template does for its T1 constants), and anything at all from a build you did
-not keep.
+That prints `name = &addr` for every symbol Baron resolved - labels, `[auto]` allocations, and
+computed constants **with their values**, which is what `--symbols` bought when it landed on
+2026-09-13 (waitingforvsync/baron#5; `docs/toolchain-baron.md` has the detail). It is
+`py/listing.py` in this kit, and the same command reads the `-v` listing if that is all you have
+- a build you kept the listing but not the dump for. Two things a LISTING cannot give you: a
+computed constant's value (it echoes `PLAY_R7 = 34 - FRAME_DROP_ROWS - PANEL_CYC_ROWS`
+unevaluated), and a trustworthy address for the last label of a section if it was written before
+2026-09-13, when a label took the *next* line's address. Neither gives you anything at all from a
+build you did not keep.
 
 The BeebASM equivalent, for the two shipping ports:
 

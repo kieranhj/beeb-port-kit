@@ -40,6 +40,7 @@ $stem    = 'game' + $(if ($Master) { '-master' } else { '' })
 $raw     = Join-Path $build "$stem-raw.ssd"
 $ssd     = Join-Path $build "$stem.ssd"
 $listing = Join-Path $build "$stem.lst"
+$syms    = Join-Path $build "$stem.symbols.json"
 
 function Find-Tool([string]$name) {
     $fromEnv = [Environment]::GetEnvironmentVariable($name.ToUpper())
@@ -90,10 +91,17 @@ try {
     # !BOOT, the stub boot_stamp.6502 assembles, which prints the stamp INFO
     # holds and runs Game. Never --opt 3: an *EXEC boot writes into DFS's
     # &1100-&1900 (lib/loader.6502's contract) and needs a language ROM.
-    & $baron -o $raw --title $discTitle --opt 2 -D $relDef -D $masDef -v 'src\main.6502' |
+    # --symbols writes the symbol dump: every resolved symbol, including the
+    # computed constants and the ZA_AUTO addresses that exist nowhere else.
+    # That file is what tools/listing.py and the verification harnesses read
+    # for addresses; the listing is for the opcode stream.
+    & $baron -o $raw --title $discTitle --opt 2 -D $relDef -D $masDef `
+        --symbols $syms -v 'src\main.6502' |
         Out-File -FilePath $listing -Encoding utf8
     if ($LASTEXITCODE -ne 0) {
-        Remove-Item $raw -ErrorAction SilentlyContinue
+        # The dump goes too: a stale one is worse than none, since every
+        # address in it would look current.
+        Remove-Item $raw, $syms -ErrorAction SilentlyContinue
         throw "baron failed ($LASTEXITCODE) - see $listing"
     }
 
@@ -109,6 +117,7 @@ if ($Release) { "RELEASE build: every DEBUG_ flag off" }
 if ($Master)  { "MASTER build: the Master 128 path" }
 "Built  $ssd"
 "       $raw   baron's own output, uncompressed and NOT bootable"
+"       $syms   symbol dump - take every address from here"
 "       $listing   assembly listing"
 
 # The second emulator, for -Run: b2 by default, beebjit with -Beebjit. b-em is

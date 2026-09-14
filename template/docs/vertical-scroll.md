@@ -159,7 +159,7 @@ What it does buy, against the panel-first shape:
 ```powershell
 cd examples\vscroll
 .\build.ps1
-python ..\..\tools\listing.py symbols build\vscroll.lst     # crtc_live, line_live, ypos
+python ..\..\tools\listing.py symbols build\vscroll.symbols.json   # crtc_live, line_live, ypos
 node tools\verify_vscroll.mjs build\vscroll.ssd 02 0D 10
 ```
 

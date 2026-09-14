@@ -16,12 +16,13 @@ deterministic, so one sample is exact for that state.
 
 ## Steps
 
-1. **Take the addresses from the listing, never from memory.** Main-RAM addresses move on every
-   build, and a zero-page address allocated by Baron moves on its own. The listing is
-   `build/<NAME>.lst` (`-v`), and `tools/listing.py` reads the symbols out of it:
+1. **Take the addresses from the build, never from memory.** Main-RAM addresses move on every
+   build, and a zero-page address allocated by Baron moves on its own. Under Baron the source is
+   the symbol dump, `build/<NAME>.symbols.json` (`--symbols`); `tools/listing.py` reads it, and
+   reads the `-v` listing (`build/<NAME>.lst`) the same way if that is all the build kept:
 
    ```bash
-   python tools/listing.py symbols build/<NAME>.lst spr_draw_all
+   python tools/listing.py symbols build/<NAME>.symbols.json spr_draw_all
    ```
 
    For a BeebASM project, the symbol dump does the same job:

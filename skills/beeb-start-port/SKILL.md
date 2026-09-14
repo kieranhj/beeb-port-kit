@@ -56,7 +56,7 @@ the original is the specification; deviations are agreed before they are built a
    - `BUGS.md`: numbered, with evidence; fixed entries are never deleted.
    - `docs/memory-map.md`: every region, what is in it, how much is free, with the date measured
      and "take live figures from the listing, never from this page" -
-     `python tools/listing.py symbols build/<NAME>.lst NAME` is the one-liner for that.
+     `python tools/listing.py symbols build/<NAME>.symbols.json NAME` is the one-liner for that.
    - `docs/layer-0-toolchain.md`: this layer's notes, started now.
    - the build stamp - assembly time and every debug flag - as the disc file `INFO`, shown at
      boot and readable later with `*TYPE INFO` (the template does this; keep it).

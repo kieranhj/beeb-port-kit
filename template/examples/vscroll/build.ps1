@@ -19,6 +19,7 @@ $tmpl    = Join-Path $root '..\..'
 $build   = Join-Path $root 'build'
 $ssd     = Join-Path $build 'vscroll.ssd'
 $listing = Join-Path $build 'vscroll.lst'
+$syms    = Join-Path $build 'vscroll.symbols.json'
 
 $local = Join-Path $tmpl 'local.ps1'
 if (Test-Path $local) { . $local }
@@ -45,10 +46,10 @@ if (-not (Test-Path $build)) { New-Item -ItemType Directory -Path $build | Out-N
 
 Push-Location $root
 try {
-    & $baron -o $ssd --title VSCROLL --opt 3 -v 'src\main.6502' |
+    & $baron -o $ssd --title VSCROLL --opt 3 --symbols $syms -v 'src\main.6502' |
         Out-File -FilePath $listing -Encoding utf8
     if ($LASTEXITCODE -ne 0) {
-        Remove-Item $ssd -ErrorAction SilentlyContinue
+        Remove-Item $ssd, $syms -ErrorAction SilentlyContinue
         throw "baron failed ($LASTEXITCODE) - see $listing"
     }
 
@@ -60,7 +61,8 @@ try {
 } finally { Pop-Location }
 
 "Built  $ssd"
-"       $listing   assembly listing (the zero-page addresses the harness wants)"
+"       $syms   symbol dump (the zero-page addresses the harness wants)"
+"       $listing   assembly listing"
 
 if ($Run) {
     $b2 = Find-Tool 'b2'

@@ -927,7 +927,7 @@ property of the whole IRQ path and drifted ~6 us later than the calibration as t
 
 ## 10. beebasm (1.11) gotchas
 
-*The kit assembles with Baron now - `lib/` and `template/` both - and four of these do not apply
+*The kit assembles with Baron now - `lib/` and `template/` both - and five of these do not apply
 to it; `docs/toolchain-baron.md` says which and what replaced them. They stay here because the
 two shipping ports are beebasm projects, and because a port that goes back to beebasm meets them
 again.*
@@ -969,9 +969,9 @@ again.*
   includes that need them. [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md)
 - **`TIME$` stamps the assembly time**, useful in `!BOOT` so any disc image can be dated.
   [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
-- **The symbol dump** (BeebASM only - Baron has none, so the kit parses the listing instead:
-  `python -m beeb_port_kit.listing symbols build/game.lst NAME`, and
-  waitingforvsync/baron#5): `beebasm -i src/main.asm -do build/symbols.ssd -D RELEASE=0 -d | tr ',' '\n'
+- **The symbol dump**: Baron grew one on 2026-09-13 (`--symbols`, waitingforvsync/baron#5), so
+  this is no longer a reason to stay on beebasm - the Baron form is
+  `python -m beeb_port_kit.listing symbols build/game.symbols.json NAME`. The beebasm one: `beebasm -i src/main.asm -do build/symbols.ssd -D RELEASE=0 -d | tr ',' '\n'
   | grep "'name'"` prints every global label as `'name':decimal`, the quick way to find a variable's
   address for an emulator poke. `-do` is there only to stop the loose files. [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md)
 - **A mechanical change can be proved mechanical** by reducing both listings to a stream of

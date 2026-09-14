@@ -47,7 +47,7 @@
 // The addresses are HEX and they MOVE on any edit - Baron allocates the zero
 // page. Take them from the listing, never from a doc, and never in decimal:
 //
-//   python ../../tools/listing.py symbols build/vscroll.lst
+//   python ../../tools/listing.py symbols build/vscroll.symbols.json
 import { loadMachineSession } from "../../../tools/jsbeeb_src.mjs";
 const MachineSession = await loadMachineSession();
 

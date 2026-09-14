@@ -3,8 +3,9 @@
 The kit's procedures written as Claude Code skills: one directory per skill, one `SKILL.md`
 each, no scripts. Each is a numbered checklist with the exact commands or jsbeeb MCP calls, the
 trap it guards against inline, and the per-project parameters looked up from the project's
-`CLAUDE.md` or the assembler's listing rather than hardcoded (`tools/listing.py symbols` reads
-them out; zero-page addresses allocated by Baron exist nowhere else). The long form of every one is in
+`CLAUDE.md` or the assembler's own output rather than hardcoded (`tools/listing.py symbols`
+reads them out of Baron's symbol dump, or its listing; zero-page addresses allocated by Baron
+exist nowhere else). The long form of every one is in
 [`docs/verification.md`](../docs/verification.md) (by procedure number) and
 [`PORTING.md`](../PORTING.md) §2-4.
 
