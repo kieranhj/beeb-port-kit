@@ -123,8 +123,9 @@ from the request**, the kit's rule again). `scroll` 0 -> 200 in 50 fields of X.
 
 ## Build facts
 
-- **The assembler changed on 2026-09-07: BeebASM 1.11 -> Baron 0.3.0** at
-  `C:\Users\khcon\OneDrive\BEEB\Bin\baron.exe`. Gated on byte-identity, both models:
+- **The assembler changed on 2026-09-07: BeebASM 1.11 -> Baron 0.3.0**, since 2026-09-14 the
+  build from `main@7213c8b` kept in this project's own `bin\` (`../../docs/toolchain-baron.md`
+  says why it is not in the shared `BEEB\Bin\`). Gated on byte-identity, both models:
   `Game` (1,087 bytes DEV, 1,138 MASTER) and `PANEL` came out **identical to the BeebASM
   build**, `!BOOT` differing only in its timestamp, and both discs boot in jsbeeb with `&4A00`
   identical to `src/data/panel.bin` and `zxdst` at `&5400`. All of RELEASE=0/1 and MASTER=0/1

@@ -5,20 +5,25 @@ ground-up rewrite of BeebASM (MIT, active - the sections design changed on 2026-
 and `template/` are both Baron. BeebASM is the legacy: the two shipping ports are BeebASM
 projects, and this file records exactly what differs so either direction is a short walk.
 
-Pin the version. The builds find `baron` through `$BARON`, then `bin/`, then the PATH, never
-through a path written into the build (`docs/build-portability.md`). On this machine it is
-in `..\..\Bin\` beside `beebasm.exe`, named in the template's gitignored `local.ps1`.
-Binaries are on the project's releases page. The language is
-still moving, so a build that worked is worth keeping the exe for - the previous exe is kept
-beside it as `baron-0.3.0-2026-09-07.exe`.
+Pin the version, **and keep the pinned exe in this project**. The builds find `baron` through
+`$BARON`, then `bin/`, then the PATH, never through a path written into the build
+(`docs/build-portability.md`). On this machine the kit's own copy is `template\bin\baron.exe`
+(gitignored), named in the template's gitignored `local.ps1`. Binaries are on the project's
+releases page; the language is still moving, so a build that worked is worth keeping the exe for.
 
-**`--version` does not identify a build.** The binary in `Bin\` is `main` at `7213c8b`
-(2026-09-14), built here from source, and it reports `baron 0.3.0.0` - the same string as the
-0.3.0 release binary of 2026-09-07, which does not have `--symbols`, `--pad`, the `INCLUDE` fix
-or the relaxed symbol naming. So a version string cannot tell you which build you are running:
-ask `baron --help | grep symbols` for the September/post-September split, assemble a label named
-`.next` for the 14th's, or check the file date. Watch the releases page for a tagged build that
-bumps it.
+**Do not upgrade a shared tools folder to do it.** `..\..\Bin\` holds `beebasm.exe`, `zx02.exe`
+and a `baron.exe` that *every* BBC project on the machine resolves - 1942 among them - so
+replacing the exe there moves projects that never asked to move. That folder stays on the
+release binary (0.3.0, 2026-09-07); the kit runs the newer build out of its own `bin\`.
+
+**`--version` does not identify a build.** The kit's `template\bin\baron.exe` is `main` at
+`7213c8b` (2026-09-14), built here from source, and it reports `baron 0.3.0.0` - the same string
+as the 0.3.0 release binary of 2026-09-07 still in `..\..\Bin\`, which does not have
+`--symbols`, `--pad`, the `INCLUDE` fix or the relaxed symbol naming. Two different assemblers,
+one version string, both on this machine. So a version string cannot tell you which you are
+running: ask `baron --help | grep symbols` for the September/post-September split, assemble a
+label named `.next` for the 14th's, or check the file date. Watch the releases page for a tagged
+build that bumps it.
 
 ## Why
 
