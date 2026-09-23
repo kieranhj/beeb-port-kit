@@ -308,9 +308,14 @@ did disabling T1's interrupt. **Either mask, or chain and change nothing** - whi
 rupture's own T1 cadence cannot run across a filing-system call, and that a chaining handler
 hands back the tick that writes `&0800-&08FF`. Chunking is no escape: a call costs ~15
 centiseconds plus ~4 a sector, so even a one-sector load blocks for nine fields.
-Measured: 2026-09-13 by 1942-beeb, jsbeeb; `docs/hardware-facts.md` has the table, the provenance
-and the caveat that the three hangs want a b2 or real-Master run before anything is designed
-against them.
+Measured: 2026-09-13 by 1942-beeb, jsbeeb, **on its own target** - it is a Master-only port, so
+these are the rows that matter to it, not an excursion. `docs/hardware-facts.md` has the table,
+the provenance and the caveat that the three hangs want a b2 or real-Master run before anything
+is designed against them.
+
+**Which machine you ship for decides which rule you need.** A Master-only port takes the Master
+rules above. A B-only port has the looser result. **A port targeting both takes the Master's** -
+it is the stricter of the two, and the B has never been shown to need the looser one for anything.
 
 Load before you take the vector anyway - the reasons that survive are real ones: DFS pages its ROM
 in over `&8000`, its workspace is live until the last call returns, and a load in the middle of a

@@ -31,6 +31,14 @@ when changing the boot.
 `Game` (1,081 to 1,168), all of it boot code a port can overlay once the game is running. The
 probe is 809 bytes in its own disc file, which the game never keeps.
 
+**And one rule that is not a default, because it only applies to a port that loads mid-game:**
+a filing-system call made after `install_irq` must either be **masked** (`SEI` around it) or run
+under a handler that **chains to the MOS and changes nothing** of its VIA state. This is
+machine-dependent and the Master is the strict one - a handler that swallows the MOS's
+interrupts hangs it mid-load, and so does touching System VIA T1 - so **a port targeting both
+machines takes the Master's rule**. `hardware-facts.md` "The MOS and DFS" has the table;
+`PORTING.md` 5.3 has the consequences for a rupture's own timing.
+
 ## The configurations
 
 "Test it in" names what can actually run the configuration. The `beeb-target-matrix` skill runs

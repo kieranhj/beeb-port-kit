@@ -742,14 +742,18 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   60). Chunking breaks a tune anyway and makes the load longer.
 
   Measured: 2026-09-13 by **1942-beeb** (`docs/note-to-kit.md`), jsbeeb via jsbeeb-mcp, Master 128
-  / MOS 3.20 / Acorn 1770 DFS, MODE 7, its own disc. **Not re-measured here**, and the three hangs
-  are jsbeeb rather than hardware - they want a b2 or real-Master run before anything is designed
-  against them. Nothing 1942 ships depends on them: its stage-seam load rests on the masked row,
-  which is the one the kit reached independently on a B. Which MOS state machine spins is not
+  / MOS 3.20 / Acorn 1770 DFS, MODE 7, its own disc. **1942 is a Master-only port** (its decision
+  2), so this is not an excursion onto a machine it does not ship for - **it is its own target**,
+  and the masked row is a Master measurement it relies on, corroborated rather than supplied by
+  the kit's B run. **Not re-measured here**, and the three hangs are jsbeeb rather than hardware -
+  they want a b2 or real-Master run before anything is designed against them. Nothing 1942 ships
+  depends on the hangs: its stage-seam load rests on the masked row. Which MOS state machine spins is not
   chased: the dispatcher saves `&F4` and `&FE34` and calls `$8003` in every bank, so it is the
   service-call loop rather than a DFS wait. Worth bisecting which of the two VIA IFR writes does
   it (the System VIA's is the suspect), and worth re-running on `B-DFS1.2` to see whether the B
-  survives by luck or by design.
+  survives by luck or by design - **that one is the kit's to do, not 1942's**: a Master-only port
+  has no reason to run it, and the kit is what tells a port targeting both machines which rule
+  holds where.
 - **The MOS's disc code needs VSync - not reproducible on current jsbeeb.** The original: with the
   CRTC's R7 parked where VSync never fires, the second `*LOAD` hung forever in DFS's 8271 status
   poll at `&ACAE`, and bisecting the CRTC writes one at a time showed R7 was the trigger.
