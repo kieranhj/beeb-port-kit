@@ -35,8 +35,11 @@ sound.
 make                    # the same on any POSIX make: make release, make master, make run, make help
 ```
 
-The assembler is [Baron](https://github.com/waitingforvsync/baron) 0.3.0, found through
-`$BARON`, then `bin/`, then the PATH. On Windows, put this machine's paths in `local.ps1`
+The assembler is [Baron](https://github.com/waitingforvsync/baron) 0.4.0, found through
+`$BARON`, then `bin/`, then the PATH. Every build passes `--warn 2`, which adds Baron's opt-in
+audits - chiefly a store into the zero-page pool at a literal address - to the ordinary
+warnings; the template is silent at that level and a port should keep it so. Warnings go to
+stderr and never change the exit code. On Windows, put this machine's paths in `local.ps1`
 (gitignored), which `build.ps1` runs first. The ZX02 compressor is built from
 `tools/zx02src/`, which needs a C compiler once. `RELEASE` and `MASTER` are `-D` symbols and
 every build passes both. `tools/build_stamp.py` writes `build/build_time.6502` for the stamp

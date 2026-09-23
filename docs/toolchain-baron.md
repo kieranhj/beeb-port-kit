@@ -1,9 +1,10 @@
-# Baron, and BeebASM as the legacy (2026-09-07)
+# Baron, and BeebASM as the legacy (2026-09-23)
 
 The kit assembles with [Baron](https://github.com/waitingforvsync/baron), Rich Talbot-Watkins's
-ground-up rewrite of BeebASM (MIT, active - the sections design changed on 2026-09-06). `lib/`
-and `template/` are both Baron. BeebASM is the legacy: the two shipping ports are BeebASM
-projects, and this file records exactly what differs so either direction is a short walk.
+ground-up rewrite of BeebASM (MIT, active - the sections design changed on 2026-09-06, the
+zero-page markers on 2026-09-23). `lib/` and `template/` are both Baron. BeebASM is the legacy:
+the two shipping ports are BeebASM projects, and this file records exactly what differs so either
+direction is a short walk.
 
 Pin the version, **and keep the pinned exe in this project**. The builds find `baron` through
 `$BARON`, then `bin/`, then the PATH, never through a path written into the build
@@ -14,16 +15,49 @@ releases page; the language is still moving, so a build that worked is worth kee
 **Do not upgrade a shared tools folder to do it.** `..\..\Bin\` holds `beebasm.exe`, `zx02.exe`
 and a `baron.exe` that *every* BBC project on the machine resolves - 1942 among them - so
 replacing the exe there moves projects that never asked to move. That folder stays on the
-release binary (0.3.0, 2026-09-07); the kit runs the newer build out of its own `bin\`.
+0.3.0 release binary of 2026-09-07; the kit runs the newer build out of its own `bin\`.
 
-**`--version` does not identify a build.** The kit's `template\bin\baron.exe` is `main` at
-`7213c8b` (2026-09-14), built here from source, and it reports `baron 0.3.0.0` - the same string
-as the 0.3.0 release binary of 2026-09-07 still in `..\..\Bin\`, which does not have
-`--symbols`, `--pad`, the `INCLUDE` fix or the relaxed symbol naming. Two different assemblers,
-one version string, both on this machine. So a version string cannot tell you which you are
-running: ask `baron --help | grep symbols` for the September/post-September split, assemble a
-label named `.next` for the 14th's, or check the file date. Watch the releases page for a tagged
-build that bumps it.
+## The pinned version: 0.4.0 (2026-09-23)
+
+`template\bin\baron.exe` is the **0.4.0 release binary**, downloaded from the releases page on
+2026-09-23 (`sha256 2c1183bb c293370e 586dcd10 bb8a6ec4 8f75c603 ba0e2fe3 0a5fe009 98a15a7c`).
+It replaced a `main@7213c8b` build made here from source on 2026-09-14; everything that build
+had is in 0.4.0, tagged.
+
+**A version string identifies a build again - from this release forward.** The 0.3.0 era did not:
+`main@7213c8b` and the 0.3.0 release binary both reported `baron 0.3.0.0` while differing in
+`--symbols`, `--pad`, the `INCLUDE` fix and the relaxed symbol naming. 0.4.0 reports
+`baron 0.4.0.0`, so `--version` now separates it from everything before it. What it still cannot
+do is tell the two *0.3.0s* apart, and one of those is the `..\..\Bin\` copy every other
+project on this machine uses: for that one, `baron --help | grep symbols` is the test.
+
+**Upgrading changed no bytes.** Measured here on 2026-09-23, the same sources under
+`main@7213c8b` and under 0.4.0:
+
+| | Result |
+|---|---|
+| The template, DEV and MASTER, `game.ssd`, `game-master.ssd` and both raw images | **byte-identical**, all four |
+| `build/game.symbols.json` and `build/game.lst` | **byte-identical** - the dump and the listing did not move either |
+| `lib/test/test_lib.6502`, `-D RELEASE=0` and `=1` | `TEST`, `BOOT` and `INFO` **byte-identical** on both |
+| `examples/vscroll` | image and symbol dump **byte-identical** |
+| `make` against `build.ps1`, `SOURCE_DATE_EPOCH` pinned to the last commit | the same `sha256 adb8baba...`, which is the pre-upgrade image's |
+| The whole template at `--warn 2` | **silent** - no warning at either level, so the new audits cost nothing to turn on |
+
+So this is a drop-in. The one thing to know before upgrading a port: **the unchecked-indexed-access
+warning is now on by default** (it used to be opt-in), so a port that indexes a `ZA_AUTO` variable
+will start seeing `warning: Unchecked indexed access into ZA_AUTO variable` where 0.3.0 said
+nothing. It is a warning, never the exit code - see `ZA_INDEXEDBY` below for how to answer it.
+
+### What the kit changed for 0.4.0
+
+**`--warn 2` on every build** - `template/build.ps1`, `template/Makefile` and
+`examples/vscroll/build.ps1`. Level 2 adds the opt-in audits to the ordinary warnings, and the one
+that matters is a store into the `ZA_POOL` at a literal address: the stray pointer the allocator
+otherwise cannot see, which is [#2](https://github.com/waitingforvsync/baron/issues/2) and the
+one failure the allocator exists to prevent. The template is silent at level 2 and a port should
+keep it that way. Warnings go to **stderr**, never change the exit code, and - unlike beebasm's
+progress chatter - do not trip PowerShell's `$ErrorActionPreference = 'Stop'` (checked here on
+PowerShell 7.6.6, warnings emitted, script survived, exit 0).
 
 ## Why
 
@@ -58,9 +92,10 @@ So the bytes are the same bytes. What changes is the toolchain around them.
 
 ## What landed upstream on 2026-09-13 and -14
 
-Four things the kit asked for, all in the binary now installed. Built from source here
-(`cmake -B build -G "Visual Studio 18 2026" -A x64`, submodule `richc` initialised first); a
-second build with `-DBARON_TESTS=ON` runs Baron's own suite, 420 tests, 420 ok.
+Four things the kit asked for. They landed before any release carried them, so they were built
+from source here (`cmake -B build -G "Visual Studio 18 2026" -A x64`, submodule `richc`
+initialised first; a second build with `-DBARON_TESTS=ON` runs Baron's own suite, 420 tests,
+420 ok) - and they are all in the 0.4.0 binary now installed, tagged.
 
 | Asked | Fixed | What it does |
 |---|---|---|
@@ -107,13 +142,63 @@ in the kit collides - but a port transcribing a 6502 source that uses `next`, `c
 `byte` as labels no longer has to rename anything, and the old workaround (renaming to
 `next_row`, `do_clr`) can be undone if the names were only changed for this.
 
+## What landed in 0.4.0 (2026-09-23)
+
+Two more of the issues this kit raised are closed, and the annotations that answer them. The
+whole release, against `7213c8b`, changed none of this kit's bytes (the table at the top).
+
+| Asked | Fixed | What it does |
+|---|---|---|
+| [#2](https://github.com/waitingforvsync/baron/issues/2) - nothing warned when a store aimed a literal address into the `ZA_POOL`, which is the one failure the allocator exists to prevent | `caa954c` | Two answers at once. `--warn 2` turns on the audit that was asked for - `warning: Store into the ZA_POOL at a fixed address: '&00'` - and **`ZA_WIPE`** is the way to say a sweep was deliberate. The kit now passes `--warn 2` on every build |
+| [#7](https://github.com/waitingforvsync/baron/issues/7) - a string carrying a NUL byte cut the `-v` listing short | in 0.4.0 | The listing runs to the end; an unprintable byte renders as `.` in listings and diagnostics, and the assembled bytes are untouched. Not something the kit hit, but it reads listings mechanically (`listing.py`), and a truncated one is a silently short opcode stream |
+
+Still open, and both worth knowing:
+
+- **[#3](https://github.com/waitingforvsync/baron/issues/3) - no response file.** This is why the
+  build time is a generated `build/build_time.6502` rather than a `-D`. Rich's answer: the defect
+  is **Windows PowerShell 5.1's** argument encoder, fixed in PowerShell 7.3+. Re-measured here on
+  2026-09-23 under PowerShell 7.6.6, and he is right - the form that came out as loose words in
+  5.1 now delivers the quoted string intact:
+
+  ```powershell
+  $t = '07 Sep 2026 15:47:31'
+  & $baron -D "BUILD_TIME=`"$t`"" p.6502      # PS 7: prints 07 Sep 2026 15:47:31
+  ```
+
+  **The kit keeps the generated file anyway**: it is what makes a rebuild byte-identical, it is
+  the same code path under `make` and under `build.ps1`, and it still works where a port is built
+  from PowerShell 5.1. Under 5.1, his workaround is an environment variable and the stop-parsing
+  token (`--%`), or cmd.exe.
+- **[#8](https://github.com/waitingforvsync/baron/issues/8) - character encoding and string
+  escapes.** Source files and strings are byte sequences, and `""` is the only
+  escape. A port that defines its own glyphs above `&7F` and writes them inside string literals
+  runs into this; the suggestion in the thread is `"hello" + CHR(&9A) + "world"`. Nothing in the
+  kit hits it - the template's text is ASCII - but a port with a custom character set will.
+
+Also in the release, unasked for and worth a line each:
+
+- **A `ZA_AUTO` read only through `var,Y` was invisible to the allocator** - the access widens to
+  absolute, which has no zero-page encoding, and the analysis missed it. A table read that way
+  could be classified unused, or have its bytes reused while still live. A silent wrong answer,
+  now fixed: any port that indexes zero page with `Y` wants 0.4.0 rather than any 0.3.0.
+- `-vv` dumps every emitted byte rather than the first eight, and whole list values.
+- `-log<n> <file>` redirects `PRINT` channel *n* (`PRINT #1, ...`), not diagnostics: errors and
+  warnings stay on stderr whatever `-log` says. Measured, because the name suggests otherwise.
+- Numbers up to 32 bits print exactly in listings and `PRINT` (`&FFFF1900` used to come out as
+  `4.29484e+09`).
+- The reserved-name relaxation of `7213c8b` is now the documented rule and reaches further: `FOR`
+  variables, macro and `FUNCTION` parameters, `ZA_AUTO` names and `-D` defines may all be spelled
+  like a keyword. Re-measured under 0.4.0: `FOR next = 0..2` runs, `-D clr=5` defines, `@next = 12`
+  assigns, bare `next = 12` is still `error: NEXT without a FOR`, and only `TRUE`, `FALSE` and `PI`
+  are refused outright (`error: Cannot reassign a constant`).
+
 ## What it costs, and what we did about it
 
 | BeebASM | Here |
 |---|---|
 | `ORG` / `SAVE` / `GUARD` / `CLEAR` | `SECTION name, org=, guard=, filename=, exec=` ... `ENDSECTION`. The filename **is** the request to save. Two sections may share an address, so `PANEL`'s `CLEAR` is gone |
 | `ASSERT cond` | A two-line `MACRO ASSERT` in `beeb.h.6502` (`IF NOT(c) : ERROR ... : ENDIF`), so all 16 assertions in `main.6502` read exactly as they did. Baron reports the `ERROR` and adds `Note: Expanded from here` at the call, so an assertion still names its own line |
-| `TIME$` | Gone. `tools/build_stamp.py` (run by the `Makefile` and `build.ps1`) writes `build/build_time.6502` - one line, `BUILD_TIME = "..."` - which `main.6502` includes. Not a `-D`: **Windows PowerShell cannot hand a quoted string containing spaces to a native exe** (three forms tried, all mangled). The time is the source's (`SOURCE_DATE_EPOCH`, else the last commit), so a rebuild is byte-identical on any machine |
+| `TIME$` | Gone. `tools/build_stamp.py` (run by the `Makefile` and `build.ps1`) writes `build/build_time.6502` - one line, `BUILD_TIME = "..."` - which `main.6502` includes. Not a `-D`: **Windows PowerShell 5.1 cannot hand a quoted string containing spaces to a native exe** (three forms tried, all mangled; PowerShell 7.3+ can, re-measured on 7.6.6 - [#3](https://github.com/waitingforvsync/baron/issues/3) above). The file stays regardless: it is what makes the rebuild byte-identical. The time is the source's (`SOURCE_DATE_EPOCH`, else the last commit), so a rebuild is byte-identical on any machine |
 | `INCLUDE` resolves from the working directory | Baron resolves it **relative to the including file**: `src/main.6502` says `INCLUDE "lib/irq.6502"`, not `"src/lib/irq.6502"`. Watch for this when forking a file into a different directory. A wrong path once surfaced as a confusing parse error downstream rather than "could not read"; that was [#1](https://github.com/waitingforvsync/baron/issues/1), fixed on 2026-09-13, and a bad path now says so at the `INCLUDE` |
 | `CPU 0` | NMOS is the default; `cmos = TRUE` on a section enables the 65C02 |
 | `P%` | `*` (both spellings work) |
@@ -149,9 +234,60 @@ clearly); `(var),Y` needs a `ZA_AUTO2`; an indexed store into the pool proves no
 analysis, which is why the blanket wipe went. Anything shared with the outside world - BASIC
 pokes, a fixed API - keeps a hand-picked address.
 
+### The two markers 0.4.0 added, and when a port needs them
+
+Both answer the same objection - "the allocator cannot see what my index register holds, or what
+my wipe loop just did" - by letting the source say it, so that Baron can check it rather than
+trust it. The template needs neither (it has no wipe loop and indexes nothing in the pool), which
+is why it is silent at `--warn 2`. A port transcribed from an original will very likely need both.
+
+**`ZA_WIPE`** - the answer to a conventional boot-time zero-page sweep, which is exactly the
+pattern [#2](https://github.com/waitingforvsync/baron/issues/2) was about. Written *directly
+after* the loop, it promises that every pool byte has just been freshly written:
+
+```
+    LDX #0 : TXA
+.wipe
+    STA &00,X : INX : CPX #&90 : BCC wipe
+    ZA_WIPE                     ; the loop above swept the pool - and says so
+```
+
+That does three things: it makes the wipe a legitimate first write (so a `ZA_ENTRY` routine may
+rely on a variable being zero), it ends every earlier value's live range, and it quiets the
+`--warn 2` fixed-address warning for the sweep's own stores - and only those; a stray pool store
+elsewhere still warns. It is **trusted**, and it is the bigger promise of the two: nothing
+survives it, so a value you wanted to keep across the wipe is already gone. Put it after the loop,
+never before - above it, it would vouch for bytes not yet written.
+
+The kit's template deleted its wipe loop instead, which is the better answer where it is
+available (six bytes of code, and every variable has a provable first write). `ZA_WIPE` is for
+the port where the wipe is load-bearing or not worth unpicking yet.
+
+**`ZA_INDEXEDBY`** - the answer to `LDA table,X`. That access is now warned about **at the default
+warning level**, where 0.3.0 said nothing, so this is the one a port will meet first. Declare what
+the register can hold and the access is checked instead of trusted:
+
+```
+ZA_AUTO 8, frames
+    LDA frames,X : ZA_INDEXEDBY 0..7    ; checked against the variable's 8 bytes
+```
+
+The operand flattens like `EQUB` data - a range, a list, a comma run, a symbol bound to one - and
+Baron refuses a declaration whose largest index reaches past the end of the variable, `(var,X)`
+included (the pair's second byte must fit too). **It goes after the access, not before**:
+measured here, `ZA_INDEXEDBY 0..1` written on the line above gets
+`error: ZA_INDEXEDBY must follow an indexed ZA_AUTO access`.
+
+One thing it does not do is discard: `STA arr,X : ZA_INDEXEDBY 0..7` bounds where the store can
+land but still writes one unknowable byte, so an array rebuilt through indexed stores wants
+`ZA_DISCARD` as well. The two answer different questions - where can an access land, and when is
+a value dead.
+
 Still unused, and worth a look when a real port needs them: `ZA_DISCARD` for arrays rebuilt
 through `STA arr,X`, `ZA_CANCALL`/`ZA_CANJUMP` for dispatch tables, `BITABS`/`BITZP` for the
-skip trick.
+skip trick. 0.4.0 also made `ZA_DISCARD` and `ZA_WIPE` placement path-accurate: **a marker
+belongs to the path it is written on, with a label as the pivot** - above the label it stays on
+the arm that falls in, below it it covers every path arriving there. Write whichever you mean.
 
 
 Also unused so far: lists and broadcasting (a sine table in one `EQUB`), user `FUNCTION`s,

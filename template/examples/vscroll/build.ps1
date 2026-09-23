@@ -38,7 +38,7 @@ function Find-Tool([string]$name) {
     return $null
 }
 
-# Baron: pin the version.
+# Baron: pin the version. 0.4.0 or newer, for --warn.
 $baron = Find-Tool 'baron'
 if (-not $baron) { throw "baron not found: set BARON, put baron.exe in the template's bin\ or on the PATH - releases at https://github.com/waitingforvsync/baron/releases" }
 
@@ -46,7 +46,7 @@ if (-not (Test-Path $build)) { New-Item -ItemType Directory -Path $build | Out-N
 
 Push-Location $root
 try {
-    & $baron -o $ssd --title VSCROLL --opt 3 --symbols $syms -v 'src\main.6502' |
+    & $baron --warn 2 -o $ssd --title VSCROLL --opt 3 --symbols $syms -v 'src\main.6502' |
         Out-File -FilePath $listing -Encoding utf8
     if ($LASTEXITCODE -ne 0) {
         Remove-Item $ssd, $syms -ErrorAction SilentlyContinue

@@ -113,8 +113,10 @@ $(CONFIG):
 
 # Baron's own image. NOT bootable: the loader expects a compressed PANEL.
 # A failed assembly removes it, so a half-written image never looks current.
+# --warn 2 adds Baron 0.4.0's opt-in audits (a store into the ZA_POOL at a
+# literal address); warnings go to stderr and never change the exit code.
 $(RAW): $(SRC) $(CONFIG)
-	$(BARON) -o $(RAW) --title $(TITLE) --opt $(BOOTOPT) \
+	$(BARON) --warn 2 -o $(RAW) --title $(TITLE) --opt $(BOOTOPT) \
 	    -D RELEASE=$(RELEASE) -D MASTER=$(MASTER) \
 	    --symbols $(SYMS) -v src/main.6502 \
 	    > $(LST) || { rm -f $(RAW) $(SYMS); exit 1; }

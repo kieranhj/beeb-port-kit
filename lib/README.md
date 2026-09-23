@@ -20,7 +20,7 @@ break.
 Nothing in here is believed without a measurement. Where a symbol is a name from a reference
 manual that neither port exercised, the header says so (`beeb.h.6502`'s five unused ACCCON bits).
 
-These files are **[Baron](https://github.com/waitingforvsync/baron)** syntax as of 2026-09-07
+These files are **[Baron](https://github.com/waitingforvsync/baron)** syntax, 0.4.0 (2026-09-23)
 (`.6502`, sections instead of `ORG`/`SAVE`, `ASSERT` as a macro in `beeb.h.6502`). The two
 shipping ports are BeebASM projects and their own copies are unaffected; a port that wants
 BeebASM reverses the table in `../docs/toolchain-baron.md`, which is six lines' work, or takes
@@ -82,13 +82,15 @@ both depackers, the ZX02 one twice (Paradroid instantiated its depacker twice), 
 `!BOOT` in both shapes. From the kit's root:
 
 ```
-baron -p lib/test/build -D RELEASE=0 lib/test/test_lib.6502
-baron -p lib/test/build -D RELEASE=1 lib/test/test_lib.6502
+baron --warn 2 -p lib/test/build -D RELEASE=0 lib/test/test_lib.6502
+baron --warn 2 -p lib/test/build -D RELEASE=1 lib/test/test_lib.6502
 ```
 
-Baron is silent on success and reports every error in one run, so check the **exit code** — in
-PowerShell do not redirect stderr or `$ErrorActionPreference = 'Stop'` throws on a successful
-build. `lib/test/build/` is scratch; `INFO` there is the stamp read back, and `BOOT` is the stub, with whichever
+`--warn 2` is what the template's builds pass; `lib/` is silent at that level, both values of
+`RELEASE` (measured 2026-09-23, Baron 0.4.0, and the three files come out byte-identical to the
+0.3.0-era binary's). Baron is silent on success, warnings never change the exit code, and every
+error of a run is reported in one go — so check the **exit code**. In PowerShell do not redirect
+stderr or `$ErrorActionPreference = 'Stop'` throws on a successful build. `lib/test/build/` is scratch; `INFO` there is the stamp read back, and `BOOT` is the stub, with whichever
 lines the `RELEASE` you passed puts in it.
 
 ## What is deliberately not here

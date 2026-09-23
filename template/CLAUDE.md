@@ -82,7 +82,7 @@ the same disc. A bare invocation:
 
 ```
 python tools/build_stamp.py build game.config RELEASE=0 MASTER=0
-baron -o build/game-raw.ssd --title GAME --opt 2 -D RELEASE=0 -D MASTER=0 \
+baron --warn 2 -o build/game-raw.ssd --title GAME --opt 2 -D RELEASE=0 -D MASTER=0 \
       --symbols build/game.symbols.json -v src/main.6502 > build/game.lst
 python tools/make_disc.py build/game-raw.ssd build/game.ssd
 ```
@@ -157,11 +157,23 @@ Seeded from the template's own Layer 0, jsbeeb `B-DFS1.2` model, 2026-09-07
 
 `docs/memory-map.md` has the table. In one line: zero page `&00-&0F` ours, and **allocated by
 Baron** from a `&00-&8F` pool rather than laid out by hand - declare a variable with `ZA_AUTO1`
-/ `ZA_AUTO2` and read its address off the `-v` listing; never hardcode one, and never let one
+/ `ZA_AUTO2` and read its address off the symbol dump; never hardcode one, and never let one
 decide the shape of the program (`IF v`, `SKIP v`, `org = v` are all refused). A routine the
 outside world enters needs `ZA_ENTRY`, an interrupt handler `ZA_INTERRUPT` - without it the
 allocator will happily put the handler's state on a byte the main loop is using, and says so
 with a warning first.
+
+**The builds pass `--warn 2`, and a clean build is one with no warnings at all.** Two of them are
+the ones a port meets, and each has an answer rather than a suppression:
+
+| Warning | What to write |
+|---|---|
+| `Unchecked indexed access into ZA_AUTO variable: 'v'` (default level) | `LDA v,X : ZA_INDEXEDBY 0..7` **after** the access - Baron then checks the range against the variable's width instead of trusting you |
+| `Store into the ZA_POOL at a fixed address: '&00'` (level 2 only) | If it is a deliberate boot-time zero-page sweep, `ZA_WIPE` directly after the loop. Otherwise it is the stray pointer the allocator cannot see - fix it |
+
+`../docs/toolchain-baron.md` has both in full. This template needs neither: it has no wipe loop
+(the allocator proved every variable's first write and the loop went) and indexes nothing in the
+pool.
 code `&1900-&1DBD` (1,213 bytes; 1,264 with `MASTER=1`) below the screen at `&3000`, `&3000`
 the loader's staging area at boot, panel `&4A00-&53FF`, strip `&5800-&7FFF`. `&0E00-&18FF` is
 DFS's on a Model B and is free once `release_fs` has had the filing system detach (`&B0-&CF` in

@@ -57,7 +57,8 @@ function Find-Tool([string]$name) {
 }
 
 # Baron: pin the version - the language is still moving (sections changed on
-# 2026-09-06).
+# 2026-09-06, the zero-page markers on 2026-09-23). 0.4.0 or newer: --warn is
+# 0.4.0's, and a 0.3.0 would fail on it rather than ignore it.
 $baron = Find-Tool 'baron'
 if (-not $baron) { throw "baron not found: set BARON, put baron.exe in bin\ or on the PATH - releases at https://github.com/waitingforvsync/baron/releases" }
 
@@ -95,7 +96,15 @@ try {
     # computed constants and the ZA_AUTO addresses that exist nowhere else.
     # That file is what tools/listing.py and the verification harnesses read
     # for addresses; the listing is for the opcode stream.
-    & $baron -o $raw --title $discTitle --opt 2 -D $relDef -D $masDef `
+    #   --warn 2 turns on the opt-in audits as well as the ordinary warnings:
+    # the one that matters here is a store into the ZA_POOL at a literal
+    # address, which is the stray pointer the allocator cannot otherwise see
+    # (waitingforvsync/baron#2). The template is silent at this level and a
+    # port should keep it that way - a deliberate zero-page wipe loop says so
+    # with ZA_WIPE, an indexed read with ZA_INDEXEDBY. Warnings go to STDERR
+    # and never change the exit code, and unlike beebasm's progress chatter
+    # they do not trip $ErrorActionPreference (checked, PowerShell 7.6).
+    & $baron --warn 2 -o $raw --title $discTitle --opt 2 -D $relDef -D $masDef `
         --symbols $syms -v 'src\main.6502' |
         Out-File -FilePath $listing -Encoding utf8
     if ($LASTEXITCODE -ne 0) {

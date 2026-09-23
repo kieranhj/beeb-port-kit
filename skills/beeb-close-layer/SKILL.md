@@ -63,8 +63,12 @@ next session re-litigating them.
    ```
 
    `--check` assembles and validates while writing nothing, which is what this loop wants; the
-   `PRINT` figures still come out. A BeebASM project runs `beebasm -i src/main.asm -do /tmp/o.ssd
-   -opt 2 -D ...` instead, where the `-do` exists only to stop loose `SAVE` files.
+   `PRINT` figures still come out. On Baron 0.4.0 add `--warn 2`, and expect the loop to be
+   silent apart from the figures - a zero-page warning in one flag combination and not another
+   is exactly what this sweep is for. (0.3.0 has no `--warn` and fails on it rather than
+   ignoring it; `..\..\Bin\baron.exe` is still 0.3.0, so check what the project resolves.)
+   A BeebASM project runs `beebasm -i src/main.asm -do /tmp/o.ssd -opt 2 -D ...` instead, where
+   the `-do` exists only to stop loose `SAVE` files.
 
    Adapt the symbol names to the project's. Add any new `DEBUG_` flag to `DEBUG_ANY` and to
    the build stamp (the template's `BUILD_STAMP` macro, which fills `INFO` and the release

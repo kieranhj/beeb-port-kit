@@ -123,9 +123,14 @@ from the request**, the kit's rule again). `scroll` 0 -> 200 in 50 fields of X.
 
 ## Build facts
 
-- **The assembler changed on 2026-09-07: BeebASM 1.11 -> Baron 0.3.0**, since 2026-09-14 the
-  build from `main@7213c8b` kept in this project's own `bin\` (`../../docs/toolchain-baron.md`
-  says why it is not in the shared `BEEB\Bin\`). Gated on byte-identity, both models:
+- **The assembler changed on 2026-09-07: BeebASM 1.11 -> Baron 0.3.0**, then `main@7213c8b` on
+  2026-09-14, and **0.4.0 on 2026-09-23** - the release binary, kept in this project's own `bin\`
+  (`../../docs/toolchain-baron.md` says why it is not in the shared `BEEB\Bin\`). The 0.4.0
+  upgrade moved no byte: `game.ssd`, `game-master.ssd`, both raw images, `game.symbols.json` and
+  `game.lst` all came out identical to the `7213c8b` build, and `make` still matches `build.ps1`
+  with `SOURCE_DATE_EPOCH` pinned. Both builds now pass `--warn 2` (Baron's opt-in audits, the
+  one that matters being a store into the `ZA_POOL` at a literal address); the template is silent
+  at that level. Gated on byte-identity, both models:
   `Game` (1,087 bytes DEV, 1,138 MASTER) and `PANEL` came out **identical to the BeebASM
   build**, `!BOOT` differing only in its timestamp, and both discs boot in jsbeeb with `&4A00`
   identical to `src/data/panel.bin` and `zxdst` at `&5400`. All of RELEASE=0/1 and MASTER=0/1
@@ -133,9 +138,10 @@ from the request**, the kit's rule again). `scroll` 0 -> 200 in 50 fields of X.
   `../../docs/toolchain-baron.md`.
 - `RELEASE` and `MASTER` passed every time (Baron has `DEFINED()`, so this is now a choice, not
   BeebASM's no-`IFDEF` workaround). The stamp's timestamp comes from the generated
-  `build/build_time.6502`, not `TIME$`: **Windows PowerShell cannot pass a quoted string with
+  `build/build_time.6502`, not `TIME$`: **Windows PowerShell 5.1 cannot pass a quoted string with
   spaces to a native exe** - three forms tried, all mangled - so it is a file, not a `-D`.
-  Keeping that file makes a rebuild byte-identical.
+  PowerShell 7.3+ can (re-measured on 7.6.6, 2026-09-23), but the file stays: it is what makes a
+  rebuild byte-identical, and it is the same code path under `make`.
 - Baron resolves `INCLUDE`/`INCBIN` **relative to the including file**, where BeebASM used the
   working directory: every include path in `src/` changed. A wrong path surfaced once as a
   confusing parse error at the first macro call, not as "could not read".

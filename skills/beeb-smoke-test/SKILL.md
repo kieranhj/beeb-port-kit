@@ -18,7 +18,10 @@ boot", a screenshot is enough. Everything past that point is verified against th
 1. **Build, and check the exit code.** Baron is silent on success and puts every error of a run
    on stderr as `file:line:col:`, so the exit code is the whole story. (A BeebASM project is the
    awkward one: it writes *progress* to stderr, so do not redirect that stream or
-   `$ErrorActionPreference = 'Stop'` throws on a successful build.) The build command and
+   `$ErrorActionPreference = 'Stop'` throws on a successful build.) **Read the warnings too**:
+   from Baron 0.4.0 the builds pass `--warn 2`, warnings go to stderr and never touch the exit
+   code, and an unchecked indexed access or a stray store into the zero-page pool is the
+   allocator telling you about a bug before the disc does (`docs/toolchain-baron.md`). The build command and
    the shipping image's name come from the project's `CLAUDE.md` ("Build" section), not from
    memory: `.\build.ps1` in both ports and the template, `make` on any POSIX system.
 
