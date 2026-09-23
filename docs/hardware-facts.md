@@ -1102,6 +1102,16 @@ again.*
   now give the documented 100 / 50 / 0 / 200. **An all-zero harness result is a boot that
   did not happen, not a dead game** - check `&1900` before believing it.
 
+  The TYPE CHANGE itself is not a jsbeeb bug - it is in v2.0.0's release notes as a breaking
+  change, and the note even names "anything driving jsbeeb headlessly by key code, jsbeeb-mcp
+  included". The kit only met it unprepared because the harnesses resolve the highest jsbeeb in
+  the npx cache and the MCP was unpinned, so the version moved on its own. Both now pinned.
+  What IS reported is the silence: `via.js`'s `set()` ends `if (!mapping) return;`, so a typo,
+  a `null` or a pre-2.0 integer all press nothing and say nothing -
+  [mattgodbolt/jsbeeb#1172](https://github.com/mattgodbolt/jsbeeb/issues/1172), asking it to
+  throw. jsbeeb-mcp already refuses an unknown key name with the full list for the model, so
+  the strictness exists one layer up.
+
   **jsbeeb-mcp 4.0.0 (2026-09-23) renamed the key names** - the machine's own now, digits `K0`-`K9`,
   `CAPSLOCK` not `CAPS_LOCK`, no `BACKSPACE`/`QUOTE`/`EQUALS`, and an unknown name is refused with
   the full list for the model. Re-measured there: `X` gives the same col, row, internal and INKEY
