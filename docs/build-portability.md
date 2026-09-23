@@ -123,11 +123,18 @@ test to run before asking anyone else to try a build.
     - `py/tests/test_zx02.py` compares the STREAM rather than the file, so its tolerance
       can no longer hide an uninitialised byte that happens to be zero.
 
-    Still open, and small: the template's own `PANEL` never showed it (slack 0), which is
-    why the kit never saw this; and on a pathological synthetic input (19,200 bytes of a
-    repeated 2,560-byte pattern, compressing 194:1) `zx02.py` and upstream's `dzx02` both
-    stop decoding early, which looks like a long-match edge case in the decoders and is
-    unrelated to this bug - no real file in the corpus triggers it.
+    **Reported upstream as [dmsc/zx02#11](https://github.com/dmsc/zx02/issues/11)**
+    (2026-09-23). It is not a duplicate: nothing upstream covers it, and `f4427e7`'s own
+    message calls it "the compressed output was one byte bigger than needed" - the size
+    symptom, not the uninitialised read. The ask there is a tagged release, since `main`
+    is 26 commits ahead of a v2 that is four years old and is what the download gives you.
+
+    Two footnotes. The template's own `PANEL` never showed any of this (slack 0), which is
+    why the kit did not find it first. And a highly repetitive input - 19,200 bytes of a
+    repeated 2,560-byte pattern - makes v2 emit a stream its own decoders refuse; that is
+    **not** this bug and not a decoder fault, it is
+    [dmsc/zx02#8](https://github.com/dmsc/zx02/issues/8), reported by someone else and
+    already fixed on `main`. Another reason to want the release.
 
 17. **Line endings are fixed by `.gitattributes`, not by each clone's settings.** Git on
     Windows (`core.autocrlf=true`, the installer's default) checks text out with CRLF.

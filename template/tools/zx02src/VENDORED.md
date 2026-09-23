@@ -48,6 +48,13 @@ a trailing pad. Neither was right: the exe was writing one byte of uninitialised
 (`0x65` in one run, `0x3D` in the next). With the patch the exe and `zx02.py` agree on that
 file **byte for byte**, so the Python port was correct all along.
 
+Reported upstream as **[dmsc/zx02#11](https://github.com/dmsc/zx02/issues/11)** (2026-09-23),
+asking for a tagged release: `main` has carried the fix since `f4427e7` (2024-03-01) but the
+newest tag is still `v2` of 2022-07-22, which is what the download gives you. Separately,
+[#8](https://github.com/dmsc/zx02/issues/8) - v2 mis-compresses very repetitive files, so its
+own decoders refuse the stream - is also fixed on `main` and also unreleased; this kit's data
+does not trigger it, but a port compressing a large run of zeroes would.
+
 On the next upstream tag, drop this patch if it carries the fix, and re-run the comparison
 below - the estimate change in `main` may move streams, which moves the disc.
 
