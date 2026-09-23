@@ -714,6 +714,42 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   Measured: 2026-09-09, jsbeeb-mcp 3.4.0 / jsbeeb 1.25.0, `B-DFS1.2`, MODE 7, purpose-built
   one-file disc. Load before the takeover anyway, for the reasons that do hold: DFS pages its ROM
   over `&8000`, its workspace is live until the last call returns, and loads cost whole frames.
+- **But a null IRQ1V handler is NOT the same as no handler, and on a Master it hangs.** The entry
+  above is a Model B with an 8271. On a **Master 128 (MOS 3.20, Acorn 1770 DFS)** the same idea in
+  the same shape does not survive, and the rule is narrower than "interrupts are not needed":
+
+  | across a 26-sector `*LOAD` | result |
+  |---|---|
+  | the MOS running normally | checksum `&7B0F` |
+  | `SEI` … `CLI` around the call | `&7B0F`, **byte-identical** |
+  | `IRQ1V` on a **null** handler (clears both VIAs' flags, `RTI`) | **HUNG** - the MOS spinning in its service-call dispatcher at `$EE72`-`$EE9C`, `JSR $8003` round every bank |
+  | `IRQ1V` on a **chaining** handler (does its work, then `JMP (old vector)`), MOS VIA state untouched | `&7B0F`, byte-identical - our code ran ~307 times, `TIME` advanced 239 cs, and the MOS wrote **35 bytes of `&0800-&08FF`** |
+  | the chaining handler **+ System VIA T1's latch changed** | **HUNG**, the same `$8003` spin |
+  | the chaining handler **+ T1's interrupt disabled** (IER `&40`) | **HUNG**, inside the DFS ROM at `$8673` |
+
+  So: **either mask, or chain and change nothing.** All three in-between configurations - swallowing
+  the MOS's interrupts, a changed T1 latch, T1's interrupt disabled - hung, in three different
+  places. **A rupture's own T1 cadence therefore cannot run across a filing-system call.** And a
+  chaining handler hands the 100 Hz tick back, so the MOS's sound driver writes `&0800-&08FF`
+  again: anything of yours parked there must be saved across the call (Paradroid's own bug, and
+  1942's `WAVELO`). The `SEI` run is sound - `TIME` moved 1 cs over a load taking ~150, and `P` on
+  return from `OSCLI` still had I set - so the transfer really did run masked; the 1770 transfers
+  on NMI, which `SEI` does not touch.
+
+  **The cost of a call, which kills the obvious workaround** of loading in chunks and servicing a
+  player between them: ~15 centiseconds of fixed overhead plus ~4 a sector, so **a one-sector call
+  already blocks for nine fields** (1 sector 18 cs / 9 fields; 2 / 20 / 10; 3 / 38 / 19; 26 / 120 /
+  60). Chunking breaks a tune anyway and makes the load longer.
+
+  Measured: 2026-09-13 by **1942-beeb** (`docs/note-to-kit.md`), jsbeeb via jsbeeb-mcp, Master 128
+  / MOS 3.20 / Acorn 1770 DFS, MODE 7, its own disc. **Not re-measured here**, and the three hangs
+  are jsbeeb rather than hardware - they want a b2 or real-Master run before anything is designed
+  against them. Nothing 1942 ships depends on them: its stage-seam load rests on the masked row,
+  which is the one the kit reached independently on a B. Which MOS state machine spins is not
+  chased: the dispatcher saves `&F4` and `&FE34` and calls `$8003` in every bank, so it is the
+  service-call loop rather than a DFS wait. Worth bisecting which of the two VIA IFR writes does
+  it (the System VIA's is the suspect), and worth re-running on `B-DFS1.2` to see whether the B
+  survives by luck or by design.
 - **The MOS's disc code needs VSync - not reproducible on current jsbeeb.** The original: with the
   CRTC's R7 parked where VSync never fires, the second `*LOAD` hung forever in DFS's 8271 status
   poll at `&ACAE`, and bisecting the CRTC writes one at a time showed R7 was the trigger.

@@ -37,11 +37,24 @@
 \ *	  - T1 continuous (ACR bit 6 set, bit 7 clear) reloads from its
 \ *	    latch on every underflow, so a handler that overruns cannot
 \ *	    shift the cadence; only the latch writes do.
-\ *	  - FILING-SYSTEM CALLS MUST PRECEDE install_irq. The DFS needs the
-\ *	    MOS's interrupt (its timeouts run off the 100 Hz tick) and a
-\ *	    load after install hangs. Both ports load everything, then
-\ *	    install. Edge, which takes HAZEL, may not touch the disc again
-\ *	    at all (loader.6502).
+\ *	  - LOAD BEFORE install_irq. NOT because the DFS needs the MOS's
+\ *	    interrupt - that claim was RETRACTED on 2026-09-09, measured
+\ *	    (hardware-facts.md) - but for the reasons that do hold: the DFS
+\ *	    pages its ROM over &8000, its workspace is live until the last
+\ *	    call returns, and a load costs whole frames. Both ports load
+\ *	    everything, then install. Edge, which takes HAZEL, may not
+\ *	    touch the disc again at all (loader.6502).
+\ *	  - A LOAD AFTER install_irq: EITHER MASK, OR CHAIN AND CHANGE
+\ *	    NOTHING. SEI across the call is byte-exact. If your own code
+\ *	    must run during the load, end the handler JMP (old vector) and
+\ *	    leave the MOS's VIA state ALONE. A handler that SWALLOWS the
+\ *	    MOS's interrupts hung a Master mid-load, and so did changing
+\ *	    System VIA T1's latch or disabling its interrupt - so a
+\ *	    rupture's own T1 cadence cannot run across a filing-system
+\ *	    call. And a chaining handler hands the MOS its tick back, which
+\ *	    means its sound driver writes &0800-&08FF: save anything of
+\ *	    yours parked there. (1942-beeb, 2026-09-13, jsbeeb, Master 128
+\ *	    / MOS 3.20 / 1770 DFS; hardware-facts.md has the table.)
 \ *	  - THE MOS SOUND WORKSPACE AT &0800 MUST BE FLUSHED BEFORE
 \ *	    uninstall_irq, if anything of yours has been written over
 \ *	    &0800-&08FF. The moment the MOS gets its tick back its sound

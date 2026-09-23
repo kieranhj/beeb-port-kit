@@ -11,9 +11,11 @@
 \ *	would land in the ROM socket, and on a Master HAZEL is the filing
 \ *	system's own workspace. So each stages in RAM and is unpacked from
 \ *	there. ALL OF IT RUNS BEFORE install_irq (irq.6502) - not because
-\ *	the DFS needs the MOS's interrupt (measured 2026-09-09: it loads
-\ *	with IRQ1V taken, and with interrupts masked outright), but because
-\ *	a load costs whole frames.
+\ *	the DFS needs the MOS's interrupt (measured 2026-09-09: on a B it
+\ *	loads with IRQ1V taken, and with interrupts masked outright), but
+\ *	because a load costs whole frames. If you DO load after the
+\ *	takeover: mask with SEI, or chain to the MOS and change nothing -
+\ *	a handler that swallows its interrupts hangs a Master (irq.6502).
 \ *
 \ *	WHERE IT CAME FROM.
 \ *	  https://github.com/kieranhj/edge-beeb/blob/master/src/main.asm

@@ -299,9 +299,22 @@ NMI-driven, and NMI is reachable in all three cases.
 Measured: 2026-09-09, jsbeeb-mcp 3.4.0 / jsbeeb 1.25.0, `B-DFS1.2`, MODE 7, purpose-built one-file
 disc.
 
+**That is a Model B with an 8271. On a Master the null handler HANGS.** Same idea, same shape,
+Master 128 / MOS 3.20 / Acorn 1770 DFS: masked with `SEI` the load is byte-identical, and a
+handler that does its own work and ends `JMP (old vector)` is byte-identical too - but a handler
+that *swallows* the MOS's interrupts never returned from the load, with the MOS spinning in its
+service-call dispatcher. So did changing System VIA T1's latch under a chaining handler, and so
+did disabling T1's interrupt. **Either mask, or chain and change nothing** - which also means a
+rupture's own T1 cadence cannot run across a filing-system call, and that a chaining handler
+hands back the tick that writes `&0800-&08FF`. Chunking is no escape: a call costs ~15
+centiseconds plus ~4 a sector, so even a one-sector load blocks for nine fields.
+Measured: 2026-09-13 by 1942-beeb, jsbeeb; `docs/hardware-facts.md` has the table, the provenance
+and the caveat that the three hangs want a b2 or real-Master run before anything is designed
+against them.
+
 Load before you take the vector anyway - the reasons that survive are real ones: DFS pages its ROM
 in over `&8000`, its workspace is live until the last call returns, and a load in the middle of a
-running display costs whole frames. Just do not expect a takeover to break the disc.
+running display costs whole frames. Just do not expect a takeover to break the disc **on a B**.
 
 The frame lock lives in the VSync handler: the main loop parks a finished frame and a ready flag,
 the handler flips the display when `FRAME_LOCK` fields have passed. A slow frame costs whole
