@@ -1048,6 +1048,10 @@ again.*
   `{col: 2, row: 4, name: "X", internal: 66, inkey: -67}`; `keyboard_state` then listed exactly
   that key with `typing_pending: false`; `release_all_keys` reported it released. The internal
   number agrees with section 7's table, which is a free cross-check of both.
+  **jsbeeb-mcp 4.0.0 (2026-09-23) renamed the key names** - the machine's own now, digits `K0`-`K9`,
+  `CAPSLOCK` not `CAPS_LOCK`, no `BACKSPACE`/`QUOTE`/`EQUALS`, and an unknown name is refused with
+  the full list for the model. Re-measured there: `X` gives the same col, row, internal and INKEY
+  as above, so **only the names moved, not the numbers**. `skills/beeb-key-numbers` has the set.
   Measured: 2026-09-07, jsbeeb MCP 3.3.0 / jsbeeb 1.24.1, the kit's template. Save at the idle
   state; hold X; 50 frames -> `scroll` 200, `frame_count` 113. Restore -> `scroll` 0,
   `elapsed_cycles` back to its saved value to the cycle, PC and A/X/Y identical. 50 frames again

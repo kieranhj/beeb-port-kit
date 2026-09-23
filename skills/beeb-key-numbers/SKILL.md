@@ -19,9 +19,10 @@ from the System VIA, so the internal matrix number is what the code carries.
 and `row`, and **reports the matrix keys that went down, with name and both numbers** - so a name
 can be measured against its numbers in one call, without the BASIC scan below. Keep the scan for
 what the *machine's own* scan sees, and to confirm the MCP's mapping. `keyboard_state` reports
-what is held; `release_all_keys` clears it (jsbeeb-mcp#33, #34). Measured 2026-09-07 on 3.4.0:
-`key_down key:"X"` -> `{col: 2, row: 4, name: "X", internal: 66, inkey: -67}`, agreeing with the
-table in `docs/hardware-facts.md` section 7.
+what is held; `release_all_keys` clears it (jsbeeb-mcp#33, #34). Measured 2026-09-07 on 3.4.0
+and again 2026-09-23 on 4.0.0: `key_down key:"X"` -> `{col: 2, row: 4, name: "X", internal: 66,
+inkey: -67}`, agreeing with the table in `docs/hardware-facts.md` section 7. **4.0.0 renamed some
+keys** - step 3 has the current set.
 
 ## Steps
 
@@ -53,8 +54,19 @@ table in `docs/hardware-facts.md` section 7.
    ```
 
    `run_until_prompt` will not return while the loop runs; read the text from `run_for_cycles`
-   (or `screenshot`). The MCP's key names are `A`-`Z`, `0`-`9`, `SPACE`, `RETURN`, `ESCAPE`,
-   `DELETE`, `TAB`, `CAPS_LOCK`, the cursor keys, `F0`-`F9`, `SHIFT`, `CTRL`.
+   (or `screenshot`).
+
+   **The key names are the machine's own, and jsbeeb-mcp 4.0.0 changed the table.** They are
+   `A`-`Z`, **`K0`-`K9` for the digits** (not `0`-`9`), `SPACE`, `RETURN`, `ESCAPE`, `DELETE`,
+   `COPY`, `TAB`, **`CAPSLOCK`** (not `CAPS_LOCK`), `SHIFTLOCK`, the cursor keys, `F0`-`F9`,
+   `SHIFT`, `CTRL`, the engraved punctuation (`COMMA`, `PERIOD`, `SLASH`, `MINUS`,
+   `SEMICOLON_PLUS`, `COLON_STAR`, `AT`, `LEFT_SQUARE_BRACKET`, `RIGHT_SQUARE_BRACKET`,
+   `UNDERSCORE_POUND`, `HAT_TILDE`, `PIPE_BACKSLASH`) and the Master's numpad. There is no
+   `BACKSPACE`, `QUOTE` or `EQUALS`. **Do not guess a name**: an unknown one is refused with the
+   whole list for the model, which is the fastest way to read the table. Measured 2026-09-23 on
+   4.0.0: `key_down key:"CAPS_LOCK"` is refused, `key:"K1"` gives
+   `{col: 0, row: 3, internal: 48, inkey: -49}`, and `key:"X"` still gives
+   `{col: 2, row: 4, internal: 66, inkey: -67}` - **the numbers did not move, only the names**.
 
 4. **Hold each key the project needs and note the number.** One key at a time; `key_up` before
    the next, because a key still held changes what the next scan reports (and a held key at
