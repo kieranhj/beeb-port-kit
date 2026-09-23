@@ -252,18 +252,28 @@ def find_exe(candidates):
     return None
 
 
-def compress(raw, exe=None, name="stream"):
+def compress(raw, exe=None, name="stream", env=None):
     """`raw` as a default-mode ZX02 stream. With `exe`, the reference
     compressor is run and its output verified by zx02.decompress(); without,
     zx02.compress() does it in Python (much slower on 16K, and never worse -
     see below).
 
-    The released zx02.exe (v2) writes a trailing 0 on some inputs where
-    zx02.py stops one byte earlier (1 file in 29 measured, 2026-09-11). Both
-    decode identically and the round-trip below is the correctness check -
-    but a BUILD must use one of them, always: choosing whichever is installed
-    makes the disc depend on the machine. make_disc.py therefore insists on
-    the reference, built from tools/zx02src/."""
+    The released zx02.exe (v2) writes EXTRA BYTES on some inputs where
+    zx02.py stops earlier (1 file in 29 measured, 2026-09-11; 9 of 31 in a
+    wider run 2026-09-23). That was recorded here as "a trailing 0", and it
+    was not: compress.c sizes the output buffer from an ESTIMATE of the bit
+    length and zx02.c writes exactly that many bytes, so the slack is
+    uninitialised malloc memory. It is often 0 and sometimes not - Edge's
+    tiles.chr.bin gained an ASCII 'e' (0x65) - and it follows the
+    environment the compressor ran in, which breaks reproducibility outright
+    (docs/build-portability.md rule 16; puzzle-beeble BUGS.md #2).
+    tools/zx02src/ carries the one-line fix, after which the exe agrees with
+    zx02.py BYTE FOR BYTE on that file. So zx02.py was right all along.
+
+    A BUILD must use one compressor, always: choosing whichever is installed
+    makes the disc depend on the machine. make_disc.py insists on the
+    reference built from tools/zx02src/, and re-runs it under a changed
+    environment to prove the answer does not move."""
     raw = bytes(raw)
     if exe is None:
         packed = zx02.compress(raw)
@@ -273,7 +283,7 @@ def compress(raw, exe=None, name="stream"):
             dst = Path(td) / "out.packed"
             src.write_bytes(raw)
             subprocess.run([str(exe), "-f", str(src), str(dst)],
-                           check=True, capture_output=True)
+                           check=True, capture_output=True, env=env)
             packed = dst.read_bytes()
     if zx02.decompress(packed) != raw:
         raise DiscError(f"{name}: stream fails the zx02.py round-trip")

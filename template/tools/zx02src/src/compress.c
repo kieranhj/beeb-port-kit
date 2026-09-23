@@ -216,6 +216,24 @@ unsigned char *compress(BLOCK *optimal, zx02_state *s, int *output_size, int *de
         write_interlaced_elias_gamma(s, 256);
 
     DPRINTF("\nbit size TOTAL: %d bits (%d bytes)\n", bit_size, (bit_size + 7) / 8);
+    /*
+     * LOCAL PATCH - beeb-port-kit, 2026-09-23. Upstream main fixes this the
+     * same way (dmsc/zx02, post-v2, unreleased); v2 does not have it.
+     *
+     * *output_size was set above from optimal->bits: an ESTIMATE, and so an
+     * allocation BOUND. But zx02.c writes exactly *output_size bytes to the
+     * file, and the writer only filled output_index of them. Where the
+     * estimate over-predicts, the slack is uninitialised malloc memory and
+     * it is written straight into the .zx02 - on Windows, readable
+     * fragments of the process environment block, so the same input gave
+     * different output in different shells (125 bytes of 224 on a 19,200-
+     * byte input; 0 on the template's panel, which is why it never showed).
+     *
+     * Report the real length. This changes no emitted stream byte - it only
+     * stops the garbage tail - and it fixes -b too, where reverse() would
+     * otherwise bring that tail to the front. See ../VENDORED.md.
+     */
+    *output_size = output_index;
     /* done! */
     return output_data;
 }

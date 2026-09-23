@@ -246,19 +246,29 @@ def find_exe(candidates):
 find_zx0_exe = find_exe          # the name the two shipping ports call it by
 
 
-def compress(raw, exe=None, name="stream", codec=zx02):
+def compress(raw, exe=None, name="stream", codec=zx02, env=None):
     """`raw` as a default-mode stream of `codec` (zx02, or zx0 for one of the
     shipping discs). With `exe`, that compressor is run and its output
     verified by codec.decompress(); without, codec.compress() does it in
     Python (much slower on 16K, and never worse - see below).
 
-    The released zx02.exe (v2) writes a trailing 0 on some inputs where
-    zx02.py stops one byte earlier (1 file in 29 measured, 2026-09-11). Both
-    decode identically and the round-trip below is the correctness check -
-    but a BUILD must use one of them, always: choosing whichever is installed
+    The released zx02.exe (v2) writes EXTRA BYTES on some inputs where
+    zx02.py stops earlier (1 file in 29 measured, 2026-09-11; 9 of 31 in a
+    wider run 2026-09-23). That was recorded here as "a trailing 0", and it
+    was not: compress.c sizes its output buffer from an ESTIMATE of the bit
+    length and zx02.c then writes exactly that many bytes, so the slack is
+    uninitialised malloc memory. Often 0, sometimes not - Edge's
+    tiles.chr.bin gained an ASCII 'e' (0x65) - and it follows the
+    environment the compressor ran in, which breaks reproducibility
+    (docs/build-portability.md rule 16; puzzle-beeble BUGS.md #2).
+    template/tools/zx02src/ carries the one-line fix, after which the exe
+    agrees with zx02.py BYTE FOR BYTE on that file - zx02.py was right.
+
+    A BUILD must use one compressor, always: choosing whichever is installed
     makes the disc depend on the machine. The template builds the reference
     from vendored source and passes it as `exe` (docs/build-portability.md
-    rule 14)."""
+    rule 14), and re-runs it under a changed environment to prove the answer
+    does not move."""
     raw = bytes(raw)
     if exe is None:
         packed = codec.compress(raw)
@@ -268,7 +278,7 @@ def compress(raw, exe=None, name="stream", codec=zx02):
             dst = Path(td) / "out.packed"
             src.write_bytes(raw)
             subprocess.run([str(exe), "-f", str(src), str(dst)],
-                           check=True, capture_output=True)
+                           check=True, capture_output=True, env=env)
             packed = dst.read_bytes()
     if codec.decompress(packed) != raw:
         raise DiscError(f"{name}: stream fails the {codec.__name__} round-trip")

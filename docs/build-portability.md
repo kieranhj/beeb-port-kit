@@ -85,21 +85,49 @@ test to run before asking anyone else to try a build.
     SHA256s, then says either "identical images" or which file differs. On the template,
     `make` and `build.ps1` with the same `SOURCE_DATE_EPOCH` give `26cf9e27...` (2026-09-11).
 
-    **Open (from puzzle-beeble, its `BUGS.md` #2, 2026-09-23): the released `zx02.exe` breaks
-    rule 16.** Its output's last two bytes follow the environment it runs in: the same
-    `zx02.exe -f` on the same 19,200-byte file ends `AA A0 54 45` from Git bash, `AA A0 00 54`
-    from PowerShell and `AA A0 33 00` under `env -i`, each repeatable in its own shell, so it
-    reads memory it never wrote. So the port's `make` and `build.ps1` images differed in that
-    file's last two bytes (`dfs.py compare`: `SCREEN` from `+0x473`). Every variant decodes to
-    the same data (`make_disc.py`'s round-trip passes), so no game is affected; the
-    reproducibility claim is. The port pointed `ZX02` at a released `zx02.exe`
-    (`..\Bin\zx02.exe`, described in its `local.ps1` as "the same bytes as tools\zx02src"),
-    which is exactly what rule 14 says not to do. **The vendored source, built with MSYS2's
-    ucrt64 gcc `-O`, ended `AA A0 00 00` in all three environments** - consistent, though
-    not proved deterministic. To do in the kit: have `make_disc.py` refuse a compressor that is
-    not `bin/zx02` built from `tools/zx02src/` (or say so loudly), and look in the source for
-    the uninitialised read - probably the final bit-reservoir byte - so the vendored build
-    cannot depend on the allocator's luck either.
+    **CLOSED (found by puzzle-beeble, its `BUGS.md` #2; diagnosed and fixed here,
+    2026-09-23): the released `zx02.exe` broke rule 16, and it was not the tail.**
+
+    `src/compress.c` sets `*output_size` from `optimal->bits` - an ESTIMATE, and so an
+    allocation BOUND - and `src/zx02.c` then writes exactly `*output_size` bytes to the
+    file, while the writer only filled `output_index` of them. **The slack is
+    uninitialised `malloc` memory, written straight into the `.zx02`.** On Windows it is
+    commonly a readable piece of the process environment block, which is why the same
+    input gave a different file in every shell. Measured by instrumenting the two
+    counters: a 19,200-byte input predicted 224 bytes and emitted **99**, so 125 bytes -
+    more than half the file - were heap, and the tails read as ASCII (`6f 63 61 6c` =
+    "ocal", `4d 6f 64 75` = "Modu"). Even adding one short environment variable moved it.
+
+    It is not rare, and not confined to the tail: over **31 real data files** from this
+    kit and edge-beeb, **9 carried surplus bytes**, 1 to 8 each. So a published disc image
+    could carry fragments of whoever's environment built it.
+
+    **It also settles an old question the other way.** `VENDORED.md` used to say
+    `tools/zx02.py` "ended one byte shorter" than the reference on Edge's `tiles.chr.bin`,
+    and `dfs.py` called it a trailing pad. Neither: the exe was writing one byte of
+    uninitialised memory - `0x65` in one run, `0x3D` in the next. **The Python port was
+    right all along**, and with the fix the two agree on that file byte for byte.
+
+    Fixed, three ways:
+
+    - `tools/zx02src/src/compress.c` carries a one-line patch, `*output_size =
+      output_index;`, recorded in `VENDORED.md`. Upstream `main` does the same, but there
+      is no tag after `v2` and `main` also changes the size ESTIMATE, which would move
+      streams and therefore the disc. The patch moves **no emitted stream byte**.
+    - `make_disc.py` refuses any stream with bytes after its END marker, whatever
+      compressor produced it. The first attempt re-ran the compressor under a changed
+      environment and compared - **that does not work**, because the leaked bytes often
+      repeat, and it passed a compressor known to be broken. Testing the stream itself is
+      deterministic: `zx02.py` stops at the END marker, so the shortest prefix that still
+      decodes is the real length.
+    - `py/tests/test_zx02.py` compares the STREAM rather than the file, so its tolerance
+      can no longer hide an uninitialised byte that happens to be zero.
+
+    Still open, and small: the template's own `PANEL` never showed it (slack 0), which is
+    why the kit never saw this; and on a pathological synthetic input (19,200 bytes of a
+    repeated 2,560-byte pattern, compressing 194:1) `zx02.py` and upstream's `dzx02` both
+    stop decoding early, which looks like a long-match edge case in the decoders and is
+    unrelated to this bug - no real file in the corpus triggers it.
 
 17. **Line endings are fixed by `.gitattributes`, not by each clone's settings.** Git on
     Windows (`core.autocrlf=true`, the installer's default) checks text out with CRLF.

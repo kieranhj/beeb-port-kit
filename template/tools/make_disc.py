@@ -48,7 +48,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-import dfs                                          # noqa: E402
+import dfs
+import zx02                                          # noqa: E402
 
 # ---- the project's tables: must match src/main.6502 ---------------------
 LOADER_STAGE = 0x3000           # LOADER_STAGE in main.6502: the blanked screen
@@ -87,6 +88,53 @@ def find_zx02(requested):
     return Path(found)
 
 
+def check_no_surplus(zx02_exe, name, raw, packed):
+    """Refuse a stream with bytes after its END marker. Rule 16.
+
+    The released v2 `zx02.exe` writes some. `compress.c` sizes its output
+    buffer from an ESTIMATE of the bit length and `zx02.c` then writes
+    exactly that many bytes, so where the estimate over-predicts, the slack
+    is uninitialised `malloc` memory - on Windows, readable fragments of the
+    process environment block. So the same input gives a different file in a
+    different shell (125 bytes of 224 on a 19,200-byte input), and Edge's
+    `tiles.chr.bin` came out one byte long, that byte being `0x65`, an ASCII
+    'e'. Nine of 31 real data files were affected. Found by puzzle-beeble
+    (`BUGS.md` #2), diagnosed here 2026-09-23; `tools/zx02src/` now carries
+    the one-line fix and `docs/build-portability.md` rule 16 has the detail.
+
+    Detecting it by re-running under a changed environment does NOT work:
+    tried first, and the leaked bytes often repeat, so the check passed on a
+    compressor known to be broken. This tests the stream itself instead.
+    zx02.py stops at the END marker, so the shortest prefix that still
+    decodes to `raw` is the real length; anything past it is surplus, and a
+    correct compressor never emits any. Deterministic, and it costs a few
+    decodes of an already-decoded stream.
+    """
+    n = len(packed)
+    while n > 1:
+        try:
+            if zx02.decompress(packed[:n - 1]) != raw:
+                break
+        except Exception:
+            break
+        n -= 1
+    if n == len(packed):
+        return
+    surplus = packed[n:]
+    raise SystemExit(
+        "make_disc: %s emitted %d SURPLUS BYTES after the END marker of %r "
+        "(%d bytes written, %d needed): %s\n"
+        "  That slack is uninitialised memory - on Windows often a piece of "
+        "the environment block - so the same input gives a different disc in "
+        "a different shell, and no two machines build the same image "
+        "(docs/build-portability.md rule 16).\n"
+        "  Build the compressor from tools/zx02src/, which carries the fix "
+        "(`make` puts it in bin/zx02; build.ps1 does the same), and point "
+        "$ZX02 at that rather than at a released zx02.exe."
+        % (zx02_exe, len(surplus), name, len(packed), n,
+           " ".join("%02X" % b for b in surplus[:16])))
+
+
 def write_atomic(path, data):
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_bytes(data)
@@ -115,6 +163,7 @@ def main():
         entry = img.files[name]
         raw = entry.data
         packed = dfs.compress(raw, zx02_exe, name)         # round-trip checked
+        check_no_surplus(zx02_exe, name, raw, packed)      # rule 16, measured
         info = dfs.check_stream(name, stream, packed, dest, raw,
                                 top=STREAM_TOP[stream])   # refuses an overlap
         entry.replace(packed, load=stream, exec=stream)

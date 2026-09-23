@@ -48,12 +48,27 @@ class RoundTrip(unittest.TestCase):
             ref = dst.read_bytes()
         mine = zx02.compress(data)
         self.assertEqual(zx02.decompress(ref), data)
-        # The released v2 exe pads a trailing 0 on some inputs where zx02.py
-        # stops one byte earlier; both streams decode to the same bytes and
-        # the depacker stops at the end marker either way. Anything else is a
-        # format disagreement and must fail.
-        self.assertIn(ref, (mine, mine + b"\x00"),
-                      "python stream differs from zx02.exe's by more than the pad")
+        # The released v2 exe writes SURPLUS BYTES after the END marker on
+        # some inputs: compress.c sizes the buffer from an estimate of the
+        # bit length and zx02.c writes all of it, so the slack is
+        # uninitialised memory. It was recorded here as "a trailing 0"; it
+        # is not, and it varies run to run - Edge's tiles.chr.bin got 0x65
+        # once and 0x3D the next. So compare the STREAM, not the file:
+        # strip anything past the END marker, then demand exact equality.
+        # Diagnosed 2026-09-23 from puzzle-beeble BUGS.md #2;
+        # template/tools/zx02src/ carries the fix, after which a compressor
+        # built from it matches zx02.py byte for byte.
+        stream = ref
+        while len(stream) > 1:
+            try:
+                if zx02.decompress(stream[:-1]) != data:
+                    break
+            except Exception:
+                break
+            stream = stream[:-1]
+        self.assertEqual(stream, mine,
+                         "python stream differs from zx02.exe's by more "
+                         "than the uninitialised tail")
 
 
 if __name__ == "__main__":
