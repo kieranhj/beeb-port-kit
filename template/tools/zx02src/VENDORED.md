@@ -1,7 +1,7 @@
 # zx02, vendored
 
 Daniel Serpell's ZX02 compressor, from https://github.com/dmsc/zx02 at tag `v2`
-(commit `b665e0aa1efaffd9679fbb6ab93ffcdfe8676223`), with **one local patch** (below). MIT (`LICENSE`), over
+(commit `b665e0aa1efaffd9679fbb6ab93ffcdfe8676223`), with **two local patches** (below). MIT (`LICENSE`), over
 Einar Saukas' BSD-3 ZX0 (`LICENSE.zx0`). `src/dzx02.c` is upstream's decompressor; the build
 does not use it.
 
@@ -15,7 +15,7 @@ checked by hash from another machine. So the build now has one compressor, this 
 builds it into `bin/zx02` and every rule that compresses depends on it; `build.ps1` builds it
 with a C compiler if `bin\zx02.exe` is missing.
 
-## The one local patch (2026-09-23)
+## The two local patches (2026-09-23)
 
 `src/compress.c`, one line: `*output_size = output_index;` before the return.
 
@@ -47,6 +47,33 @@ the 9 that did are the same bytes with the surplus gone.
 a trailing pad. Neither was right: the exe was writing one byte of uninitialised memory
 (`0x65` in one run, `0x3D` in the next). With the patch the exe and `zx02.py` agree on that
 file **byte for byte**, so the Python port was correct all along.
+
+### 2. `src/optimize.c` - the invalid-code sentinel (`dmsc/zx02` `5d2f2e3`)
+
+Two lines: the `elias_gamma_bits` / `_1` sentinel for an out-of-range value, `return 1024`
+-> `return 1<<20`.
+
+1024 bits is the optimiser's way of saying "never choose this". On a long enough input it
+stops being prohibitive, the parse picks an invalid code, and **v2 emits a stream that is
+not the data**. Measured here: 19,200 bytes of a repeated 2,560-byte pattern compressed to
+99 bytes, and those 99 bytes decode - without error - to 4,096 WRONG bytes. With the fix the
+same input gives 310 bytes which round-trip exactly, and which equal `tools/zx02.py`'s own
+output byte for byte.
+
+That is upstream [#8](https://github.com/dmsc/zx02/issues/8), reported by someone else in
+2025 and fixed on `main`; it is a COST-FUNCTION change, not a format change, so it cannot
+move a stream that was already valid. Verified: over the 31-file corpus, **all 31 identical**
+to the build without it. It only rescues inputs v2 got wrong.
+
+A port compressing a big run of zeroes, or a very flat screen, is the one this protects.
+
+### Why two patches and not upstream `main`
+
+`main` is 26 commits ahead of `v2`, but the rest is 6502 decoder work (this kit uses its own
+transcription in `lib/zx02depack.6502`), tests and docs - and `f4427e7` also changes the
+bit-size ESTIMATE, which can move streams and so the disc. Two targeted patches keep the
+vendored tree diffable against tag `v2` while fixing both known compressor bugs. Take the
+next tag whole when there is one, and re-run the corpus comparison.
 
 Reported upstream as **[dmsc/zx02#11](https://github.com/dmsc/zx02/issues/11)** (2026-09-23),
 asking for a tagged release: `main` has carried the fix since `f4427e7` (2024-03-01) but the
