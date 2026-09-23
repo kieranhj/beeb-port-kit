@@ -85,6 +85,22 @@ test to run before asking anyone else to try a build.
     SHA256s, then says either "identical images" or which file differs. On the template,
     `make` and `build.ps1` with the same `SOURCE_DATE_EPOCH` give `26cf9e27...` (2026-09-11).
 
+    **Open (from puzzle-beeble, its `BUGS.md` #2, 2026-09-23): the released `zx02.exe` breaks
+    rule 16.** Its output's last two bytes follow the environment it runs in: the same
+    `zx02.exe -f` on the same 19,200-byte file ends `AA A0 54 45` from Git bash, `AA A0 00 54`
+    from PowerShell and `AA A0 33 00` under `env -i`, each repeatable in its own shell, so it
+    reads memory it never wrote. So the port's `make` and `build.ps1` images differed in that
+    file's last two bytes (`dfs.py compare`: `SCREEN` from `+0x473`). Every variant decodes to
+    the same data (`make_disc.py`'s round-trip passes), so no game is affected; the
+    reproducibility claim is. The port pointed `ZX02` at a released `zx02.exe`
+    (`..\Bin\zx02.exe`, described in its `local.ps1` as "the same bytes as tools\zx02src"),
+    which is exactly what rule 14 says not to do. **The vendored source, built with MSYS2's
+    ucrt64 gcc `-O`, ended `AA A0 00 00` in all three environments** - consistent, though
+    not proved deterministic. To do in the kit: have `make_disc.py` refuse a compressor that is
+    not `bin/zx02` built from `tools/zx02src/` (or say so loudly), and look in the source for
+    the uninitialised read - probably the final bit-reservoir byte - so the vendored build
+    cannot depend on the allocator's luck either.
+
 17. **Line endings are fixed by `.gitattributes`, not by each clone's settings.** Git on
     Windows (`core.autocrlf=true`, the installer's default) checks text out with CRLF.
     Without the attributes, a clone of the kit on this machine got the template's `Makefile`
