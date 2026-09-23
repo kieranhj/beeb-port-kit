@@ -129,7 +129,7 @@ $(SSD): $(RAW) $(DISCTOOLS) $(ZX02)
 # The compressor. `-O` is c99's own option, so any cc accepts it. The linker
 # adds `.exe` where the platform wants one, and make finds it without being
 # told.
-bin/zx02: $(ZX02SRC) tools/zx02src/src/zx02.h
+bin/zx02: $(ZX02SRC) tools/zx02src/src/zx02.h tools/zx02src/src/memory.h
 	mkdir -p bin
 	$(CC) -O -o bin/zx02 $(ZX02SRC)
 

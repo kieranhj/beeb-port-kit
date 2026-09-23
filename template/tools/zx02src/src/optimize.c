@@ -25,8 +25,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "zx02.h"
+#include "memory.h"
 
 #define MAX_SCALE 50
 
@@ -40,7 +42,7 @@ int elias_gamma_bits(zx02_state *s, int value) {
     int bits = 1;
     // Return a really big number to limit range to valid values
     if (value < 1 || value > 0x100)
-        return 1<<20;   /* LOCAL PATCH: dmsc/zx02 5d2f2e3, see ../VENDORED.md */
+        return 1<<20;
     // Optimization: don't send last 2 bits on limit value:
     if (s->elias_short_code && value == 0x100)
         bits = -1;
@@ -53,7 +55,7 @@ int elias_gamma_bits_1(zx02_state *s, int value) {
     if (value == 1)
         return elias_gamma_bits(s, 256);
     else if (value > 256)
-        return 1<<20;   /* LOCAL PATCH: dmsc/zx02 5d2f2e3, see ../VENDORED.md */
+        return 1<<20;
     else
         return elias_gamma_bits(s, value - 1);
 }
@@ -65,7 +67,36 @@ int offset_bits(zx02_state *s, int value) {
         return 8 + elias_gamma_bits(s, value / 128 + 1);
 }
 
-BLOCK *optimize(zx02_state *s) {
+// Build a new list with the given chain
+BLOCK *new_chain(BLOCK *chain) {
+
+    // Get chain size
+    size_t size = 0;
+    for(BLOCK *ptr = chain; ptr; ptr=ptr->chain)
+        size++;
+
+    if(!size)
+        return NULL;
+
+    BLOCK *ret = calloc(size, sizeof(BLOCK));
+    if(!ret) {
+        fprintf(stderr, "Error: Insufficient memory\n");
+        exit(1);
+    }
+
+    size = 0;
+    for(BLOCK *ptr = chain; ptr; ptr=ptr->chain) {
+        memcpy(&ret[size], ptr, sizeof(BLOCK));
+        ret[size].chain = &ret[size] + 1;
+        ret[size].unused_chain = 0;
+        size++;
+    }
+    ret[size-1].chain = 0;
+
+    return ret;
+}
+
+void optimize(zx02_state *s) {
     BLOCK **last_literal;
     BLOCK **last_match;
     BLOCK **optimal;
@@ -97,9 +128,12 @@ BLOCK *optimize(zx02_state *s) {
     if (s->input_size > 1)
         best_length[1] = 1;
 
+    // Allocate initial block memory
+    struct block_mem_t *mem = block_mem_new();
+
     /* start with fake block */
-    assign(&last_match[s->initial_offset],
-           allocate(-1, s->skip - 1, s->initial_offset, NULL));
+    assign(mem, &last_match[s->initial_offset],
+           allocate(mem, -1, s->skip - 1, s->initial_offset, NULL));
 
     printf("[");
 
@@ -115,10 +149,10 @@ BLOCK *optimize(zx02_state *s) {
                 if (last_literal[offset]) {
                     length = index - last_literal[offset]->index;
                     bits = last_literal[offset]->bits + 1 + elias_gamma_bits(s, length);
-                    assign(&last_match[offset],
-                           allocate(bits, index, offset, last_literal[offset]));
+                    assign(mem, &last_match[offset],
+                           allocate(mem, bits, index, offset, last_literal[offset]));
                     if (!optimal[index] || optimal[index]->bits > bits)
-                        assign(&optimal[index], last_match[offset]);
+                        assign(mem, &optimal[index], last_match[offset]);
                 }
                 /* copy from new offset */
                 match_length[offset]++;
@@ -143,10 +177,10 @@ BLOCK *optimize(zx02_state *s) {
                        elias_gamma_bits_1(s, length);
                 if (!last_match[offset] || last_match[offset]->index != index ||
                     last_match[offset]->bits > bits) {
-                    assign(&last_match[offset],
-                           allocate(bits, index, offset, optimal[index - length]));
+                    assign(mem, &last_match[offset],
+                           allocate(mem, bits, index, offset, optimal[index - length]));
                     if (!optimal[index] || optimal[index]->bits > bits)
-                        assign(&optimal[index], last_match[offset]);
+                        assign(mem, &optimal[index], last_match[offset]);
                 }
             } else {
                 /* copy literals */
@@ -155,10 +189,10 @@ BLOCK *optimize(zx02_state *s) {
                     length = index - last_match[offset]->index;
                     bits = last_match[offset]->bits + 1 + elias_gamma_bits(s, length) +
                            length * 8;
-                    assign(&last_literal[offset],
-                           allocate(bits, index, 0, last_match[offset]));
+                    assign(mem, &last_literal[offset],
+                           allocate(mem, bits, index, 0, last_match[offset]));
                     if (!optimal[index] || optimal[index]->bits > bits)
-                        assign(&optimal[index], last_literal[offset]);
+                        assign(mem, &optimal[index], last_literal[offset]);
                 }
             }
         }
@@ -173,5 +207,14 @@ BLOCK *optimize(zx02_state *s) {
 
     printf("]\n");
 
-    return optimal[s->input_size - 1];
+    // Get new chain to return
+    s->optimal = new_chain(optimal[s->input_size - 1]);
+
+    // Free all memory
+    block_mem_free(mem);
+    free(last_literal);
+    free(last_match);
+    free(optimal);
+    free(match_length);
+    free(best_length);
 }

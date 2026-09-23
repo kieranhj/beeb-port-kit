@@ -27,6 +27,7 @@
 #include <stdlib.h>
 
 #include "zx02.h"
+#include "memory.h"
 
 #ifndef NDEBUG
 #define DPRINTF(...) fprintf(stderr, __VA_ARGS__)
@@ -99,20 +100,25 @@ void write_interlaced_elias_gamma(zx02_state *s, int value) {
         write_bit(!!s->elias_ending_bit);
 }
 
-unsigned char *compress(BLOCK *optimal, zx02_state *s, int *output_size, int *delta) {
+unsigned char *compress(zx02_state *s, int *output_size, int *delta) {
     BLOCK *prev;
     BLOCK *next;
+    BLOCK *optimal = s->optimal;
     int length;
+    int optbits = optimal->bits;
     int i;
     int last_offset = s->initial_offset;
 
     /* calculate and allocate output buffer */
-    if (s->zx1_mode)
+    if (s->zx1_mode) {
         /* we need to add 9 bits for END marker */
         *output_size = (optimal->bits + 9 + 7) / 8;
-    else
+        optbits = optimal->bits + 9;
+    } else {
         /* we need to add 18 bits for END marker */
         *output_size = (optimal->bits + 18 + 7) / 8;
+        optbits = optimal->bits + 18;
+    }
 
     output_data = (unsigned char *)malloc(*output_size);
     bit_size = 0;
@@ -215,25 +221,17 @@ unsigned char *compress(BLOCK *optimal, zx02_state *s, int *output_size, int *de
     else
         write_interlaced_elias_gamma(s, 256);
 
+    int real_size = (bit_size + 7) / 8;
+    if( real_size != *output_size )
+    {
+        fprintf(stderr, "WARNING: optimal/real sizes mismatch by %d bytes\n",
+                *output_size - real_size);
+        *output_size = real_size;
+    }
+    fprintf(stderr, "bit size data: opt %d bits (%d bytes), real %d bits (%d bytes)\n", optbits, *output_size, bit_size, (bit_size + 7) / 8);
     DPRINTF("\nbit size TOTAL: %d bits (%d bytes)\n", bit_size, (bit_size + 7) / 8);
-    /*
-     * LOCAL PATCH - beeb-port-kit, 2026-09-23. Upstream main fixes this the
-     * same way (dmsc/zx02, post-v2, unreleased); v2 does not have it.
-     *
-     * *output_size was set above from optimal->bits: an ESTIMATE, and so an
-     * allocation BOUND. But zx02.c writes exactly *output_size bytes to the
-     * file, and the writer only filled output_index of them. Where the
-     * estimate over-predicts, the slack is uninitialised malloc memory and
-     * it is written straight into the .zx02 - on Windows, readable
-     * fragments of the process environment block, so the same input gave
-     * different output in different shells (125 bytes of 224 on a 19,200-
-     * byte input; 0 on the template's panel, which is why it never showed).
-     *
-     * Report the real length. This changes no emitted stream byte - it only
-     * stops the garbage tail - and it fixes -b too, where reverse() would
-     * otherwise bring that tail to the front. See ../VENDORED.md.
-     */
-    *output_size = output_index;
     /* done! */
+    free(s->optimal);
+    s->optimal = 0;
     return output_data;
 }

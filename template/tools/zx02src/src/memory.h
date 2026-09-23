@@ -1,5 +1,6 @@
 /*
  * (c) Copyright 2021 by Einar Saukas. All rights reserved.
+ * (c) Copyright 2024 by Daniel Serpell. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -24,23 +25,23 @@
  */
 
 #pragma once
+#include <stdint.h>
 
-#define NDEBUG 1
-#define FALSE 0
-#define TRUE 1
+typedef struct block_t {
+    struct block_t *chain;
+    struct block_t *unused_chain;
+    int bits;
+    int index;
+    int offset;
+    int references;
+} BLOCK;
 
-typedef struct zx02_state_t {
-    unsigned char *input_data;
-    int input_size;
-    int skip;
-    int initial_offset;
-    int backwards_mode;
-    int elias_short_code;
-    int elias_ending_bit;
-    int zx1_mode;
-    int offset_limit;
-    struct block_t *optimal;
-} zx02_state;
+// Create and free the block memory
+struct block_mem_t *block_mem_new();
+void block_mem_free(struct block_mem_t *);
 
-void optimize(zx02_state *s);
-unsigned char *compress(zx02_state *s, int *output_size, int *delta);
+// Allocat a new block into the given chain
+BLOCK *allocate(struct block_mem_t *, int bits, int index, int offset, BLOCK *chain);
+// Assign (copy) a block from another, making the old one available.
+void assign(struct block_mem_t *, BLOCK **ptr, BLOCK *chain);
+
