@@ -23,8 +23,9 @@
 // are seen (BUGS.md #1). Prints scroll, field_count and frame_count.
 import { writeFileSync } from "node:fs";
 
-import { loadMachineSession } from "./jsbeeb_src.mjs";
+import { loadMachineSession, keys } from "./jsbeeb_src.mjs";
 const MachineSession = await loadMachineSession();
+const K = keys();   // jsbeeb 2.0 changed keyDown from a number to a code string
 
 const [ssd, out, mode] = process.argv.slice(2);
 const PANEL_LAST_LINE = 0x4a00 + 3 * 640 + 7;   // PANEL_ADDR + row 3 + scan 7
@@ -32,7 +33,7 @@ const s = new MachineSession(process.env.JSBEEB_MODEL || "B-DFS1.2", { tube: fal
 await s.initialise();
 await s.boot(30);
 s.loadDisc(ssd);
-s.keyDown(16); s.reset(true); await s.runFrames(50); s.keyUp(16);   // SHIFT+BREAK, held long enough
+s.keyDown(K.SHIFT); s.reset(true); await s.runFrames(50); s.keyUp(K.SHIFT);  // SHIFT+BREAK, held long enough
 await s.runFrames(150);
 if (mode) {
     for (let u = 0; u < 80; u++) {

@@ -1088,6 +1088,20 @@ again.*
   `{col: 2, row: 4, name: "X", internal: 66, inkey: -67}`; `keyboard_state` then listed exactly
   that key with `typing_pending: false`; `release_all_keys` reported it released. The internal
   number agrees with section 7's table, which is a free cross-check of both.
+  **jsbeeb 2.0 changed `keyDown`'s TYPE, and it fails SILENTLY.** The same rework, one layer
+  down. `MachineSession.keyDown` took a numeric browser `keyCode` in 1.x (16 = SHIFT, 88 =
+  X); in 2.x it takes a `KeyboardEvent.code` string naming the physical key (`"ShiftLeft"`,
+  `"KeyX"`). **Passing the old number to 2.x matches nothing and does not throw** - the key
+  is simply never pressed. In the kit's harnesses that meant SHIFT+BREAK stopped booting the
+  disc, so every counter read its power-on value and `verify_dynamic.mjs` printed
+  `{"fields":0,"frames":0,"scrollIdle":0,"scrollAfterX":0}` - which reads exactly like a
+  regression in the port. Diagnosed by reading `&1900` after the boot: `0d ff 00 00...`
+  under 2.3.0 where 1.25.0 had the game's `a2 ff 9a a9` (`LDX #&FF : TXS`).
+  Fixed 2026-09-23: `tools/jsbeeb_src.mjs` exports `keys()`, which returns the right form
+  for whichever jsbeeb was resolved, and the harnesses say `K.SHIFT` / `K.X`. Both versions
+  now give the documented 100 / 50 / 0 / 200. **An all-zero harness result is a boot that
+  did not happen, not a dead game** - check `&1900` before believing it.
+
   **jsbeeb-mcp 4.0.0 (2026-09-23) renamed the key names** - the machine's own now, digits `K0`-`K9`,
   `CAPSLOCK` not `CAPS_LOCK`, no `BACKSPACE`/`QUOTE`/`EQUALS`, and an unknown name is refused with
   the full list for the model. Re-measured there: `X` gives the same col, row, internal and INKEY

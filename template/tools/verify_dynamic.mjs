@@ -33,8 +33,9 @@
 //   {"fields":100,"frames":50,"scrollIdle":0,"scrollAfterX":200}
 import { writeFileSync } from "node:fs";
 
-import { loadMachineSession } from "./jsbeeb_src.mjs";
+import { loadMachineSession, keys } from "./jsbeeb_src.mjs";
 const MachineSession = await loadMachineSession();
+const K = keys();   // jsbeeb 2.0 changed keyDown from a number to a code string
 
 const [ssd, scrollA, fieldA, frameA, model, panelOut] = process.argv.slice(2);
 if (!ssd || !scrollA || !fieldA || !frameA) {
@@ -47,7 +48,7 @@ const s = new MachineSession(model || "B-DFS1.2", { tube: false });
 await s.initialise();
 await s.boot(30);
 s.loadDisc(ssd);
-s.keyDown(16); s.reset(true); await s.runFrames(50); s.keyUp(16);   // SHIFT+BREAK, held
+s.keyDown(K.SHIFT); s.reset(true); await s.runFrames(50); s.keyUp(K.SHIFT);  // SHIFT+BREAK, held
 await s.runFrames(150);
 
 const rd = (a, n) => s.readMemory(a, n).reduce((v, b, i) => v + (b << (8 * i)), 0);
@@ -58,11 +59,12 @@ const f0 = rd(field, 1), p0 = rd(frame, 2), s0 = rd(scroll, 2);
 await s.runFrames(100);
 const f1 = rd(field, 1), p1 = rd(frame, 2), s1 = rd(scroll, 2);
 
-// X held for 50 fields: 25 passes of SCROLL_STEP = 8 -> 200. 88 is the key
-// code jsbeeb maps (its BBC key numbers are a different table - measured).
-s.keyDown(88);
+// X held for 50 fields: 25 passes of SCROLL_STEP = 8 -> 200. The key argument
+// is the HOST key, not a BBC key number, and its TYPE depends on the jsbeeb
+// version - jsbeeb_src.mjs's keys() has the detail and the failure it caused.
+s.keyDown(K.X);
 await s.runFrames(50);
-s.keyUp(88);
+s.keyUp(K.X);
 await s.runFrames(2);
 const s2 = rd(scroll, 2);
 

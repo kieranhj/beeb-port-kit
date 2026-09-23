@@ -74,6 +74,34 @@ export function resolveJsbeebSrc() {
     return { src: join(best.dir, "src").split("\\").join("/"), version: best.version };
 }
 
+/**
+ * The key argument `keyDown`/`keyUp` want, for the jsbeeb that is loaded.
+ *
+ * **jsbeeb 2.0 CHANGED THE TYPE.** 1.x took a numeric browser `keyCode` (16 =
+ * SHIFT, 88 = X); 2.x takes a `KeyboardEvent.code` STRING naming the physical
+ * position ("ShiftLeft", "KeyX"). Passing the old number to 2.x matches
+ * nothing and DOES NOT THROW - the key is simply never pressed. That is how it
+ * was found: SHIFT+BREAK stopped booting the disc, so every harness counter
+ * read its power-on value and verify_dynamic.mjs reported all zeros, which
+ * reads exactly like a regression in the port (2026-09-23; jsbeeb 2.3.0 came
+ * in with jsbeeb-mcp 4.0.0).
+ *
+ * Add a key here rather than writing a literal at the call site, so the next
+ * harness cannot reintroduce the same silent failure.
+ */
+export function keys() {
+    const { version } = resolveJsbeebSrc();
+    const major = parseInt(version, 10);
+    const modern = !Number.isNaN(major) && major >= 2;
+    return modern
+        ? { SHIFT: "ShiftLeft", CTRL: "ControlLeft", ESCAPE: "Escape",
+            SPACE: "Space", RETURN: "Enter",
+            X: "KeyX", Z: "KeyZ", K: "KeyK", M: "KeyM", L: "KeyL", P: "KeyP", Q: "KeyQ" }
+        : { SHIFT: 16, CTRL: 17, ESCAPE: 27,
+            SPACE: 32, RETURN: 13,
+            X: 88, Z: 90, K: 75, M: 77, L: 76, P: 80, Q: 81 };
+}
+
 /** Import MachineSession, announcing the jsbeeb it came from. */
 export async function loadMachineSession() {
     const { src, version } = resolveJsbeebSrc();
