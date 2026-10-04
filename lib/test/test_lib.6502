@@ -37,6 +37,8 @@ SECTION zeropage, org = &70, guard = &100
 .zxlen  SKIP 2
 .zxbit  SKIP 1
 .zxwrk  SKIP 2
+.ptsrc  SKIP 2                  ; packed_text.6502
+.ptbits SKIP 1
 ENDSECTION
 
 \ ---- the image ------------------------------------------------
@@ -56,6 +58,7 @@ INCLUDE "../boot_stamp.6502"
 INCLUDE "../irq.6502"
 INCLUDE "../keydown.6502"
 INCLUDE "../loader.6502"
+INCLUDE "../packed_text.6502"
 
 \ zx_unpack is what loader.6502 jumps to: the ZX02 depacker, for a new port.
 .zx_unpack
@@ -81,8 +84,14 @@ INCLUDE "../swram_probe.6502"
     jsr install_irq
     jsr uninstall_irq
     jsr SwrMain
+    ldx #LO(texts) : ldy #HI(texts) : jsr pt_start
+    lda #1 : ldx #LO(texts) : ldy #HI(texts) : jsr pt_nth
+    jsr pt_next
     rts
 .name EQUS "Bank0", 13
+.texts
+    PACKED "LIB TEST"
+    PACKED "BUILT 2026-10-04"
 
 .test_end
 ENDSECTION
