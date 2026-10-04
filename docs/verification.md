@@ -769,10 +769,25 @@ The checklist for a new check:
 
 ---
 
-## 16. A checked-in behaviour baseline
+## 16. A checked-in behaviour baseline, when the original cannot be the oracle
 
-For a change that **alters instructions but should not alter behaviour** - a size saving, a
-refactor, two routines folded into one, an allocator change - where procedure 12 fails by
+**Prefer the original.** When the original runs headless - a C64 game under VICE or a 6502
+simulator such as py65, a Spectrum one under SkoolKit's Z80 simulator - the reference for any
+routine is the original's own code: restore a snapshot, poke the same inputs, call the routine,
+read its model state back, and diff the port's against it, byte for byte (procedure 15's rule,
+applied to game logic). That one check serves new work ("does the port now do what the original
+does?") and every later size pass ("does it still?"), and it proves *right*, not just
+*unchanged*. Where it reaches, this procedure adds nothing.
+
+This procedure is the fallback, for when there is nothing to call: a port-in-spirit with no
+runnable original (Scorched Earth's case: a PC game, ported from its manual), or port-only code
+with no counterpart in the original (menus, glue, a reworked AI). There the best reference left
+is the port's own earlier behaviour, checked in. It is the code checked against its past self -
+the thing procedure 15 warns about - so it can only say "unchanged", and every limit below
+follows from that.
+
+It covers a change that **alters instructions but should not alter behaviour** - a size saving,
+a refactor, two routines folded into one, an allocator change - where procedure 12 fails by
 design, procedure 13 cannot see it (its own section says so), and procedure 14 needs both builds
 side by side for every change. The game's own logic is compared, against a file in the repo.
 [Scorched Earth](https://github.com/mattgodbolt/beeb-scorched-earth) (a Baron, MODE 2 port
@@ -849,7 +864,7 @@ What it cannot prove:
   described here.
 - **Unchanged, not right.** The baseline is the old build's output, so it is the code checked
   against itself (procedure 15). It proves a change preserved behaviour; whether the behaviour
-  was correct needs an oracle.
+  was correct needs an oracle - the original, if it can be run at all (top of this section).
 
 ```
 # once
@@ -875,8 +890,10 @@ Recorded so the next port does not assume they are filled:
   (procedure 12); both were done inline. The kit ships the reducer now (`py/listing.py`,
   2026-09-07); the catalogue extractor is still inline.
 - Paradroid's headless A/B script (procedure 14) survives only as a memory note.
-- The kit ships no behaviour-baseline tool (procedure 16): the template's `verify_dynamic.mjs`
-  asserts four hand-written numbers, and the recipe is Scorched Earth's, not either port's.
+- The kit ships no harness that drives the original headless as a routine-level oracle, nor a
+  behaviour-baseline tool for when it cannot (procedure 16); the template's `verify_dynamic.mjs`
+  asserts four hand-written numbers, and the fallback recipe is Scorched Earth's, not either
+  port's.
 - The mid-frame bank flip, the 8K-wrap ring and the display-below-`&3000` rule are measured on
   one or two emulators and on no hardware (procedure 11).
 - Procedure 9's BASIC loop is reconstructed from the doc's description of the method, not

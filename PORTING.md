@@ -426,8 +426,8 @@ Build the oracle in Layer 3, before the scroll is trusted. The recipe, and the t
 The same document has the other checks that proved themselves: breakpoint-pair cycle timing,
 frame-drop counting, sound capture matched against a rebuilt reference stream, the byte-identical
 build check for a change meant to be mechanical, the listing-stream diff that proves no
-instruction moved, and a checked-in behaviour baseline for a change that moves instructions but
-should not change what the game does. The habit behind all of them: **never check a thing
+instruction moved, and - where the original cannot be run as the oracle - a checked-in behaviour
+baseline for a change that moves instructions but should not change what the game does. The habit behind all of them: **never check a thing
 against itself, and say which oracle a number came from.**
 
 ---
