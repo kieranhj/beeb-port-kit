@@ -824,9 +824,10 @@ written by hand; a baseline is what that becomes when the expectations are too m
    - Baby Missile's crater radius 6 -> 7, one byte in the item table: exactly the 9 Baby Missile
      rows moved and the other 65 did not, and the near misses' plain text showed the extra
      damage (`health 100,78` -> `100,76`). The harness is sensitive, and the diff is local.
-   - Baby Missile's blast power 40 -> 41 instead: **0 rows moved**. Damage is
-     `(reach - dist) * power / reach`, truncated, and at the distances the table uses one more
-     unit rounds away. A clean diff means no row saw a difference, nothing more.
+   - Baby Missile's blast power 40 -> 41 instead: **0 rows moved** (probably because damage
+     is `(reach - dist) * power / reach`, truncated, so one unit more rounds away at the
+     distances the table uses; inferred from the formula, not traced). A clean diff means no
+     row saw a difference, nothing more.
 6. **Read a diff by its names.** Which rows moved says which path changed: one weapon's rows is
    that weapon; every row is shared flight, the landscape, or the reading itself (a variable that
    moved and is read from a stale address - read by symbol from the build, per "Addresses come
