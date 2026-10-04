@@ -598,8 +598,8 @@ order of importance:
      worktrees. Kill only the PIDs you started.
    - Squeezed code leans on side effects across file boundaries
      ([`draw_char`](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/src/text.6502)
-     returns A = text_x, never 0, with carry clear). Comment such a contract where it is relied on, so whoever owns
-     the other file can grep for its users before changing it.
+     returns A = text_x, never 0, with carry clear). Comment such a contract where it is relied
+     on, so whoever owns the other file can grep for its users before changing it.
 
 ---
 
