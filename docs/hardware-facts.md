@@ -818,6 +818,18 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   hexwab, 2026-09-13, paradroid-beeb #18. Not measured.
 - **DFS filenames are seven characters.**
   [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md)
+- **The MOS's BRK path is `&DC27` on OS 1.20 and `&E5A9` on MOS 3.20**, and both are found the
+  same way: the IRQ/BRK vector at `&FFFE` (`&DC1C`, `&E59E`) starts with `STA &FC : PLA : PHA :
+  AND #&10 : BNE brk : JMP (&0204)`, and the BNE's target is the path. The B-flag test runs
+  before `JMP (IRQ1V)`, so a game that owns IRQ1V still sends its BRKs through the MOS. The path
+  then offers the BRK to every sideways ROM as service call 6 and only after that jumps through
+  BRKV (`&0202`), which is why a bank of zeros loops at `&8003` and never reaches BRKV (section
+  5). On entry `S` is untouched: `&0101+S` is the stacked P with B set, `&0102+S`/`&0103+S` the
+  BRK's address + 2. A breakpoint there is a crash detector (`docs/verification.md` procedure 1).
+  Measured: 2026-10-04, jsbeeb 2.3.1 `B-DFS1.2` and `Master`, by tracing every PC from a
+  `BRK` `CALL`ed from BASIC, and again through jsbeeb-mcp 4.0.1's `set_breakpoint` on a template
+  build with a `BRK` planted in the scroll path: both stopped with `&B0` stacked and the planted
+  address + 2 above it.
 
 ---
 

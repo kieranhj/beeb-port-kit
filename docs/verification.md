@@ -106,12 +106,32 @@ The first thing after every build, and the only procedure here that trusts a scr
    perf audit hit this again on 2026-08-31.
 5. If the first MCP connection of a session times out, reconnect (`/mcp`) and try again - Edge
    Grinder's Layer 0 notes exactly that.
+6. **Trap BRK before booting, in this run and every automated one.** A crash does not stop the
+   machine: the MOS handles the BRK, the game's own IRQ handler can carry on counting fields, and
+   every number read afterwards is the wreck's. Scorched Earth's regression harness hashed the
+   state a Leapfrog crash left, the baseline recorded the crash as correct, and it shipped
+   ([journal.md "Leapfrog crashed the machine"](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/journal.md),
+   fixed in [34b1635](https://github.com/mattgodbolt/beeb-scorched-earth/commit/34b1635)). The
+   kit's template with a `BRK` planted in its scroll path did the same here: `verify_dynamic.mjs`
+   exited 0 printing `fields: 100`, with only `scrollAfterX: 0` to give it away (2026-10-04).
+   Put an execute breakpoint on the MOS's BRK path - `&DC27` on OS 1.20, `&E5A9` on MOS 3.20, or
+   follow `&FFFE` to its B-flag test on any other (`hardware-facts.md` section 6 has the
+   shape) - and treat a stop there as a failure in its own right: the scenario's result is "BRK
+   at &xxxx", not a hash or a counter. The address is the stacked PC - 2: `read_registers` for
+   `S`, then the two bytes at `&0102+S`, low first. Trap the MOS path rather than the address in
+   BRKV (`&0202`): the MOS offers the BRK to the sideways ROMs before it gets there, and a game
+   that has paged or overwritten sideways RAM may never arrive. A breakpoint set before
+   `boot_disc` survives it (jsbeeb-mcp 4.0.1). The template's headless harnesses do this through
+   `trapBrk` in `tools/jsbeeb_src.mjs`.
 
 ```
 create_machine  model: "Master"                       # or "B-DFS1.2"
+set_breakpoint  address: 0xE5A9                       # OS 1.20: 0xDC27
 boot_disc       session_id, image_path: "<abs path>/build/game.ssd"   (whatever the project ships)
-run_frames      count: 400
+run_frames      count: 400                            # stopped_reason "breakpoint" = a crash
 screenshot
+read_registers                                        # only on a stop: s
+read_memory     address: 0x0100 + s + 1, length: 3    # P, then the BRK's address + 2
 ```
 
 ---
