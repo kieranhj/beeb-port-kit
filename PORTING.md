@@ -406,6 +406,9 @@ drifts a page into a region rewritten at runtime assembles cleanly and fails qui
 the ceiling for anything read in play may be lower than the ceiling for the image: Edge Grinder's
 sprite save area sits above its code, and boot-only code is allowed there because it is dead before
 the first sprite draws.
+Gauge zero page too, as its own region: where Baron's `ZA_AUTO` pool shares it with fixed slots,
+two changes that each fit can together exhaust it while the code gauge still shows bytes free (item
+7 of section 12).
 
 ---
 
@@ -574,6 +577,29 @@ order of importance:
    `.claude/skills/`.
 6. **Session memory** keeps the emulator's quirks (it zeroes RAM; memory reads above `&8000`
    return whichever bank is paged) across conversations, so they are not rediscovered.
+7. **Parallel agents can split a memory squeeze, if the shared budgets are split too.** Neither
+   port did this; it is from
+   [Scorched Earth for the BBC Micro](https://github.com/mattgodbolt/beeb-scorched-earth), whose
+   three space passes (605 to 2328, 1769 to 2571 and 1292 to 2085 bytes free, per its
+   [`journal.md`](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/journal.md)) each
+   ran four or five Claude Code agents at once, each in its own `git worktree` owning a disjoint
+   set of source files, one briefed on data placement rather than code, and every commit gated on
+   an exact match with a checked-in regression baseline
+   ([`tools/regress.mjs`](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/tools/regress.mjs),
+   hashed state after a fixed set of shots from a pinned seed). Disjoint files made the merges
+   mechanical: three small conflicts in the first pass, none in the second. What bit:
+   - Every third-pass branch fitted alone; merged, the zero-page allocator ran out and a
+     per-player array had to move back to main RAM
+     ([`7bc949a`](https://github.com/mattgodbolt/beeb-scorched-earth/commit/7bc949a)). Zero page,
+     the RAM holes below `&0E00` and the free-byte count are budgets shared by every branch: give
+     each agent a share up front, or merge and rebuild after each branch lands. The build that
+     counts is the merge's, not each branch's.
+   - One agent's `pkill -f regress.mjs` killed the other agents' regression runs in their own
+     worktrees. Kill only the PIDs you started.
+   - Squeezed code leans on side effects across file boundaries
+     ([`draw_char`](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/src/text.6502)
+     returns A = text_x, never 0, with carry clear). Comment such a contract where it is relied on, so whoever owns
+     the other file can grep for its users before changing it.
 
 ---
 
