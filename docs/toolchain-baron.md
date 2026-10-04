@@ -28,7 +28,7 @@ binary (`baron.exe` from the [releases page](https://github.com/waitingforvsync/
 ([`d046a9a`](https://github.com/waitingforvsync/baron/commit/d046a9a), released 2026-09-30)
 added one, and from then on that macro is `error: Reserved macro name` - so on any current Baron
 the template, `lib/test/` and `examples/vscroll` all failed to build, while the 0.4.0 pin hid it.
-Three projects building on the kit met it independently (one is the side note on #10), and the
+Three projects building on the kit met it independently, and the
 kit said nothing about which versions it supports. The macro is gone and the call
 sites are unchanged: the statement takes both of its shapes (`ASSERT c`, `ASSERT c, msg`). There
 is no source that builds on both sides - Baron has no version symbol, and a `MACRO ASSERT` is
