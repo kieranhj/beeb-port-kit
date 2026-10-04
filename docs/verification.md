@@ -1,6 +1,6 @@
 # Verification: the measuring and checking procedures
 
-Fifteen procedures, numbered so a reader can pick one by number. Each gives the manual route
+Sixteen procedures, numbered so a reader can pick one by number. Each gives the manual route
 first - what to do by hand in [jsbeeb](https://bbc.xania.org), b2 or beebjit - and then, in a short
 sub-block, the same thing as calls to the jsbeeb MCP server (`jsbeeb-mcp` on npm, used from
 Claude Code). Nothing in the MCP block is needed to follow the manual one.
@@ -769,6 +769,132 @@ The checklist for a new check:
 
 ---
 
+## 16. The original as the oracle, run headless
+
+Procedure 15 asks for a reference the code under test did not produce. The strongest there is
+when the original's binary can be run: **its own code**, called routine by routine on a CPU
+simulator, with the port's equivalent run in jsbeeb on the same inputs and the two outputs diffed
+byte for byte. None of procedure 15's examples does that - they decode data back to its source
+form, or compare against a model written from the original - and the kit records no such harness
+in either shipping port. It answers "does the port do what the original does?", not "does it do
+what it did last week?", and it keeps answering it through every later size pass.
+
+The worked example is [Chuckie Egg 2](https://github.com/mattgodbolt/chuckie-egg-2-beeb), a Baron
+port of the ZX Spectrum original (A&F, 1985) outside the two this kit grew from. Its rules file
+says the original is the specification; these tools are what check it:
+
+| tool | runs | does |
+|---|---|---|
+| [`tools/zx.py`](https://github.com/mattgodbolt/chuckie-egg-2-beeb/blob/main/tools/zx.py) | the original, on SkoolKit's Z80 simulator | the counterpart of its jsbeeb `play.mjs`: the same key-script language, the keyboard matrix and Kempston port answered from Python |
+| [`tools/zxrooms.py`](https://github.com/mattgodbolt/chuckie-egg-2-beeb/blob/main/tools/zxrooms.py) | the original's room drawer, `&7920` | for each of 120 rooms: restore a snapshot of a game just started, poke the room number into `&A3FE`, push a sentinel return address, run until the PC reaches it; keep the screen and the three 768-byte maps the drawer fills |
+| [`tools/roomcheck.mjs`](https://github.com/mattgodbolt/chuckie-egg-2-beeb/blob/main/tools/roomcheck.mjs) | the port's drawer, in jsbeeb | a viewer build (`-D VIEWER=1`) of the same code; poke `room`, run to `viewer.wait`, dump the maps and the screen |
+| [`tools/roomcmp.py`](https://github.com/mattgodbolt/chuckie-egg-2-beeb/blob/main/tools/roomcmp.py) | - | maps byte for byte; every playfield pixel in the colour the room's palette maps the Spectrum's to |
+| [`tools/passlog.py`](https://github.com/mattgodbolt/chuckie-egg-2-beeb/blob/main/tools/passlog.py), [`passlog.mjs`](https://github.com/mattgodbolt/chuckie-egg-2-beeb/blob/main/tools/passlog.mjs), [`passcmp.py`](https://github.com/mattgodbolt/chuckie-egg-2-beeb/blob/main/tools/passcmp.py) | both games, in step | the same keys held over the same main-loop passes on both; the model (player, RNG, every monster record, score, objects) logged at the top of every pass; the first pass that differs printed with three passes either side |
+| [`tests/scenarios.txt`](https://github.com/mattgodbolt/chuckie-egg-2-beeb/blob/main/tests/scenarios.txt), [`tools/fuzz.py`](https://github.com/mattgodbolt/chuckie-egg-2-beeb/blob/main/tools/fuzz.py) | - | 16 named scenarios replayed by `make passes`; random walks from random standing spots in random rooms by `make fuzz` |
+
+What it caught ([journal](https://github.com/mattgodbolt/chuckie-egg-2-beeb/blob/main/docs/journal.md),
+"The rooms on the BBC: 120 of 120" and "Objects, and three bugs that taught something"): the
+original's run handler pushes the command byte and two data bytes and pops them crosswise, so the
+command is the tile and the last byte the type; the first transcription had them the other way
+round, and the tile and type maps disagreed in exactly mirrored cells. Later, a pass comparison
+diverged on the dog deaths; the cause was an `LDA #0` added between saving the room number and
+using it, which gave every room room 0's palette. It also caught the harness twice: 16 rooms
+"wrong" that were a check reading the font after a fixed 4 s wait while the DFS was still paged
+in, and three more from a fixed 20-frame wait when drawing got slower. The tools now run to a
+symbol, never a guessed wait.
+
+Measured 2026-10-04 at
+[`348257f`](https://github.com/mattgodbolt/chuckie-egg-2-beeb/commit/348257f), Baron 0.4.2 (main
+at `016a764`), SkoolKit 10.1 (its C simulator), jsbeeb-mcp 4.0.1, an i9-9980XE: `zxrooms.py` draws
+all 120 rooms in 1.9 s; `make rooms` (oracle, port and compare) reports 120 of 120 in 19 s;
+`make passes` reports all 16 scenarios matching, 40 to 260 passes each, in 113 s. The control:
+putting the crosswise bug back (tile and type swapped in `cmd_run`) gives **0 of 120**, each room
+reporting the mirror signature (`tile map ... zx 2C bbc 01; type map ... zx 01 bbc 2C`).
+
+The recipe, for a Z80 original under SkoolKit or a 6502 one (C64, Atari 8-bit, Apple II) under
+[py65](https://github.com/mnaberez/py65), which this kit's own `lib/test/bench/bench_depack.py`
+already drives:
+
+1. **Get the original into memory as it is when the routine runs.** Not the file: a snapshot
+   taken once the game has loaded and unpacked itself. Chuckie Egg 2 simulates loading the tape
+   (SkoolKit's `tap2sna.py`, `make zx`) and then plays its own key script into a game
+   (`zx.py ... >start`, saving `build/zx_start.z80`). For a C64 game, RAM saved from VICE's
+   monitor with the game running does the same job. The original's binary is rarely yours to
+   commit; Chuckie Egg 2 commits a SHA256SUMS and a fetch script instead.
+2. **Find the routine's inputs and outputs in the disassembly**, and name them in the tool's
+   header: the room number at `&A3FE` in, and out not only the screen but every table the rest of
+   the game reads (the attribute, tile and cell-type maps). The tables are what made the crosswise
+   bug obvious; the screen alone would have shown it as wrong pixels.
+3. **Call it with a sentinel return.** Set the stack pointer, push an address nothing else will
+   reach, set the PC to the routine, run until the PC equals the sentinel, and fail if it never
+   gets there. On a Z80, `RET` pops the address itself. **On a 6502, `RTS` adds one to what it
+   pulls, so push the sentinel minus one**; `bench_depack.py` gets the same effect by pulling
+   `&FFFF` and stopping at `&0000`. Run with interrupts as the original has them at that point
+   (the room drawer runs with them off in the game too).
+4. **Answer the hardware the routine reads.** SkoolKit calls the tracer for every `IN`; `zx.py`
+   answers port `&FE` from a key matrix (bit 6, the tape input, reading silence) and `&1F` as a
+   Kempston joystick. py65 has no VIC or CIA: give it a `py65.memory.ObservableMemory` and
+   subscribe reads of `$D000-$DFFF` (or the machine's I/O page) to a function, or a raster or
+   keyboard poll reads stale RAM and the routine spins or takes the wrong branch.
+5. **Run the port's equivalent in jsbeeb, the same call from the same inputs** - a build variant
+   (Chuckie Egg 2's viewer) or a debug hook the test fills (its `dbg_room` teleport, whose
+   Spectrum side calls the original's own room set-up at `&7913`) - and run to the symbol that
+   means "done", never a fixed wait.
+6. **Compare in the original's terms, and put every accepted difference in the comparer.** A
+   numbered decision that changes output belongs in the comparison, not in a reviewer's head:
+   `roomcmp.py` maps each Spectrum colour through the room's four-colour palette (decision 2) and
+   expects text cells in the MOS font (decision 4); `passcmp.py` ignores pass 0's fall counter,
+   which the original leaves at 250 from before and zeroes on its first update. That is
+   procedure 15's step 3, and anything else that differs is a bug.
+7. **For logic over time, compare in lockstep, and log the RNG.** Give both machines the same
+   input at the top of the same main-loop pass (`passlog` sets keys on reaching the loop label,
+   before either game reads them) and log the model, not the screen. The RNG state in the log
+   makes call counts part of the check: the train's noise routine takes a random number nine
+   times a pass in the original, so the port calls its noise at the same nine places and the
+   monsters' RNG stays in step. An `--power` poke one pass early showed as the original's RNG
+   count lagging the port's by exactly one.
+8. **Then fuzz.** Once the named scenarios match, random inputs from random states find what
+   nobody wrote a scenario for: `make fuzz` seeds 1 and 2 compared 39 cases in 35 rooms the
+   scenarios never visit, all matching (journal, "Fuzzing"). A case that differs is printed as a
+   line for `scenarios.txt`.
+
+```python
+# py65: call the original's routine at ROUTINE with its input poked in, read what it wrote
+from py65.devices.mpu6502 import MPU
+from py65.memory import ObservableMemory
+
+SENTINEL = 0x0200                                   # an address the routine never reaches
+mem = ObservableMemory()
+mem.subscribe_to_read(range(0xD000, 0xE000), lambda addr: 0x00)   # answer I/O reads
+mpu = MPU(memory=mem)
+mem[0:0x10000] = list(ram)                          # the snapshot, as 64K of bytes
+mem[ROOM] = room                                    # the input, in the original's own variable
+mpu.sp = 0xFD
+mem[0x01FE], mem[0x01FF] = (SENTINEL - 1) & 0xFF, (SENTINEL - 1) >> 8   # RTS adds one
+mpu.pc = ROUTINE
+while mpu.pc != SENTINEL:                           # and a step limit, failing loudly
+    mpu.step()
+out = bytes(mem[OUT:OUT + OUT_LEN])                 # diff against the port's dump from jsbeeb
+```
+
+The call pattern ran on py65 1.2.0 on 2026-10-04 against an eleven-byte test routine (an `LDA $D012`
+answered by the subscription, a poked input, the sentinel reached); the snapshot load is
+illustrative. The jsbeeb side is `write_memory` for the input, `set_breakpoint` on the "done"
+symbol, `run_for_cycles` until it stops there, and `save_memory` for every output table.
+
+What it cannot prove:
+
+- **Only what is called.** A routine nobody calls with an input stays unchecked; that is why the
+  scenarios grow with every layer and the fuzzer exists.
+- **Not timing.** A pass-for-pass match says the same things happened in the same passes, not in
+  the same cycles; frame rate is procedure 6's.
+- **Not port-only code.** A BBC front end, a loader, an IRQ handler with no counterpart in the
+  original has nothing to call. When there is no runnable original at all, a checked-in baseline
+  of the port's own behaviour is the fallback (proposed as a procedure of its own in
+  kieranhj/beeb-port-kit#12), and it can only say "unchanged".
+
+---
+
 ## Gaps
 
 Recorded so the next port does not assume they are filled:
@@ -778,6 +904,9 @@ Recorded so the next port does not assume they are filled:
   (procedure 12); both were done inline. The kit ships the reducer now (`py/listing.py`,
   2026-09-07); the catalogue extractor is still inline.
 - Paradroid's headless A/B script (procedure 14) survives only as a memory note.
+- Neither shipping port is recorded running the original as an oracle (procedure 16); the
+  recipe is Chuckie Egg 2's, a Spectrum original, and its 6502 half (py65) is checked on a test
+  routine, not on a C64 game.
 - The mid-frame bank flip, the 8K-wrap ring and the display-below-`&3000` rule are measured on
   one or two emulators and on no hardware (procedure 11).
 - Procedure 9's BASIC loop is reconstructed from the doc's description of the method, not
