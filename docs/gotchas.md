@@ -291,6 +291,19 @@ Rule: a lib routine gets a disc that runs it (`lib/test/andy_test.6502`) or a he
 it has never run. The first port to call it should treat it as its own new code.
 Source: [1942-beeb BUGS.md #21](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md), `lib/README.md` "Proving it runs".
 
+**A harness that drives the path but does not trap BRK records the crash as the right answer.**
+Instance: Scorched Earth's Leapfrog keeps its hop count in bits 4-5 of its kind byte, so a new
+`kind >= SK_CHARGE` test in `fire` sent it through the charge dispatch, off the end of an RTS
+table and into a `BRK`. The computer players never choose a Leapfrog, so the game test never ran
+it. The regression harness did fire one, and hashed whatever memory the crash left: the baseline
+recorded the crash, and it shipped. Fixed by masking the kind; the harness now breaks on the MOS's
+BRK path and writes `BRK` for that scenario instead of a hash.
+Rule: every automated run sets a breakpoint on the MOS's BRK path before it boots, and a stop
+there fails the run with the BRK's address (`verification.md` procedure 1, step 6).
+Source: [journal.md "Leapfrog crashed the machine"](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/journal.md),
+[34b1635](https://github.com/mattgodbolt/beeb-scorched-earth/commit/34b1635),
+[tools/regress.mjs](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/tools/regress.mjs).
+
 ---
 
 ## 5. Instrumentation that lies

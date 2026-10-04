@@ -31,9 +31,11 @@
 //
 // It prints one line of JSON, so a build script can assert on it:
 //   {"fields":100,"frames":50,"scrollIdle":0,"scrollAfterX":200}
+// A BRK anywhere after the boot prints no JSON: it throws "BRK at &xxxx" and
+// exits non-zero, because counters read after a crash are not a measurement.
 import { writeFileSync } from "node:fs";
 
-import { loadMachineSession, keys } from "./jsbeeb_src.mjs";
+import { loadMachineSession, keys, trapBrk } from "./jsbeeb_src.mjs";
 const MachineSession = await loadMachineSession();
 const K = keys();   // jsbeeb 2.0 changed keyDown from a number to a code string
 
@@ -47,25 +49,26 @@ const scroll = parseInt(scrollA, 16), field = parseInt(fieldA, 16), frame = pars
 const s = new MachineSession(model || "B-DFS1.2", { tube: false });
 await s.initialise();
 await s.boot(30);
+const run = trapBrk(s);
 s.loadDisc(ssd);
-s.keyDown(K.SHIFT); s.reset(true); await s.runFrames(50); s.keyUp(K.SHIFT);  // SHIFT+BREAK, held
-await s.runFrames(150);
+s.keyDown(K.SHIFT); s.reset(true); await run(50); s.keyUp(K.SHIFT);  // SHIFT+BREAK, held
+await run(150);
 
 const rd = (a, n) => s.readMemory(a, n).reduce((v, b, i) => v + (b << (8 * i)), 0);
 if (panelOut) writeFileSync(panelOut, Buffer.from(s.readMemory(0x4a00, 2560)));
 
 // idle: the field counter runs at 50 Hz, the loop at 25 (FRAME_LOCK = 2)
 const f0 = rd(field, 1), p0 = rd(frame, 2), s0 = rd(scroll, 2);
-await s.runFrames(100);
+await run(100);
 const f1 = rd(field, 1), p1 = rd(frame, 2), s1 = rd(scroll, 2);
 
 // X held for 50 fields: 25 passes of SCROLL_STEP = 8 -> 200. The key argument
 // is the HOST key, not a BBC key number, and its TYPE depends on the jsbeeb
 // version - jsbeeb_src.mjs's keys() has the detail and the failure it caused.
 s.keyDown(K.X);
-await s.runFrames(50);
+await run(50);
 s.keyUp(K.X);
-await s.runFrames(2);
+await run(2);
 const s2 = rd(scroll, 2);
 
 console.log(JSON.stringify({

@@ -48,14 +48,24 @@ boot", a screenshot is enough. Everything past that point is verified against th
 
    If the first MCP connection of a session times out, reconnect (`/mcp`) and try again.
 
-4. **Boot and run.** `boot_disc` is load, SHIFT down, reset, SHIFT up in one call. The path
-   must be absolute.
+4. **Trap BRK, then boot and run.** A crash does not stop the machine - the MOS handles the
+   BRK and the game's IRQ can go on counting fields - so a breakpoint on the MOS's BRK path
+   is what makes it a failure: `&DC27` on OS 1.20 (`B-DFS1.2`), `&E5A9` on MOS 3.20
+   (`Master`), measured 2026-10-04; for another MOS follow `&FFFE` to its `AND #&10 : BNE`
+   (`docs/hardware-facts.md` section 6). Set it before `boot_disc`, which it survives, and
+   leave it set for every later skill on this machine. `boot_disc` is load, SHIFT down, reset,
+   SHIFT up in one call. The path must be absolute.
 
    ```
+   set_breakpoint  session_id, address: 0xE5A9          # 0xDC27 on a Model B
    boot_disc    session_id, image_path: "<abs project path>/build/<the shipping image>"
    run_frames   session_id, count: 400
    screenshot   session_id
    ```
+
+   `stopped_reason: "breakpoint"` at that address is a **fail**, whatever the screenshot shows.
+   Report where: the BRK is at the stacked PC - 2, `read_memory` of 3 bytes at `&0101+S` (S from
+   the stop's registers) giving P, then the address + 2 low byte first.
 
 5. **Look at the screenshot once.** Title page or loading screen up, in the right mode, panel
    where it belongs: pass. Report what is on screen in one line. If the picture is noise but
