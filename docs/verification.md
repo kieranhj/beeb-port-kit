@@ -847,8 +847,12 @@ written by hand; a baseline is what that becomes when the expectations are too m
    that weapon; every row is shared flight, the landscape, or the reading itself (a variable that
    moved and is read from a stale address - read by symbol from the build, per "Addresses come
    from the build" above). Repeated hashes in the baseline are worth a look too: Scorched
-   Earth's Leapfrog and Baby Missile wall rows hash the same on all four wall types, so 8 of its
-   16 wall rows never reach a wall.
+   Earth's Leapfrog and Baby Missile wall rows hashed the same on all four wall types, and MIRV
+   and Baby Roller on two each, so 8 of its 16 wall rows never reached a wall (the shots hit a
+   hill first, or burst on concrete high in the air and changed nothing). A sweep of angle and
+   power found shots that give four different results, and now no two of its 74 rows share a
+   hash ([`326a576`](https://github.com/mattgodbolt/beeb-scorched-earth/commit/326a576)).
+   A row that matches another is a row that tests less than its name says.
 
 What it cannot prove:
 
