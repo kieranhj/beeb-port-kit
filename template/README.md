@@ -35,7 +35,7 @@ sound.
 make                    # the same on any POSIX make: make release, make master, make run, make help
 ```
 
-The assembler is [Baron](https://github.com/waitingforvsync/baron) 0.4.0, found through
+The assembler is [Baron](https://github.com/waitingforvsync/baron) 0.4.2 (0.4.1 or later), found through
 `$BARON`, then `bin/`, then the PATH. Every build passes `--warn 2`, which adds Baron's opt-in
 audits - chiefly a store into the zero-page pool at a literal address - to the ordinary
 warnings; the template is silent at that level and a port should keep it so. Warnings go to

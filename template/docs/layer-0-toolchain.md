@@ -136,6 +136,12 @@ from the request**, the kit's rule again). `scroll` 0 -> 200 in 50 fields of X.
   identical to `src/data/panel.bin` and `zxdst` at `&5400`. All of RELEASE=0/1 and MASTER=0/1
   assemble, from `build.ps1` and `tools/build.sh`. Why, and the whole BeebASM delta:
   `../../docs/toolchain-baron.md`.
+- **0.4.2 on 2026-10-04**, because 0.4.1 made `ASSERT` a statement and `beeb.h.6502`'s
+  `MACRO ASSERT` became `error: Reserved macro name`. The macro is gone and no call site changed;
+  0.4.0 cannot build the template any more. The images did not move: `game.ssd`,
+  `game-master.ssd` and both raw images are identical to 0.4.0's, under 0.4.1, 0.4.2 and
+  `main@accc35c`. The listing loses its `ASSERT` lines and the symbol dump the macro's
+  per-expansion `c` entries, nothing else.
 - `RELEASE` and `MASTER` passed every time (Baron has `DEFINED()`, so this is now a choice, not
   BeebASM's no-`IFDEF` workaround). The stamp's timestamp comes from the generated
   `build/build_time.6502`, not `TIME$`: **Windows PowerShell 5.1 cannot pass a quoted string with

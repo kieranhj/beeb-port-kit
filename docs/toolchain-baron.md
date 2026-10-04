@@ -17,9 +17,41 @@ and a `baron.exe` that *every* BBC project on the machine resolves - 1942 among 
 replacing the exe there moves projects that never asked to move. That folder stays on the
 0.3.0 release binary of 2026-09-07; the kit runs the newer build out of its own `bin\`.
 
-## The pinned version: 0.4.0 (2026-09-23)
+## The pinned version: 0.4.2 (2026-10-03)
 
-`template\bin\baron.exe` is the **0.4.0 release binary**, downloaded from the releases page on
+**The kit builds on Baron 0.4.1 and later, and on nothing older.** The pin is the 0.4.2 release
+binary (`baron.exe` from the [releases page](https://github.com/waitingforvsync/baron/releases/tag/v0.4.2),
+`sha256 2c428495 87132a11 aeee5f52 ca965437 4a4ee499 d1ad53be e9bb8fd9 e8a816c6`).
+
+**0.4.1 made `ASSERT` a statement, and that is what moved the pin.** `beeb.h.6502` had defined
+`MACRO ASSERT` because Baron had no `ASSERT`; 0.4.1
+([`d046a9a`](https://github.com/waitingforvsync/baron/commit/d046a9a), released 2026-09-30)
+added one, and from then on that macro is `error: Reserved macro name` - so on any current Baron
+the template, `lib/test/` and `examples/vscroll` all failed to build, while the 0.4.0 pin hid it.
+Three projects building on the kit met it independently, and the
+kit said nothing about which versions it supports. The macro is gone and the call
+sites are unchanged: the statement takes both of its shapes (`ASSERT c`, `ASSERT c, msg`). There
+is no source that builds on both sides - Baron has no version symbol, and a `MACRO ASSERT` is
+refused even inside `IF FALSE` - so 0.4.0 and older are no longer supported.
+
+What changed, measured on 2026-10-04 with Linux builds of the tags (`v0.4.1`, `v0.4.2`, and
+`main@accc35c`), each against the old macro under 0.4.0:
+
+| | Result |
+|---|---|
+| The template, `make`, `make release` and `make master`: `game.ssd`, `game-master.ssd` and both raw images | **byte-identical**, on all three |
+| `lib/test/test_lib.6502`, `-D RELEASE=0` and `=1` | `TEST`, `BOOT` and `INFO` **byte-identical**; exit 0 and silent at `--warn 2` |
+| `lib/test/run_test`, `andy_test`, `probe_test` | images **byte-identical**, exit 0 |
+| `examples/vscroll` | image **byte-identical** |
+| `game.lst` / `vscroll.lst` | each `ASSERT` line is gone - a macro call was listed, a statement is not. Nothing else moved |
+| `game.symbols.json` / `vscroll.symbols.json` | entries like `"@0:2465.c": true` are gone: the macro's parameter `c`, one per expansion (14 in the DEV template's dump). Nothing else moved |
+| A failing `ASSERT` | still fails the build, exit 1 (`make`: 2, raw image removed), reported at the `ASSERT`'s own line - `src/main.6502:60:1: error: Assertion failed` with `PANEL_BYTES = 2560` changed to 2561, or the message when there is one. The macro said `assertion failed` at its `ERROR` line in `beeb.h`, with `Note: Expanded from here` at the call |
+
+`build.ps1` was not run (no PowerShell here), so `make` against `build.ps1` is not re-measured.
+
+### The previous pin, 0.4.0 (2026-09-23)
+
+`template\bin\baron.exe` was the **0.4.0 release binary**, downloaded from the releases page on
 2026-09-23 (`sha256 2c1183bb c293370e 586dcd10 bb8a6ec4 8f75c603 ba0e2fe3 0a5fe009 98a15a7c`).
 It replaced a `main@7213c8b` build made here from source on 2026-09-14; everything that build
 had is in 0.4.0, tagged.
@@ -197,7 +229,7 @@ Also in the release, unasked for and worth a line each:
 | BeebASM | Here |
 |---|---|
 | `ORG` / `SAVE` / `GUARD` / `CLEAR` | `SECTION name, org=, guard=, filename=, exec=` ... `ENDSECTION`. The filename **is** the request to save. Two sections may share an address, so `PANEL`'s `CLEAR` is gone |
-| `ASSERT cond` | A two-line `MACRO ASSERT` in `beeb.h.6502` (`IF NOT(c) : ERROR ... : ENDIF`), so all 16 assertions in `main.6502` read exactly as they did. Baron reports the `ERROR` and adds `Note: Expanded from here` at the call, so an assertion still names its own line |
+| `ASSERT cond` | The same, Baron's own statement since 0.4.1, with an optional message (`ASSERT cond, "text", value`). Until then it was a two-line `MACRO ASSERT` in `beeb.h.6502`, which 0.4.1 refuses as `Reserved macro name` - see the pin above |
 | `TIME$` | Gone. `tools/build_stamp.py` (run by the `Makefile` and `build.ps1`) writes `build/build_time.6502` - one line, `BUILD_TIME = "..."` - which `main.6502` includes. Not a `-D`: **Windows PowerShell 5.1 cannot hand a quoted string containing spaces to a native exe** (three forms tried, all mangled; PowerShell 7.3+ can, re-measured on 7.6.6 - [#3](https://github.com/waitingforvsync/baron/issues/3) above). The file stays regardless: it is what makes the rebuild byte-identical. The time is the source's (`SOURCE_DATE_EPOCH`, else the last commit), so a rebuild is byte-identical on any machine |
 | `INCLUDE` resolves from the working directory | Baron resolves it **relative to the including file**: `src/main.6502` says `INCLUDE "lib/irq.6502"`, not `"src/lib/irq.6502"`. Watch for this when forking a file into a different directory. A wrong path once surfaced as a confusing parse error downstream rather than "could not read"; that was [#1](https://github.com/waitingforvsync/baron/issues/1), fixed on 2026-09-13, and a bad path now says so at the `INCLUDE` |
 | `CPU 0` | NMOS is the default; `cmos = TRUE` on a section enables the 65C02 |

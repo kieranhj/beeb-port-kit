@@ -38,7 +38,7 @@ function Find-Tool([string]$name) {
     return $null
 }
 
-# Baron: pin the version. 0.4.0 or newer, for --warn.
+# Baron: pin the version. 0.4.1 or newer, for --warn and ASSERT.
 $baron = Find-Tool 'baron'
 if (-not $baron) { throw "baron not found: set BARON, put baron.exe in the template's bin\ or on the PATH - releases at https://github.com/waitingforvsync/baron/releases" }
 

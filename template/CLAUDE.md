@@ -182,7 +182,7 @@ the zero page with it); the template leaves both alone.
 ## Assembly conventions
 
 - Baron syntax: labels `.name`, comments `\` or `;`, hex `&` - BeebASM's, less `ORG`/`SAVE`/
-  `GUARD`/`CLEAR` (sections carry those) and `ASSERT` (a macro in `beeb.h.6502`)
+  `GUARD`/`CLEAR` (sections carry those); `ASSERT` is Baron's own from 0.4.1
 - Keep routine and variable names matching the original's where a routine is a transcription
 - A local label inside `{}` shadows a global of the same name, silently
 - Debug builds are switched by `DEBUG_` constants at the top of `main.6502`; every debug key
