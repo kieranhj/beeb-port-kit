@@ -293,6 +293,21 @@ the arm that falls in, below it it covers every path arriving there. Write which
 Also unused so far: lists and broadcasting (a sine table in one `EQUB`), user `FUNCTION`s,
 `BASIC` ... `ENDBASIC` for a tokenised BASIC loader, and macro overloading.
 
+**Before adopting `FUNCTION`s on 0.4.x: call frames can collide.** Up to and including 0.4.2, a
+call's frame was keyed by its caller scope and byte offset but not its source file, so two calls
+from the same scope at the same offset in two files shared one frame, and the second call's body
+read the first call's arguments; a frame key could also coincide with a macro, anonymous `{ }` or
+`FOR` scope's. Scorched Earth (Baron, `FUNCTION`s over strings for its font and text) met it as
+`Incompatible types` inside a function called from a macro, appearing and disappearing with
+unrelated edits, because only byte offsets decide it. Reported as
+[#10](https://github.com/waitingforvsync/baron/issues/10), fixed by
+[#11](https://github.com/waitingforvsync/baron/pull/11), merged to `main` (`accc35c`) on
+2026-10-04, after v0.4.2 and in no release yet. Measured here on 2026-10-04 with #10's two-file
+repro (`fn.6502` calls `f(5)`, `a.6502` includes it and calls `f(1)` at the same offset): 0.4.0
+and 0.4.2 print `10` `10`, `main@accc35c` prints `10` `2`; the macro repro gives `2` `2` against
+`2` `1`. On the pinned version, a `FUNCTION` that misbehaves only at some offsets is this, and
+moving the call by a byte is a workaround, not a fix.
+
 ## Going back to BeebASM
 
 A port that wants BeebASM reverses the table above. The whole delta measured on `lib/` was six

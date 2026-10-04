@@ -869,6 +869,20 @@ K -71, M -102, UP -58, DOWN -42; CTRL is INKEY -2 (`KEY_CTRL = &FE`).
   `ldx zpaddr` is the same two bytes `ldx #imm` was, so moving a constant table into zero page can
   cost nothing at its call sites.
   Established: 2026-09-06, from the listing. [Edge layer-9h-keyredef.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-9h-keyredef.md)
+- **`zp,X` wraps inside zero page, and the assembler picks it for any operand below `&100`** -
+  including `label-1` when `label` is `&0100`. Scorched Earth's boot copied a table down to the
+  stack page with `STA item_price_lo-1,X`; that operand is `&FF`, so it assembled as `STA &FF,X`
+  (`95 FF`), and the stores wrapped round inside zero page instead of reaching `&0100` onwards.
+  Every shop price read `&FF` ($65535) and zero page took the table, yet a whole computer-only
+  game ran without a crash; only the shop gave it away. Index by Y instead (`STA abs,Y` has no zero-page form, so
+  it stays absolute) or count up from the label itself. The exception is the pair that does have
+  `zp,Y`: `STX label-1,Y` and `LDX label-1,Y` wrap the same way.
+  Established: 2026-10-04, from the listings - Baron 0.4.0 and 0.4.2 both emit `95 FF` for
+  `STA stk-1,X` and `99 FF 00` for `STA stk-1,Y` (`stk = &100`), with `96 FF` / `B6 FF` for
+  `STX`/`LDX stk-1,Y`; BeebASM 1.10 (snap `v1.10+git2.1bf9191`) emits the same `95 FF` / `99 FF 00`.
+  [scorched-earth src/boot.6502](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/src/boot.6502),
+  fixed in [`0b599d0`](https://github.com/mattgodbolt/beeb-scorched-earth/commit/0b599d0)
+  ([journal.md](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/journal.md) "A trap found on the way")
 - **IRQ latency swings by more than a few cycles**: the 6502 finishes the instruction it is on, and
   a `SEI` window in the foreground (17 cycles in Paradroid's `SetCRTCStart`) adds to it. A CRTC write
   with 3-7 cycles of margin to the end of horizontal blanking overran intermittently and showed a
