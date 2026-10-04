@@ -1,0 +1,173 @@
+\ ******************************************************************
+\ *	packed_text.6502 - on-screen text at five bits a character
+\ ******************************************************************
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, plain 6502.
+\ *
+\ *	WHAT IT IS. The macro PACKED "TEXT" packs a string at assembly
+\ *	time; pt_next unpacks it at run time, one ASCII byte per call.
+\ *	The source keeps saying what is on screen, and the assembly fails
+\ *	on a character the alphabet cannot carry, so a font with holes in
+\ *	it cannot be handed one by mistake.
+\ *
+\ *	THE FORMAT. Five bits a code, first bit highest, the string padded
+\ *	to a whole byte at its end (each string starts a byte):
+\ *	  1-30  the 1st-30th character of PT_ALPHABET (below);
+\ *	  0     escape: the next five bits are ASCII 32-63 (space, digits,
+\ *	        the punctuation between them), ten bits a character;
+\ *	  31    end of string.
+\ *	Characters outside PT_ALPHABET and outside 32-63 are refused.
+\ *
+\ *	PT_ALPHABET IS THE ONE LINE TO EDIT. It names the 30 characters
+\ *	that cost five bits; the default is upper-case text. A game that
+\ *	prints mixed case has 30 slots for 52 letters: it puts its
+\ *	commonest there and moves the escape's 32 characters to cover the
+\ *	rest (pt_entry's c < 64 and pt_next's ADC #31, together), or goes
+\ *	back to a byte a character. pt_alpha, the 31-byte table pt_next reads, is
+\ *	assembled from the same line, so the two cannot disagree. Its
+\ *	bytes are what pt_next returns: a port whose font is not in ASCII
+\ *	order can make them glyph numbers and skip a translation; one
+\ *	whose alphabet IS in font order can drop the table for an ADC, as
+\ *	the source port did (its code c was glyph c + 64).
+\ *
+\ *	WHERE IT CAME FROM. Scorched Earth for the BBC Micro (Matt
+\ *	Godbolt, MIT), https://github.com/mattgodbolt/beeb-scorched-earth:
+\ *	the macro in blob/main/src/text.6502, the unpacker (unpack, five,
+\ *	fetch, packed_nth) in blob/main/src/menu.6502. Generalised for the
+\ *	kit: the port mapped codes to its own font's glyph numbers; this
+\ *	maps them to ASCII through PT_ALPHABET.
+\ *
+\ *	WHAT WAS MEASURED. In the port: going from six bits a character
+\ *	to this five-bit format alone (its commit f45d8bf, 2026-10-03)
+\ *	shrank its text by ~110 bytes for 18 of decoder and glyphs, every
+\ *	text screen dumping identical; with its item names packed too and
+\ *	the glyphs no string reached dropped, the text work freed 217
+\ *	bytes (blob/main/journal.md, "Third pass", "Text (+217)"). In this
+\ *	kit (2026-10-04, Baron 0.4.0): test/text_test.6502 unpacks seven
+\ *	strings - empty, escaped, all-escape - in jsbeeb 2.3.1 (Model B
+\ *	and Master, via jsbeeb-mcp 4.0.1) and compares every byte,
+\ *	terminators included, with an EQUS copy: PASS, and a wrong copy
+\ *	is caught at the right offset. Those 98 characters pack to 86
+\ *	bytes against 105 as zero-terminated EQUS; they are escape-heavy
+\ *	on purpose (text of alphabet characters alone tends to 5/8 of a
+\ *	byte each). Code: pt_start 9 bytes, pt_next 42, pt_nth 20,
+\ *	pt_alpha 31. The same test built with Baron 0.4.2 and main
+\ *	(accc35c) gives a byte-identical disc, once its INCLUDE of
+\ *	beeb.h.6502 is taken out: 0.4.1 made ASSERT a keyword, and
+\ *	refuses beeb.h.6502's ASSERT macro ("Reserved macro name").
+\ *
+\ *	THE BARON TRAP. The port's PACKED called a FUNCTION, and in
+\ *	Baron 0.4.0 to 0.4.2 (0.4.0 checked with the issue's repro, on
+\ *	2026-10-04) two calls to one FUNCTION from the same scope
+\ *	at the same byte offset in two different source files share a
+\ *	call frame: the second sees the first's arguments
+\ *	(waitingforvsync/baron#10, fixed by #11, merged after v0.4.2). In
+\ *	the port it showed as "Incompatible types" that came and went
+\ *	with the bytes before a PACKED line. So PACKED here calls no
+\ *	FUNCTION: the two below run only from this file, to build PT_T.
+\ *	Keep it that way when you fork this, or build Baron from main.
+\ *
+\ *	CALLING CONVENTION.
+\ *	  pt_start  X/Y = the string (lo/hi). Sets ptsrc and ptbits.
+\ *	  pt_next   -> A = the next character, Z set (A = 0) at the end.
+\ *	            X clobbered, Y preserved (so a print loop may index
+\ *	            by it). Do not call again after the end.
+\ *	  pt_nth    A = n, X/Y = a run of PACKED strings: as pt_start on
+\ *	            the n-th (from 0), unpacking past the ones before it.
+\ *	            One list, no pointer table: for item names and menus.
+\ *	            It is O(n): the port's shop went slow unpacking every
+\ *	            name before the one it wanted, and now remembers where
+\ *	            the next name starts: after the end, ptsrc points at
+\ *	            the next string, to hand to pt_start.
+\ *
+\ *	THE INCLUDER DEFINES two zero-page symbols, ptsrc (2 bytes, the
+\ *	next byte to read) and ptbits (1 byte, what is left of the last),
+\ *	as for the depackers, and includes beeb.h.6502 first (ASSERT).
+\ ******************************************************************
+
+PT_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ.!' "    ; codes 1-30: EDIT ME
+PT_NO = 99                                       ; a character it can't carry
+ASSERT LEN(PT_ALPHABET) <= 30
+
+\ Code (or 0) of each of ASCII 32-127 in PT_ALPHABET, as an outer
+\ product: Baron's FIND is a hard error on a miss.
+PT_AIDX = SUM((ZIP(32..127) = CODES(PT_ALPHABET)) * (1..LEN(PT_ALPHABET)), 1)
+
+\ PT_T[c - 32] is the list of codes character c packs to.
+FUNCTION pt_entry(c)
+    a = PT_AIDX[c - 32]
+    IF a > 0
+        e = {a}
+    ELSE
+        IF c < 64
+            e = {0, c - 32}
+        ELSE
+            e = {PT_NO}
+        ENDIF
+    ENDIF
+= e
+\ Halving, not counting: Baron refuses recursion 96 deep.
+FUNCTION pt_table(lo, hi)
+    IF lo = hi
+        t = {pt_entry(lo)}
+    ELSE
+        m = (lo + hi) DIV 2
+        t = CONCAT(pt_table(lo, m), pt_table(m + 1, hi))
+    ENDIF
+= t
+PT_T = pt_table(32, 127)
+
+\ Byte k is bits 8k-8k+7 of the stream, which lie inside the three
+\ codes from code 8k DIV 5; two zero codes pad the end for that read.
+MACRO PACKED text
+    pt_c = CONCAT(FLATTEN(PT_T[CODES(text) - 32]), 31, 0, 0)
+    ASSERT MAX(pt_c) < 32, "PACKED: not in PT_ALPHABET nor ASCII 32-63"
+    FOR k = 0..<((LEN(pt_c) - 2) * 5 + 7) DIV 8
+        pt_i = k * 8 DIV 5
+        pt_w = pt_c[pt_i] * 1024 + pt_c[pt_i + 1] * 32 + pt_c[pt_i + 2]
+        EQUB (pt_w >> (7 - k * 8 MOD 5)) AND 255
+    NEXT
+ENDMACRO
+
+.pt_start
+    STX ptsrc : STY ptsrc+1
+    LDA #&80 : STA ptbits                       ; empty: the 1 is a sentinel
+    RTS
+
+.pt_next
+{
+    JSR five : BEQ escape
+    TAX : LDA pt_alpha-1,X                      ; code 31 reads the 0
+    RTS
+.escape
+    JSR five : ADC #31                          ; carry set: +32, never 0
+    RTS
+\ The next five bits -> A, Z set if they are 0, carry set.
+.five
+    LDA #8                                      ; shifts out after 5 bits
+.bit
+    ASL ptbits : BNE got
+    PHA                                         ; ptbits ran dry: refill
+    LDX #0 : LDA (ptsrc,X)
+    INC ptsrc : BNE @+ : INC ptsrc+1 : .@
+    SEC : ROL A : STA ptbits                    ; top bit to C, sentinel in
+    PLA
+.got
+    ROL A : BCC bit
+    RTS
+}
+
+.pt_nth
+{
+    STX ptsrc : STY ptsrc+1
+    TAY                                         ; (pt_next preserves Y)
+.skip
+    LDA #&80 : STA ptbits                       ; each string starts a byte
+    DEY : BMI found
+.@  JSR pt_next : BNE @-
+    BEQ skip
+.found
+    RTS
+}
+
+.pt_alpha
+    EQUB CODES(PT_ALPHABET), REPEATED(30 - LEN(PT_ALPHABET), 0), 0

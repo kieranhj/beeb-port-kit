@@ -1,0 +1,127 @@
+\ ******************************************************************
+\ *	text_test.6502 - packed_text.6502, RUN
+\ ******************************************************************
+\ *	Unpacks seven PACKED strings - the empty one, ones that escape for
+\ *	digits and punctuation, one that is nothing but escapes - and
+\ *	compares every byte, terminators included, with an EQUS copy of
+\ *	the same text. Model B or Master. From the kit's root:
+\ *
+\ *	  baron --warn 2 -o lib/test/build/text.ssd --title TEXTT --opt 3 lib/test/text_test.6502
+\ *
+\ *	It prints the packed and plain sizes. SHIFT+BREAK it, then read:
+\ *	  &0900-   every string by pt_nth(0..6), each ended by pt_next's 0:
+\ *	           PASS = the bytes of `plain` below
+\ *	  &0A00    0 = PASS, else 1 + the offset of the first wrong byte
+\ *	  &0A01    the same for string 3 by pt_start, unpacked to &0A10
+\ *	  &0A02    &AA once the test has finished
+\ *	Measured 2026-10-04 (Baron 0.4.0, jsbeeb 2.3.1, Model B and
+\ *	Master): 00 00 AA, and "packed 86 bytes, plain 98 characters + 7
+\ *	terminators". A copy with a digit changed in two of the EQUS strings read
+\ *	1C 09 AA: the check catches it, at the right offset.
+\ ******************************************************************
+
+INCLUDE "../beeb.h.6502"
+
+SECTION zeropage, org = &70, guard = &90
+.ptsrc  SKIP 2
+.ptbits SKIP 1
+.out    SKIP 2
+ENDSECTION
+
+OUT    = &0900
+RESULT = &0A00
+OUT3   = &0A10
+NSTR   = 7
+
+SECTION TextT, org = &1900, guard = &2400, filename = "TEXTT", exec = test_main
+.test_main
+{
+    lda #LO(OUT) : sta out
+    lda #HI(OUT) : sta out+1
+    lda #0
+.each
+    pha
+    ldx #LO(packed) : ldy #HI(packed)
+    jsr pt_nth
+    ldy #0
+.char
+    jsr pt_next
+    php
+    sta (out),Y
+    iny
+    plp
+    bne char
+    tya : clc : adc out : sta out       ; (output < 256 bytes in all)
+    pla
+    clc : adc #1
+    cmp #NSTR
+    bcc each
+
+    ldx #plain_end - plain - 1          ; compare, backwards, so the
+    lda #0 : sta RESULT                 ; lowest wrong byte wins
+.cmp1
+    lda OUT,X
+    cmp plain,X
+    beq ok1
+    inx : stx RESULT : dex
+.ok1
+    dex
+    cpx #&FF
+    bne cmp1
+
+    ldx #LO(s3) : ldy #HI(s3)
+    jsr pt_start
+    ldy #0
+.char3
+    jsr pt_next
+    sta OUT3,Y
+    php : iny : plp
+    bne char3
+    ldx #p3_end - p3 - 1
+    lda #0 : sta RESULT+1
+.cmp3
+    lda OUT3,X
+    cmp p3,X
+    beq ok3
+    inx : stx RESULT+1 : dex
+.ok3
+    dex
+    bpl cmp3
+
+    lda #&AA : sta RESULT+2
+.done
+    jmp done
+}
+
+INCLUDE "../packed_text.6502"
+
+\ The strings, packed and plain; the two lists must stay in step.
+.packed
+    PACKED "HELLO, WORLD!"
+    PACKED ""
+    PACKED "SCORE: 012345"
+.s3 PACKED "IT'S 3.45 PM."
+    PACKED "#$%&()*+-/;<=>?"
+    PACKED "A"
+    PACKED "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG"
+.packed_end
+
+.plain
+    EQUS "HELLO, WORLD!", 0
+    EQUB 0
+    EQUS "SCORE: 012345", 0
+.p3 EQUS "IT'S 3.45 PM.", 0
+.p3_end
+    EQUS "#$%&()*+-/;<=>?", 0
+    EQUS "A", 0
+    EQUS "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG", 0
+.plain_end
+ENDSECTION
+
+ASSERT plain_end - plain < 256
+
+SECTION Boot, org = &7E00, guard = &7F00, filename = "!BOOT"
+    EQUS "*RUN TEXTT", 13
+ENDSECTION
+
+PRINT "packed ", packed_end - packed, " bytes, plain ", plain_end - plain - NSTR, " characters + ", NSTR, " terminators"
