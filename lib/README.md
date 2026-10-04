@@ -20,8 +20,9 @@ break.
 Nothing in here is believed without a measurement. Where a symbol is a name from a reference
 manual that neither port exercised, the header says so (`beeb.h.6502`'s five unused ACCCON bits).
 
-These files are **[Baron](https://github.com/waitingforvsync/baron)** syntax, 0.4.0 (2026-09-23)
-(`.6502`, sections instead of `ORG`/`SAVE`, `ASSERT` as a macro in `beeb.h.6502`). The two
+These files are **[Baron](https://github.com/waitingforvsync/baron)** syntax, 0.4.1 or later, pinned at 0.4.2
+(`.6502`, sections instead of `ORG`/`SAVE`). 0.4.0 and older cannot build them: `beeb.h.6502`
+defined `ASSERT` as a macro until 0.4.1 made it a statement (`../docs/toolchain-baron.md`). The two
 shipping ports are BeebASM projects and their own copies are unaffected; a port that wants
 BeebASM reverses the table in `../docs/toolchain-baron.md`, which is six lines' work, or takes
 the files from this repository's history (commit `5355d03`).
@@ -88,7 +89,8 @@ baron --warn 2 -p lib/test/build -D RELEASE=1 lib/test/test_lib.6502
 
 `--warn 2` is what the template's builds pass; `lib/` is silent at that level, both values of
 `RELEASE` (measured 2026-09-23, Baron 0.4.0, and the three files come out byte-identical to the
-0.3.0-era binary's). Baron is silent on success, warnings never change the exit code, and every
+0.3.0-era binary's; re-measured 2026-10-04 on 0.4.1, 0.4.2 and `main@accc35c` without the macro,
+still silent, and byte-identical to 0.4.0's). Baron is silent on success, warnings never change the exit code, and every
 error of a run is reported in one go — so check the **exit code**. In PowerShell do not redirect
 stderr or `$ErrorActionPreference = 'Stop'` throws on a successful build. `lib/test/build/` is scratch; `INFO` there is the stamp read back, and `BOOT` is the stub, with whichever
 lines the `RELEASE` you passed puts in it.
