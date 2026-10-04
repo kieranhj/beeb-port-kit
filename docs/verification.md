@@ -1,6 +1,6 @@
 # Verification: the measuring and checking procedures
 
-Fifteen procedures, numbered so a reader can pick one by number. Each gives the manual route
+Sixteen procedures, numbered so a reader can pick one by number. Each gives the manual route
 first - what to do by hand in [jsbeeb](https://bbc.xania.org), b2 or beebjit - and then, in a short
 sub-block, the same thing as calls to the jsbeeb MCP server (`jsbeeb-mcp` on npm, used from
 Claude Code). Nothing in the MCP block is needed to follow the manual one.
@@ -769,6 +769,122 @@ The checklist for a new check:
 
 ---
 
+## 16. A checked-in behaviour baseline, when the original cannot be the oracle
+
+**Prefer the original.** When the original runs headless - a C64 game under VICE or a 6502
+simulator such as py65, a Spectrum one under SkoolKit's Z80 simulator - the reference for any
+routine is the original's own code: restore a snapshot, poke the same inputs, call the routine,
+read its model state back, and diff the port's against it, byte for byte (procedure 15's rule,
+applied to game logic). That one check serves new work ("does the port now do what the original
+does?") and every later size pass ("does it still?"), and it proves *right*, not just
+*unchanged*. Where it reaches, this procedure adds nothing.
+
+This procedure is the fallback, for when there is nothing to call: a port-in-spirit with no
+runnable original (Scorched Earth's case: a PC game, ported from its manual), or port-only code
+with no counterpart in the original (menus, glue, a reworked AI). There the best reference left
+is the port's own earlier behaviour, checked in. It is the code checked against its past self -
+the thing procedure 15 warns about - so it can only say "unchanged", and every limit below
+follows from that.
+
+It covers a change that **alters instructions but should not alter behaviour** - a size saving,
+a refactor, two routines folded into one, an allocator change - where procedure 12 fails by
+design, procedure 13 cannot see it (its own section says so), and procedure 14 needs both builds
+side by side for every change. The game's own logic is compared, against a file in the repo.
+[Scorched Earth](https://github.com/mattgodbolt/beeb-scorched-earth) (a Baron, MODE 2 port
+outside the two this kit grew from) has the worked example,
+[`tools/regress.mjs`](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/tools/regress.mjs)
+and [`tools/regress.baseline.txt`](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/tools/regress.baseline.txt),
+written for its first memory pass and the gate on every commit of three
+([journal.md](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/journal.md), "The
+memory team", "Second pass", "Third pass") - 605 -> 2,328, 1,769 -> 2,571 and 1,292 -> 2,085
+bytes free, each merged build reproducing the baseline exactly (features spent the bytes in
+between). The template's `tools/verify_dynamic.mjs` is the same idea with four expected numbers
+written by hand; a baseline is what that becomes when the expectations are too many to write.
+
+1. **Reach one state and pin every source of chance in it.** Boot, drive the menus with keys,
+   break where play begins (`main.game`+3 in Scorched Earth) and poke the random seed, and any
+   frame counter the game reads, to fixed values. Without that the result moves with code size:
+   Scorched Earth's seed is whatever the boot left, and boot time changes with every byte -
+   procedure 14's Paradroid deck, met again. Then save the state once; every scenario starts
+   from a restore of it.
+2. **Write the scenarios as a table, not a script.** Each row is a few pokes into the model and
+   one input, and its name is built from those values. Scorched Earth's row is (weapon, wall
+   type, power, angle, shield), poked into the current player's arrays, then a tap of SPACE; the
+   name reads `w0_wall2_a10_p3232`. Cover each path you care about at least once: every weapon
+   (32 rows), the splitting, bouncing and rolling weapons against each wall type (16), near
+   misses on the firing tank at four distances for six weapons (24), a shielded tank (2) - 74
+   rows. Run each for a fixed number of frames, long enough for the slowest row to settle
+   (12 x 40 there).
+3. **Hash the model, not the screen.** After each row read the game's state by symbol -
+   Scorched Earth reads the 161-byte heightmap, health, money, positions, shields and inventory -
+   and write one line: the name, a SHA-1 of those bytes, and a few of them in plain text
+   (`health 100,78`) so a changed line says what changed without a debugger. The screen is the
+   wrong thing to hash here: it is drawn across frames, so its hash depends on which frame was
+   sampled; it is a projection of the model, so two different states can draw the same pixels;
+   and a cosmetic change moves every line. For what the table does not drive, compare screen
+   memory as a separate check - Scorched Earth's third pass did both.
+4. **Check the baseline in and gate on it**, every commit:
+   `node tools/regress.mjs build/regress.txt && diff tools/regress.baseline.txt build/regress.txt`.
+   A deliberate behaviour change regenerates the file in the same commit and says so in the
+   message. Scorched Earth adopted it in
+   [`2bc8d2f`](https://github.com/mattgodbolt/beeb-scorched-earth/commit/2bc8d2f) and has
+   regenerated it in five commits since
+   ([`0b599d0`](https://github.com/mattgodbolt/beeb-scorched-earth/commit/0b599d0) grew the
+   table to 74 rows when the weapon indices moved).
+5. **Run the controls before trusting a clean diff.** Measured 2026-10-04 on Scorched Earth at
+   [`1c963f3`](https://github.com/mattgodbolt/beeb-scorched-earth/commit/1c963f3), Baron 0.4.2
+   (main at `016a764`), jsbeeb-mcp 4.0.1, 190 s a run on an i9-9980XE:
+   - the same build, run twice: two identical 74-line files, both identical to the checked-in
+     baseline. The harness is deterministic.
+   - Baby Missile's crater radius 6 -> 7, one byte in the item table: exactly the 9 Baby Missile
+     rows moved and the other 65 did not, and the near misses' plain text showed the extra
+     damage (`health 100,78` -> `100,76`). The harness is sensitive, and the diff is local.
+   - Baby Missile's blast power 40 -> 41 instead: **0 rows moved** (probably because damage
+     is `(reach - dist) * power / reach`, truncated, so one unit more rounds away at the
+     distances the table uses; inferred from the formula, not traced). A clean diff means no
+     row saw a difference, nothing more.
+6. **Read a diff by its names.** Which rows moved says which path changed: one weapon's rows is
+   that weapon; every row is shared flight, the landscape, or the reading itself (a variable that
+   moved and is read from a stale address - read by symbol from the build, per "Addresses come
+   from the build" above). Repeated hashes in the baseline are worth a look too: Scorched
+   Earth's Leapfrog and Baby Missile wall rows hashed the same on all four wall types, and MIRV
+   and Baby Roller on two each, so 8 of its 16 wall rows never reached a wall (the shots hit a
+   hill first, or burst on concrete high in the air and changed nothing). A sweep of angle and
+   power found shots that give four different results, and now no two of its 74 rows share a
+   hash ([`326a576`](https://github.com/mattgodbolt/beeb-scorched-earth/commit/326a576)).
+   A row that matches another is a row that tests less than its name says.
+
+What it cannot prove:
+
+- **Only what the table drives.** The power example above, and everything with no row: the
+  computer players' choices, the shop, the menus. Scorched Earth adds a whole game of four
+  computer players (`make test`) and, in its third pass, the screen comparisons.
+- **A crash hashes too.** Scorched Earth's Leapfrog jumped off the end of a dispatch table into
+  a BRK and shipped that way: its rows ran into the crash, the baseline recorded whatever state
+  the crash left, and those hashes then moved with unrelated code (journal, "The rest of the shop";
+  fixed in [`34b1635`](https://github.com/mattgodbolt/beeb-scorched-earth/commit/34b1635), where
+  the tool started breaking on OS 1.20's BRK path at `&DC27` and writing `BRK` for the row).
+  Trap crashes in the harness so a crashed row says so; that is a check of its own, not
+  described here.
+- **Unchanged, not right.** The baseline is the old build's output, so it is the code checked
+  against itself (procedure 15). It proves a change preserved behaviour; whether the behaviour
+  was correct needs an oracle - the original, if it can be run at all (top of this section).
+
+```
+# once
+set_breakpoint  address: <main.game + 3>             # after setup; then press SPACE, run
+write_memory    address: <seed>, bytes: [0x34, 0x12] # and any frame counter the game reads
+save_state      session_id                           # -> state_id
+# per row
+restore_state   session_id, state_id
+write_memory    address: <tank_weapon + cur>, bytes: [<w>]      # the row's pokes
+key_down        key: "SPACE"    key_up  key: "SPACE"
+run_frames      count: 480
+read_memory     address: <ground>, length: 161                  # ... every model array; hash them
+```
+
+---
+
 ## Gaps
 
 Recorded so the next port does not assume they are filled:
@@ -778,6 +894,10 @@ Recorded so the next port does not assume they are filled:
   (procedure 12); both were done inline. The kit ships the reducer now (`py/listing.py`,
   2026-09-07); the catalogue extractor is still inline.
 - Paradroid's headless A/B script (procedure 14) survives only as a memory note.
+- The kit ships no harness that drives the original headless as a routine-level oracle, nor a
+  behaviour-baseline tool for when it cannot (procedure 16); the template's `verify_dynamic.mjs`
+  asserts four hand-written numbers, and the fallback recipe is Scorched Earth's, not either
+  port's.
 - The mid-frame bank flip, the 8K-wrap ring and the display-below-`&3000` rule are measured on
   one or two emulators and on no hardware (procedure 11).
 - Procedure 9's BASIC loop is reconstructed from the doc's description of the method, not
