@@ -21,9 +21,10 @@
 //     ruler      logical 3 every eighth unit, else 0
 // Writes out.png and out-b.png, ONE FIELD APART, so both frame-lock parities
 // are seen (BUGS.md #1). Prints scroll, field_count and frame_count.
+// A BRK after the boot throws "BRK at &xxxx" instead of saving a picture.
 import { writeFileSync } from "node:fs";
 
-import { loadMachineSession, keys } from "./jsbeeb_src.mjs";
+import { loadMachineSession, keys, trapBrk } from "./jsbeeb_src.mjs";
 const MachineSession = await loadMachineSession();
 const K = keys();   // jsbeeb 2.0 changed keyDown from a number to a code string
 
@@ -32,9 +33,10 @@ const PANEL_LAST_LINE = 0x4a00 + 3 * 640 + 7;   // PANEL_ADDR + row 3 + scan 7
 const s = new MachineSession(process.env.JSBEEB_MODEL || "B-DFS1.2", { tube: false });
 await s.initialise();
 await s.boot(30);
+const run = trapBrk(s);
 s.loadDisc(ssd);
-s.keyDown(K.SHIFT); s.reset(true); await s.runFrames(50); s.keyUp(K.SHIFT);  // SHIFT+BREAK, held long enough
-await s.runFrames(150);
+s.keyDown(K.SHIFT); s.reset(true); await run(50); s.keyUp(K.SHIFT);  // SHIFT+BREAK, held long enough
+await run(150);
 if (mode) {
     for (let u = 0; u < 80; u++) {
         const v = mode === "ruler" ? ((u % 8 === 0) ? 0xff : 0)
@@ -42,10 +44,10 @@ if (mode) {
                 : 0x0f;
         s.writeMemory(PANEL_LAST_LINE + u * 8, [v]);
     }
-    await s.runFrames(3);
+    await run(3);
 }
 writeFileSync(out, await s.screenshotActive());
-await s.runFrames(1);
+await run(1);
 writeFileSync(out.replace(/\.png$/, "-b.png"), await s.screenshotActive());
 console.log("scroll", s.readMemory(0x13, 2), "field_count", s.readMemory(0x0b, 1), "frame_count", s.readMemory(0x15, 2));
 process.exit(0);

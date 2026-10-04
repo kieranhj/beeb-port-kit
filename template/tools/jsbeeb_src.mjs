@@ -109,3 +109,48 @@ export async function loadMachineSession() {
     const { MachineSession } = await import(`file:///${src}/machine-session.js`);
     return MachineSession;
 }
+
+/**
+ * Stop at the MOS's BRK path and fail, so a crash cannot pass as a result.
+ *
+ * A harness that reads memory after a BRK measures whatever the crash left,
+ * and a baseline taken from it records the crash as correct: Scorched Earth's
+ * Leapfrog dispatched off the end of an RTS table into a BRK, the regression
+ * hashed the wreck, and it shipped (mattgodbolt/beeb-scorched-earth 34b1635).
+ *
+ * The address is found, not hardcoded. The 6502 sends BRK through the IRQ
+ * vector at &FFFE, and both MOSes begin there with the same B-flag test,
+ * `STA &FC : PLA : PHA : AND #&10 : BNE brk : JMP (IRQ1V)`; the BNE's target
+ * is the BRK path. Measured on jsbeeb 2.3.1 by tracing a BRK from BASIC
+ * (2026-10-04): OS 1.20 enters at &DC1C and takes &DC27, MOS 3.20 enters at
+ * &E59E and takes &E5A9. Owning IRQ1V does not take BRKs off the MOS, since
+ * the test runs before the JMP, so this traps them in any game. BRKV (&0202)
+ * is the weaker place: the MOS offers the BRK to every sideways ROM (service
+ * call 6) before it gets there, which a game that has paged or overwritten
+ * sideways RAM may never survive.
+ *
+ * Call it after boot(), when &FFFE reads the MOS. It returns `run(frames)`,
+ * runFrames that throws "BRK at &xxxx" - the BRK opcode's own address, read
+ * off the stack the BRK pushed (P, then the address + 2).
+ */
+export function trapBrk(s) {
+    const hex = (v) => "&" + v.toString(16).toUpperCase().padStart(4, "0");
+    const v = s.readMemory(0xfffe, 2), entry = v[0] | (v[1] << 8);
+    const b = s.readMemory(entry, 8);
+    const shape = [0x85, 0xfc, 0x68, 0x48, 0x29, 0x10, 0xd0];
+    if (shape.some((x, i) => b[i] !== x)) {
+        throw new Error(`IRQ entry at ${hex(entry)} is not the B-flag test this expects: find the BRK path by hand`);
+    }
+    const path = entry + 8 + (b[7] < 0x80 ? b[7] : b[7] - 0x100);
+    const id = s.addBreakpoint("execute", path);
+    return async function run(frames) {
+        const r = await s.runFrames(frames);
+        const hit = s.hitBreakpoint();
+        if (hit && hit.id === id) {
+            const sp = s.registers().s;
+            const at = (k) => s.readMemory(0x100 + ((sp + k) & 0xff), 1)[0];
+            throw new Error(`BRK at ${hex(((at(2) | (at(3) << 8)) - 2) & 0xffff)} (MOS BRK path ${hex(path)})`);
+        }
+        return r;
+    };
+}
