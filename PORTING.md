@@ -75,6 +75,17 @@ You need the original's source, or a disassembly you can trust.
 - A screenshot of the original beats a model of it. Paradroid's play area was believed to be
   multicolour through three successive wrong models until someone looked at the C64 running.
   Keep reference screenshots in the repo (gitignored if they are not yours to redistribute).
+- **With no source at all, the specification is a research document, and the guesses are
+  decisions.** [Scorched Earth](https://github.com/mattgodbolt/beeb-scorched-earth) (a port-in-spirit of the 1991 PC shareware game)
+  had the original's manual and a clone's source, nothing to transcribe. A research pass
+  before any code ([`docs/research.md`](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/docs/research.md)) stood in for the
+  listing, each number marked with where it came from, and it still decided architecture:
+  the manual's Suspend Dirt defaults to 0, so dirt always settles and a heightmap is faithful,
+  not just convenient. Every value the manual leaves undocumented, and every reinterpretation,
+  went into a list the owner audits against it for playability
+  ([`docs/for-review.md`](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/docs/for-review.md)). That list is `decisions.md`
+  under another name; use `decisions.md`, with a row per guess saying "undocumented; ours,
+  by play".
 
 ### 2.2 Choose the machine
 
@@ -406,6 +417,40 @@ drifts a page into a region rewritten at runtime assembles cleanly and fails qui
 the ceiling for anything read in play may be lower than the ceiling for the image: Edge Grinder's
 sprite save area sits above its code, and boot-only code is allowed there because it is dead before
 the first sprite draws.
+
+### 5.9 When the game does not scroll
+
+5.1 to 5.5 assume a scrolling action game. A turn-based game on a static bitmap met other
+problems; these are from one port ([Scorched Earth](https://github.com/mattgodbolt/beeb-scorched-earth): MODE 2, destructible terrain,
+Model B), so treat them as a checklist, not as measured-twice rules.
+
+- **Keep the field as a model and paint the screen from it.** The terrain is a heightmap
+  (`ground`, one byte a column), shells collide with the model, not the screen, and the screen
+  is repainted from it. A whole-field repaint (`draw_terrain`) took 1,394,233 cycles, 35
+  fields, with the tanks gone from the screen meanwhile (breakpoint pair around round start's
+  `JSR draw_terrain`, jsbeeb-mcp 4.0.1, 2026-10-04). So each effect repaints only the rows it
+  touched: [`repaint_rows`](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/src/gfx.6502),
+  [`repaint_field`](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/src/special.6502).
+- **A list longer than the screen flips pages; it does not scroll.** The shop first scrolled a
+  line at a time, and redrawing 28 lines on each move took long enough that held keys were
+  lost. Two fixed pages, redrawn only when the selection leaves one, and a move inside a page
+  redraws two lines ([`src/menu.6502`](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/src/menu.6502) `shop_human`; journal,
+  "The shop first scrolled").
+- **Bound every loop that waits for physics to settle.** Nothing in a turn-based game is
+  paced by the frame, so a shell that never lands hangs the game instead of dropping a frame.
+  A magnetic deflector pushed shells straight up only, a bomblet falling vertically in a calm
+  bounced over one forever, and `fly_shells` had no limit; it now gives up after `MAX_FRAMES`,
+  as the AI's test flights already did ([journal](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/journal.md), "A review agent
+  found the one serious bug"; commit [`0b599d0`](https://github.com/mattgodbolt/beeb-scorched-earth/commit/0b599d0)).
+- **Screen rows are code space.** A game that does not need the full height can cut the
+  display with R6, R7 and the start address: each MODE 2 character row is 640 bytes. Scorched
+  Earth shows 29 rows (`SCREEN_ROWS`, screen at `&8000 - 29 * 640` = `&3780`), and the last row
+  cut bought 640 bytes when 160 were left (journal, "Code space went"). The MOS still believes
+  the screen starts at `&3000`, so OS text lands `32 - SCREEN_ROWS` rows higher, and a
+  `VDU 22` after the load wipes the code above `&3000`: select the mode first (hardware-facts,
+  `VDU 22`). The run-once start-up code rides in the file past the code, in screen memory, and
+  is copied to and run from tables that are filled before their first read: the boot-only rule
+  of 5.8 ([`src/boot.6502`](https://github.com/mattgodbolt/beeb-scorched-earth/blob/main/src/boot.6502)).
 
 ---
 
