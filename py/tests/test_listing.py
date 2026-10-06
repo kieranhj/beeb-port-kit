@@ -250,5 +250,32 @@ class AgainstTheTemplate(unittest.TestCase):
         self.assertIn("PLAY_R7", syms)
 
 
+class Pages(unittest.TestCase):
+    """listing.crossings: a taken branch costs a cycle more when its target is
+    on another page from the instruction after it."""
+
+    CROSS = "\n".join([
+        'SECTION Game, org = &19F0, filename = "Game"',
+        "  19F0  D0 FE                       bne here_and_back",   # 19F2 -> 19F0: same page
+        "  19FC  F0 02                       beq over",            # 19FE -> 1A00: crosses
+        "  19FE  10 FC                       bpl back",            # 1A00 -> 19FC: crosses
+        "  1A00  A9 10                       lda #&10",            # LDA #&10: not a branch
+        "  1A02  D0 7F                       bne far",             # 1A04 -> 1A83: same page
+        "ENDSECTION", ""])
+
+    def test_crossings(self):
+        found = listing.crossings(self.CROSS)
+        self.assertEqual([(s, a, t) for s, a, t, _ in found],
+                         [("Game", 0x19FC, 0x1A00), ("Game", 0x19FE, 0x19FC)])
+        self.assertEqual(found[0][3], "beq over")
+
+    def test_every_branch(self):
+        self.assertEqual(len(listing.crossings(self.CROSS, every=True)), 4)
+
+    def test_the_sample_has_none(self):
+        self.assertEqual(listing.crossings(SAMPLE), [])
+        self.assertEqual(len(listing.crossings(SAMPLE, every=True)), 1)    # bne loop
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -241,6 +241,40 @@ def opcode_stream(source):
     return stream
 
 
+# The relative branches: BPL BMI BVC BVS BCC BCS BNE BEQ, and the 65C02's BRA.
+_BRANCHES = {0x10, 0x30, 0x50, 0x70, 0x90, 0xB0, 0xD0, 0xF0, 0x80}
+_SECTION = re.compile(r"^SECTION\s+([A-Za-z_][A-Za-z_0-9]*)")
+
+
+def crossings(source, every=False):
+    """The branches that cost an extra cycle when taken, because the target
+    is on another page from the instruction after the branch: a list of
+    (section, address, target, text). `every` lists every branch instead.
+
+    A listing only (it needs the bytes). Static: how often a branch is
+    taken is a profiler's question. After beebgame's tools/pagecheck.py
+    (Eben Upton, MIT), which does the same from an ld65 debug file; its
+    engine places code with PAD and asserts hot branches with SAMEPAGE,
+    and this is the list to do that by on a Baron build."""
+    out, section = [], None
+    for line in parse(source):
+        if line.addr is None:
+            m = _SECTION.match(line.text)
+            if m:
+                section = m.group(1)
+            elif line.text.strip().upper() == "ENDSECTION":
+                section = None
+            continue
+        if len(line.data) != 2 or line.data[0] not in _BRANCHES or not line.is_instruction:
+            continue
+        d = line.data[1] - 256 if line.data[1] > 127 else line.data[1]
+        after = (line.addr + 2) & 0xFFFF
+        target = (after + d) & 0xFFFF
+        if every or after >> 8 != target >> 8:
+            out.append((section, line.addr, target, " ".join(line.text.split())))
+    return out
+
+
 def _format(value):
     if isinstance(value, bool) or not isinstance(value, int):
         return repr(value)
@@ -248,19 +282,28 @@ def _format(value):
 
 
 def _main(argv):
-    if len(argv) < 2 or argv[0] not in ("symbols", "stream"):
+    if len(argv) < 2 or argv[0] not in ("symbols", "stream", "pages"):
         raise SystemExit(
             "usage: python tools/listing.py symbols DUMP|LISTING [NAME ...]\n"
             "       python tools/listing.py stream  LISTING\n"
+            "       python tools/listing.py pages   LISTING [all]\n"
             "\n"
             "symbols  every symbol and its value; NAME filters (substring).\n"
             "         Prefer build/game.symbols.json (baron --symbols): it has\n"
             "         computed constants too, which a listing does not.\n"
             "stream   one line per emitted instruction, addresses removed, for\n"
-            "         diffing two builds of a change meant to be mechanical")
+            "         diffing two builds of a change meant to be mechanical\n"
+            "pages    every taken branch whose target is on another page (+1\n"
+            "         cycle when taken), by section; `all` lists every branch")
     what, path, rest = argv[0], argv[1], argv[2:]
     if what == "stream":
         print("\n".join(opcode_stream(path)))
+        return
+    if what == "pages":
+        found = crossings(path, every=rest[:1] == ["all"])
+        for section, addr, target, text in found:
+            print("%-10s &%04X -> &%04X  %s" % (section or "-", addr, target, text))
+        print("%d %s" % (len(found), "branches" if rest[:1] == ["all"] else "page-crossing branches"))
         return
     syms = values(path) if is_dump(path) else symbols(path)
     for name in sorted(syms):

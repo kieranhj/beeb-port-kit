@@ -867,6 +867,17 @@ K -71, M -102, UP -58, DOWN -42; CTRL is INKEY -2 (`KEY_CTRL = &FE`).
 
 ## 8. 6502 cycle facts and measured timing constants
 
+- **A taken branch costs one cycle more when its target is on another page** from the
+  instruction after the branch (3 cycles becomes 4), and an indexed read (`abs,X`, `abs,Y`,
+  `(zp),Y`) that crosses a page costs one more too. So moving code moves cycles, with no
+  instruction changed - which matters in a raster loop or an interrupt with a timed write.
+  `python tools/listing.py pages build/game.lst` lists every page-crossing branch in a Baron
+  build, by section (`all` lists every branch); the template has 4 of 34, three of them in
+  `rupture.6502` (2026-10-06). After beebgame's `tools/pagecheck.py`, whose engine places hot
+  code with `PAD` and asserts its hot branches with `SAMEPAGE`; in Baron that is
+  `ASSERT HI(branch_end) = HI(target)`. Edge Grinder's BANK1 review is the case in point: its
+  credit raster's `ttl_pal` loads cross a page today, and moving them moves the bars.
+  Established: the 6502 cycle tables.
 - **`LDA abs` is 4 cycles and `LDA zp` is 3, but `LDA abs,X` and `LDA zp,X` are both 4.** Zero page
   went to scalars; indexed tables gained nothing by moving.
   Established: RAM pass (2026-08-25), from the cycle tables, worth knowing before costing a
