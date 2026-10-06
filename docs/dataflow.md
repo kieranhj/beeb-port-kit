@@ -140,7 +140,7 @@ README says the same: "they hold for this build". Read every `imm_load`, `const_
 | Instructions | 557 | 9,380 |
 | `report` | 6 findings, 11 bytes, ~2 s | 122 findings, 129 bytes (upper bound), ~4 s |
 | `annotate` (range analysis, no cache) | ~2 min, converged | 18.5 min, then **ran out of steps**: 8,295 of 9,380 instructions reached, so not sound (see above) |
-| Checked by hand | all 6: correct, one a constant coincidence | 3 of the riskier ones: one allocator artefact (above), and **one real bug**: `shooter.6502:303` loads `tk_frame+1` and overwrites it at once with `tk_frame`, so the high byte is never tested |
+| Checked by hand | all 6: correct, one a constant coincidence | 3 of the riskier ones: one allocator artefact (above), and one dead load: `shooter.6502:303` loads `tk_frame+1` and overwrites it at once. It is a leftover from a commit that moved the high-byte test to line 288, so 2 bytes and 3 cycles a frame, not a bug. I called it a bug at first, without following the paths into it, and puzzle-beeble's session corrected me: the lesson is in the skill's step 4 |
 
 So the findings are good leads and nothing more. The `report` analysis (liveness and
 constants) is fast and complete on a full game. The range analysis, as pinned, doesn't yet

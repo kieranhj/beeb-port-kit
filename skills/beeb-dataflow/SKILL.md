@@ -53,8 +53,12 @@ for them are in `CLAUDE.md` "Build"; pass `--listing`, `--symbols`, `--disc` if 
      instruction is still a delay.
 
    Treat a `dead_insn` or `reload` that makes the surrounding code look wrong (a load overwritten
-   at once, a test of the wrong byte) as a **possible bug**, and report it as one, not as a
-   saving.
+   at once, a test of the wrong byte) as a **possible bug**, but **follow every path into it
+   before calling it one**. Read back to each branch that reaches it, and check whether the
+   test it seems to lose is already done earlier on every path. The annotation's own state
+   says so: a value known on entry (`$00`, a narrow range) means something upstream already
+   decided it. puzzle-beeble's `shooter.6502:303` looked like a lost high-byte test and was
+   only a dead leftover, because line 288 had already branched away on that byte (2026-10-06).
 
 5. **Change a few at a time, behind the gate.** Run the port's oracle, the A/B differential
    (`docs/verification.md` 14) and the sound check, plus `beeb-identical-build` for anything
