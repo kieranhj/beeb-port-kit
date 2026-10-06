@@ -80,6 +80,43 @@ matching in-memory patch when one lands.
     a warning. `--budget N` raises the limit
     ([#2](https://github.com/ebenupton/beebgame/issues/2)).
 
+## BeebASM projects
+
+The two shipped ports are beebasm, and `py/beeb_port_kit/beebasm_dataflow.py` covers them: a
+single file that converts the `-v` listing and runs the analyses from this kit's vendored copy.
+Fork it into the project's `tools/` with a `tools/dataflow_config.py` that names `LISTING`,
+`SOURCES` and `ISR_ROOTS`, and run `python tools/beebasm_dataflow.py [report|annotate|patterns]`
+from the project root. It finds the kit through `$BEEB_PORT_KIT`, else `../beeb-port-kit`.
+Paradroid and Edge Grinder carry it, each with a `docs/dataflow-report.md` of what it found.
+
+A beebasm listing gives less than a Baron build:
+
+- **No source lines.** It prints resolved operands (`LDA &0A00`), not source text, so findings
+  point into a listing-shaped `build/dataflow-in/src/listing.s` with the nearest label. Search
+  the sources by that label.
+- **No references.** "Address taken" comes from scanning the sources: a label named anywhere
+  other than as a `JSR`/`JMP`/branch target counts as taken. That over-counts, which costs
+  findings but never correctness.
+- **No sections.** They're inferred from `Saving file` lines and address jumps. Check the
+  summary line against the listing's own memory map.
+- **Long data may be cut short.** Edge Grinder's beebasm prints an `INCBIN` as three bytes and
+  `...`. Paradroid's prints every byte. A cut line is taken to run to the next listed address,
+  zero-filled, which the report never reads.
+
+Measured on 2026-10-06:
+
+| | Instructions | Findings | Bytes | Range analysis |
+| --- | ---: | ---: | ---: | --- |
+| Paradroid (`944578c`) | 22,556 | 371 | 274 | not run (larger than puzzle-beeble, which ran out of steps) |
+| Edge Grinder (`0000aec`) | 4,051 | 83 | 106 | converged in 56 s |
+
+`py/tests/test_beebasm_dataflow.py` covers both listing shapes, the `Saving file` split and the
+address-taken scan. When those projects are on the machine, it also checks that the vendored
+model reads their converted listings with no bad spans. Writing those tests found two bugs in
+the first version, both fixed before anything was committed: a label sharing a line with a
+statement hid that statement's references, and a bare address line (a zero-page variable)
+attached its label to the next code address.
+
 ## Reading the results on a Baron port: two traps
 
 **Zero page is shared, and the analysis sees the byte, not the name.** Baron's allocator gives

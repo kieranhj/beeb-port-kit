@@ -9,7 +9,9 @@ Reads what the build left and never runs the game. The kit's `docs/dataflow.md` 
 form: where the analyses come from, how a Baron build becomes the debug file they read, and the
 two traps specific to Baron.
 
-**Needs:** `tools/analyse.py`, `tools/baron_dbg.py`, `tools/dataflow_config.py`, `tools/listing.py`,
+**A beebasm project** uses `tools/beebasm_dataflow.py` instead (the kit's `py/beeb_port_kit/` fork, with a `tools/dataflow_config.py` naming `LISTING`, `SOURCES`, `ISR_ROOTS`). Findings then point at the nearest label rather than a `file:line` (`docs/dataflow.md`, "BeebASM projects"). Steps 4-6 apply unchanged.
+
+**Needs (Baron):** `tools/analyse.py`, `tools/baron_dbg.py`, `tools/dataflow_config.py`, `tools/listing.py`,
 `tools/dfs.py` and the vendored `tools/dataflow/` (all in the template); Python 3
 **Reads:** `build/game.lst`, `build/game.symbols.json`, `build/game-raw.ssd` - the project's names
 for them are in `CLAUDE.md` "Build"; pass `--listing`, `--symbols`, `--disc` if they differ
