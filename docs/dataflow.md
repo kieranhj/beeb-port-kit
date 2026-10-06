@@ -29,7 +29,7 @@ Build first. The tool reads `build/game.lst`, `build/game.symbols.json` and
 | `tools/analyse.py` | template | the kit's: verify, convert, run |
 | `tools/baron_dbg.py` | template (fork of `py/beeb_port_kit/baron_dbg.py`, tested in `py/tests/test_baron_dbg.py`) | the kit's: Baron build -> `game.dbg` |
 | `tools/dataflow_config.py` | template | the project's: interrupt entries, source directory |
-| `tools/dataflow/`: `model analysis forward findings dataflow dom ranges annotate patterns gamecfg`, `README.md`, `LICENSE` | template, vendored; `VENDORED.md` beside them | beebgame's, MIT, at `e07f8b2` |
+| `tools/dataflow/`: `model analysis forward findings dataflow dom ranges annotate patterns gamecfg`, `README.md`, `LICENSE` | template, vendored; `VENDORED.md` beside them | beebgame's, MIT, at `235e890` |
 
 **Vendored, unmodified, and checked every run.** beebgame took an MIT licence on 2026-10-06
 (`e07f8b2`), the same day this was built, so the template carries its `tools/dataflow` the way
@@ -44,10 +44,9 @@ at other commits: `--try <commit>` runs one from `build/dataflow-upstream/`, and
 **Moving the pin** is a decision, not a refresh. Read what changed upstream. `--try` the new
 commit on the template and on one real port, and compare with the current results. Then
 `--vendor` it, paste the `PIN` and `SHA256` it prints into `analyse.py`, and redo
-`template/tools/dataflow/VENDORED.md`'s checks. The fixes for the two problems below
-([#1](https://github.com/ebenupton/beebgame/issues/1),
-[#2](https://github.com/ebenupton/beebgame/issues/2)) are the reason to move first; drop the
-matching in-memory patch when one lands.
+`template/tools/dataflow/VENDORED.md`'s checks. The first move was on 2026-10-06, from `e07f8b2` to
+`235e890`, which took the kit's two fixes upstream; the template's and three ports' results were
+identical across it.
 
 ## The converter: what it does and cannot know
 
@@ -68,17 +67,16 @@ matching in-memory patch when one lands.
   has its address taken (a dispatch table, `lda #LO(x)`). The converter takes them from the
   statement text, resolving each name through the `{ }` scopes. A wrong resolution errs
   towards "taken", which loses precision but never soundness.
-- **Two upstream functions are patched in memory** as the tools run, and nothing else is
-  changed. Both are reported upstream:
-  - `model.Source.short` joins paths with `os.sep`, and every caller compares against `/`, so
-    on Windows nothing counts as the game's and nothing is reported
-    ([#1](https://github.com/ebenupton/beebgame/issues/1)).
-  - When the range analysis runs out of its step budget (3,000,000 a round), it stops partway
-    through but still calls itself converged. It caches the result as a sound starting point
-    and writes annotations with no warning. `analyse.py` marks such a run unconverged, so
-    annotate's own NOT-sound banner goes on every file. It also deletes the cache and prints
-    a warning. `--budget N` raises the limit
-    ([#2](https://github.com/ebenupton/beebgame/issues/2)).
+- **Nothing upstream is patched.** Until the pin moved to `235e890`, two functions were
+  patched in memory here, and both fixes are now beebgame's own (merged 2026-10-06):
+  - [#4](https://github.com/ebenupton/beebgame/pull/4): `model.Source.short` joined paths with
+    `os.sep` while every caller compared against `/`, so on Windows nothing counted as the
+    game's and nothing was reported.
+  - [#5](https://github.com/ebenupton/beebgame/pull/5): a range run that ran out of its step
+    budget stopped partway but still called itself converged, cached the result as a sound
+    start and annotated with no warning. Now upstream marks it NOT sound and skips the cache.
+    `--budget N` (or `$DATAFLOW_BUDGET`) sets upstream's `RANGES_BUDGET`, 3,000,000 a run by
+    default.
 
 ## BeebASM projects
 

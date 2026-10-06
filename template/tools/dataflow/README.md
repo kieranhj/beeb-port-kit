@@ -58,7 +58,7 @@ Notation: registers/flags as `AXYNZCV` (`-` = none).  Known values: `A=$00`,
 ## Input
 
 `build/master/game.dbg` (ld65 `--dbgfile`) and the output images its segments name
-(`hazel.bin`, `b7.bin`, `MENU`, ...).  An instruction starts exactly where a span
+(`b7.bin`, `b6x.bin`, `MENU`, ...).  An instruction starts exactly where a span
 whose innermost source line is a mnemonic starts (macro bodies are type-2 lines,
 so `mov16`, `stz`, `bge16i` ... are expanded); every other byte is data.  So data
 embedded in code, inline operands after a JSR and `.byte $2C` skips are never
@@ -215,7 +215,9 @@ memory operand's range; `ty=` the object types possible (when not all); `never` 
 `in:` / `out:` the liveness (dataflow.py's).  summary.md lists the per-type record table,
 the assumptions made (unbounded pointer stores, indexes clamped to their arrays, the
 current-record pointer taken to stay in the records, code analysis.py calls self-modified
-but analysed as written), unresolved exits and what was not reached.
+but analysed as written), unresolved exits and what was not reached.  A run stops after 3,000,000 steps
+(`RANGES_BUDGET` sets another number); one that stops is not a fixpoint, and summary.md and
+every annotated file then say the annotations are NOT sound.
 
 ## Mechanical finds (patterns.py)
 `reload_via_test` (a load used only for its flags while A holds a value that is reloaded

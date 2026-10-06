@@ -206,7 +206,10 @@ class Ranges:
         self.ptr_unknown = collections.Counter()
         self.unresolved = collections.Counter()
         self.rts_dispatch = collections.Counter()
-        self.budget = 3_000_000
+        # steps a run may take before it stops; a run that stops is not a fixpoint, and
+        # analyse() says so (RANGES_BUDGET raises it for a large program)
+        self.budget = int(os.environ.get('RANGES_BUDGET', '3000000'))
+        self.exhausted = False
         self.check = bool(os.environ.get('RANGES_CHECK'))
         self.bad = collections.Counter()
         self.WIDEN = 12
@@ -1186,7 +1189,9 @@ class Ranges:
             node = wl.popleft(); inwl.discard(node)
             steps += 1
             if steps > self.budget:
-                self.notes.append('ranges: step budget exhausted'); break
+                self.notes.append('ranges: step budget exhausted')
+                self.exhausted = True
+                break
             if self.debug and steps % self.debug == 0:
                 top = visits.most_common(8)
                 print(f"  {steps} steps, {len(IN)} nodes, wl {len(wl)}:",
@@ -1592,6 +1597,7 @@ def run_phased(make, an, types, notes, label):
             if ek in isr or (('orphan' in kinds or 'taken' in kinds) and not table_taken(an, ek))]
     seeds = list(base)
     pw, pwa = {}, set()
+    cut = False
     for rnd in range(12):
         R = make()
         for k, v in pw.items():
@@ -1599,6 +1605,7 @@ def run_phased(make, an, types, notes, label):
         R.pw_all |= pwa
         n0 = sum(map(len, R.pw.values())) + len(R.pw_all)
         R.run([(ek, St(types)) for ek in seeds])
+        cut = cut or R.exhausted
         grew = sum(map(len, R.pw.values())) + len(R.pw_all) != n0
         pw, pwa = R.pw, R.pw_all
         missing = [ek for ek, kinds in an.entries.items()
@@ -1607,9 +1614,11 @@ def run_phased(make, an, types, notes, label):
                      f"{R.steps} steps, {R.secs:.1f}s; {len(missing)} table entries unreached; "
                      f"written sets {'grew' if grew else 'stable'}")
         if not missing and not grew:
+            R.exhausted = cut
             return R
         seeds += missing
     notes.append(f"{label}: did not settle in 12 rounds")
+    R.exhausted = cut
     return R
 
 
@@ -1735,6 +1744,13 @@ def analyse(build, out=None, quiet=False, rounds=12):
         # not sound.  Say so loudly (annotate.py prints it at the top of every file)
         R.converged = False
         notes.append('WARNING: the record invariant did not converge: the states are NOT sound')
+    # a run cut off by its step budget stopped with work still on its worklist: its states
+    # are not a fixpoint, whatever the rounds above concluded, so not sound and not a cache
+    cut = [n for n, r_ in (('game', R), ('loader', RL_)) if r_ is not None and r_.exhausted]
+    if cut:
+        R.converged = False
+        notes.append(f"WARNING: the step budget ({R.budget:,} a run; RANGES_BUDGET raises it) ran "
+                     f"out in the {' and '.join(cut)} analysis: the states are NOT sound")
     R.I_final = I
     if getattr(R, 'converged', False):
         try:

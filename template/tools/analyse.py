@@ -42,12 +42,12 @@ VENDORED.md's checks.
 HOW THEY RUN ON A BARON BUILD. The analyses read ld65's debug file. A Baron
 build has none, so tools/baron_dbg.py writes one from the listing, the symbol
 dump and the raw disc (its header says how and what it cannot know), and the
-analyses are pointed at that. Upstream functions are patched as they run,
-in memory, and two only: `model.Source.short` joins paths with os.sep while
-every caller compares with '/' (on Windows no file would be the game's), and
-a range analysis that runs out of steps is marked unconverged - upstream
-calls it converged and annotates it without a warning, though it is not a
-fixpoint (_run_upstream says more). `--budget N` raises the step limit.
+analyses are pointed at that, unmodified. (Until 235e890 two upstream
+functions were patched in memory here - Windows paths, and a range run cut
+off by its step budget being called converged; both fixes went upstream as
+beebgame #4 and #5 and the patches went.) `--budget N` raises the range
+analysis's step limit, upstream's RANGES_BUDGET (3,000,000 a run); a run
+that hits it says its annotations are NOT sound.
 
 CONFIG. tools/dataflow_config.py says what is this game's: the interrupt's
 entry, its sources' directory, and what the template has none of (inline
@@ -65,11 +65,11 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-PIN = "e07f8b25af4493a37f21604883949c3658eb5e53"     # beebgame, 2026-10-06: MIT
+PIN = "235e890c4b3d13c0eff36b5f32850ace4050643b"     # beebgame, 2026-10-06: #4 and #5 merged
 REPO = "https://github.com/ebenupton/beebgame"
 SHA256 = {
     "LICENSE": "790e97e5467e541e53f2b8f45b3f95d0a1d086d4005551cc6496eb39aafa9b2e",
-    "README.md": "ffebb0d9b1bf4ddd2687550c80ee8e3da0b8da98765ce42fb6d57ef526035816",
+    "README.md": "532fdfd610a7e1eca758d46c7f23d5a17fc328cccff5b81952abaa6b85ec7aa3",
     "analysis.py": "63de194f57ec89f2072ac0faac23fcea39b38c15db1c75f42a6fed1d6a84992d",
     "annotate.py": "a6875ee74604f3db9a27e7ba519645e4b2dae68dace9767efe1b7f2ae1ee6ec8",
     "dataflow.py": "cfad13aa3df3f629272d9c10428309b6684e6afb485330d656948ab66f648a30",
@@ -77,9 +77,9 @@ SHA256 = {
     "findings.py": "48c8e701b65efb0122946b2f56aae7b3aa9be34fab516cc9a76bb8173b545025",
     "forward.py": "bbea6a4cb13e2a70789d9df5715e72e4300c7aef8828d7f72bd285a160179145",
     "gamecfg.py": "fc0551ca46689a2be574c24f5b5600ae0c9b2dea136e88db35225ff2cdd3b8b4",
-    "model.py": "2a540bf46f6d362f6007eb65b92d5e0292c90d73a18e7af2468ee80a7f2009bf",
+    "model.py": "2ed49df33b92bd7b249f023db0c392bf1cf2fa7496841b8fbf277822529bab0a",
     "patterns.py": "992ebe5fcc7149c6d43e865a0f63f28bf811543095db6a221ff65ba6dd8f280e",
-    "ranges.py": "dd012e80a88e97c3ed56914dc2c019a4606b819ad930f7e2c1b0afa0005774d5",
+    "ranges.py": "52e5b6ca08a1e7a66bcb108628b174a01e05eb031923f71ae88b34982cbd606d",
 }
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -181,48 +181,14 @@ def vendor(commit):
 
 
 def _run_upstream(up, tool, args, budget=None):
-    """In a child process: the pinned tool, with the two patches below."""
+    """In a child process: the pinned tool, as it is. Nothing of it is patched
+    since beebgame 235e890, which took the kit's two fixes upstream (#4: paths
+    on Windows; #5: a range run cut off by its step budget is not converged).
+    The budget is upstream's RANGES_BUDGET; --budget sets it."""
+    if budget:
+        os.environ["RANGES_BUDGET"] = str(budget)
     sys.path.insert(0, up)
     import runpy
-    import model
-    import ranges
-
-    # 1. model.Source.short joins with os.sep and every caller compares with
-    #    '/': on Windows no file would be the game's.
-    short = model.Source.short
-    model.Source.short = lambda self, fid: short(self, fid).replace(os.sep, "/")
-
-    # 2. When the range analysis runs out of steps it stops mid-worklist but
-    #    still calls the result converged, caches it as a sound start and
-    #    writes the annotations without a warning (measured on puzzle-beeble,
-    #    2026-10-06: 8,295 of 9,380 instructions reached). A cut-off run is not
-    #    a fixpoint: mark it so - annotate.py then prints its own NOT-sound
-    #    banner on every file - drop the cache, and say so. --budget raises
-    #    the limit (upstream's is 3,000,000 steps).
-    init = ranges.Ranges.__init__
-
-    def init_budget(self, *a, **k):
-        init(self, *a, **k)
-        if budget:
-            self.budget = budget
-    ranges.Ranges.__init__ = init_budget
-    analyse = ranges.analyse
-
-    def analyse_honestly(build, *a, **k):
-        R = analyse(build, *a, **k)
-        if any("step budget exhausted" in n for n in getattr(R, "notes_all", [])):
-            R.converged = False
-            R.notes_all.append("WARNING (tools/analyse.py): the step budget ran out, so these "
-                               "states are not a fixpoint and are NOT sound - raise --budget")
-            try:
-                os.remove(os.path.join(build, "ranges_I.json"))
-            except OSError:
-                pass
-            print("WARNING: the range analysis ran out of steps (%d of %d instructions reached): "
-                  "the ranges are NOT sound. Raise --budget." % (len(R.reached), len(R.P.insns)),
-                  file=sys.stderr, flush=True)
-        return R
-    ranges.analyse = analyse_honestly
     sys.argv = [os.path.join(up, tool)] + args
     runpy.run_path(sys.argv[0], run_name="__main__")
 
