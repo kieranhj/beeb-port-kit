@@ -251,6 +251,12 @@ the comments in the listing are the specification).
   register are NOT cycle-stretched to 1 MHz.** The loop's stability is observed; its explanation
   is unmeasured and probably wrong. To measure: time `STA &FE21` against `STA &FE4F` with a
   breakpoint pair. [Edge layer-6e-titles.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-6e-titles.md)
+  **jsbeeb agrees with KC** (read 2026-10-06, 1.25.0 and 2.3.1): its `is1MHzAccess` makes
+  `&FE20-&FE3F` a 2 MHz access, on the Master too, so in the emulator nothing realigns such a
+  loop. A pass that takes a cycle extra (an indexed load crossing a page) carries into every
+  later write on the line, and the loop is only as stable as its passes are equal. Found by the
+  skeptic in Edge's BANK1 review, where moving `ttl_pal` would move the credit bars; Edge's
+  `bank1.asm` comment was corrected (`7363c8b`). Still unmeasured on hardware.
 - **Why a palette write glitches pixels, and why all sixteen entries must always be programmed**
   (KC, 2026-09-07, from the ULA's design rather than a measurement): pixels are shifted out one
   bit at a time at the 16 MHz pixel clock, and the resulting bits are masked and looked up in
@@ -1110,7 +1116,10 @@ again.*
   a `null` or a pre-2.0 integer all press nothing and say nothing -
   [mattgodbolt/jsbeeb#1172](https://github.com/mattgodbolt/jsbeeb/issues/1172), asking it to
   throw. jsbeeb-mcp already refuses an unknown key name with the full list for the model, so
-  the strictness exists one layer up.
+  the strictness exists one layer up. **Fixed in jsbeeb 2.3.1** (the issue closed 2026-09-23):
+  `keyDown(16)` now throws `16 is a numeric key code; since 2.0 keys are named by physical
+  position`, and an unknown name throws too. Seen 2026-10-06 with 2.3.1 in the npx cache. So
+  silence now means 2.0-2.3.0 only, and `keys()` is still the way to write a key.
 
   **jsbeeb-mcp 4.0.0 (2026-09-23) renamed the key names** - the machine's own now, digits `K0`-`K9`,
   `CAPSLOCK` not `CAPS_LOCK`, no `BACKSPACE`/`QUOTE`/`EQUALS`, and an unknown name is refused with

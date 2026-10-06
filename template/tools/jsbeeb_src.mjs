@@ -80,7 +80,8 @@ export function resolveJsbeebSrc() {
  * **jsbeeb 2.0 CHANGED THE TYPE.** 1.x took a numeric browser `keyCode` (16 =
  * SHIFT, 88 = X); 2.x takes a `KeyboardEvent.code` STRING naming the physical
  * position ("ShiftLeft", "KeyX"). Passing the old number to 2.x matches
- * nothing and DOES NOT THROW - the key is simply never pressed. That is how it
+ * nothing and, up to 2.3.0, DOES NOT THROW - the key is simply never pressed
+ * (2.3.1 throws instead: mattgodbolt/jsbeeb#1172, fixed). That is how it
  * was found: SHIFT+BREAK stopped booting the disc, so every harness counter
  * read its power-on value and verify_dynamic.mjs reported all zeros, which
  * reads exactly like a regression in the port (2026-09-23; jsbeeb 2.3.0 came
