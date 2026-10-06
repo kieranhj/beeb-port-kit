@@ -168,6 +168,12 @@ them from the listing each time; decimal silently measures the wrong bytes and r
 that look like a regression. The harness prints one JSON line per scroll position and a summary,
 and exits non-zero on any failure.
 
+**OPEN (2026-10-06): the harness does not run on jsbeeb 2.x.** It still presses keys by 1.x
+number (`keyDown(16)` for SHIFT, `KEY_DOWN = 40`); jsbeeb 2.3.1 throws
+`16 is a numeric key code` at the SHIFT+BREAK, and 2.0-2.3.0 would press nothing and report a
+boot that never happened. The numbers above are jsbeeb 1.25.0's. The fix is the template's:
+`keys()` from `tools/jsbeeb_src.mjs` (kit `docs/hardware-facts.md`, the `keyDown` entry).
+
 **Feed it the LIVE position, never `ypos`.** The main loop parks the next position and the VSync
 hook takes it on the next field, so `ypos` runs a field ahead of what the CRTC was given. 1942
 scored 57,284 of 57,344 pixels wrong on a correct build by feeding an oracle the parked pair

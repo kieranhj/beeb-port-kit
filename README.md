@@ -63,7 +63,7 @@ build on a second emulator and on hardware, reports what looks wrong, and owns t
 speed or a colour, which are played rather than calculated.
 
 **What the kit gives the agent**: the full method, the facts it would otherwise re-measure, the
-mistakes it would otherwise repeat, a dozen checklists for the measurements it makes over and
+mistakes it would otherwise repeat, fifteen checklists (skills) for the measurements it makes over and
 over, the code both ports shared, and a starter project that boots to a panel above a scrolling
 area with all eight colours on screen.
 
