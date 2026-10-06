@@ -77,7 +77,9 @@ docs/gotchas.md         the bug classes that recurred, with the instance and the
 docs/verification.md    the measuring and checking procedures, by hand or through the MCP
 docs/build-portability.md   the rules for a build that makes the same disc on any machine
 docs/dataflow.md        static analysis of the linked program - liveness, ranges, bytes to
-                        save - by beebgame's dataflow tools, run on a Baron build
+                        save - by beebgame's dataflow tools, on a Baron or beebasm build
+docs/related-beebgame.md  what this kit takes from Eben Upton's beebgame engine, what it sent
+                        back, and what it left on purpose
 docs/target-portability.md  which machines a port runs on: each configuration, what it costs,
                         what can test it, and the defaults the template already carries
 skills/                 the procedures as Claude Code skills; copy into .claude/skills/
