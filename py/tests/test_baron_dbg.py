@@ -142,9 +142,9 @@ class SmallProgramTest(unittest.TestCase):
 
 @unittest.skipUnless((TEMPLATE / "build" / "game.lst").exists(), "build the template first")
 class TemplateTest(unittest.TestCase):
-    """The template's own build: every statement placed, and - when
-    tools/analyse.py has fetched the pinned analyses - beebgame's model reads
-    the result as the instructions the listing says it has."""
+    """The template's own build: every statement placed, and beebgame's model
+    (the template's vendored tools/dataflow) reads the result as the
+    instructions the listing says it has."""
 
     @classmethod
     def setUpClass(cls):
@@ -163,10 +163,7 @@ class TemplateTest(unittest.TestCase):
         self.assertEqual(self.s["notes"], [])
 
     def test_upstream_model_reads_it(self):
-        ups = sorted((TEMPLATE / "build" / "dataflow-upstream").glob("*/model.py"))
-        if not ups:
-            self.skipTest("run tools/analyse.py once to fetch the analyses")
-        sys.path.insert(0, str(ups[-1].parent))
+        sys.path.insert(0, str(TEMPLATE / "tools" / "dataflow"))
         try:
             import model
             P = model.Program(str(TEMPLATE), str(self.out))

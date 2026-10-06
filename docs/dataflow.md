@@ -8,9 +8,9 @@ and it is the tool to reach for when a port runs out of RAM, which every port so
 
 The analyses are **Eben Upton's**, written for his engine
 [beebgame](https://github.com/ebenupton/beebgame) (`tools/dataflow`, its README is the manual)
-and used on Commando to take about 400 bytes out behind a replay gate. The kit runs them
-**unmodified at a pinned commit** and supplies the one thing a Baron build lacks: the ld65 debug
-file they read.
+and used on Commando to take about 400 bytes out behind a replay gate. The template **vendors
+them unmodified at a pinned commit** (`template/tools/dataflow/`, MIT) and supplies the one
+thing a Baron build lacks: the ld65 debug file they read.
 
 ```
 python tools/analyse.py report      # ~2 s: findings, register ABIs   -> build/dataflow/
@@ -26,22 +26,28 @@ Build first. The tool reads `build/game.lst`, `build/game.symbols.json` and
 
 | Piece | Where | Whose |
 |---|---|---|
-| `tools/analyse.py` | template | the kit's: fetch, verify, convert, run |
+| `tools/analyse.py` | template | the kit's: verify, convert, run |
 | `tools/baron_dbg.py` | template (fork of `py/beeb_port_kit/baron_dbg.py`, tested in `py/tests/test_baron_dbg.py`) | the kit's: Baron build -> `game.dbg` |
 | `tools/dataflow_config.py` | template | the project's: interrupt entries, source directory |
-| `model analysis forward findings dataflow dom ranges annotate patterns gamecfg` | `build/dataflow-upstream/<commit>/`, gitignored | beebgame's, fetched |
+| `tools/dataflow/`: `model analysis forward findings dataflow dom ranges annotate patterns gamecfg`, `README.md`, `LICENSE` | template, vendored; `VENDORED.md` beside them | beebgame's, MIT, at `e07f8b2` |
 
-**Fetched, not vendored, because beebgame has no licence file yet** (2026-10-06). Copying it
-into an MIT kit is not ours to do; running a public repository's code is. `analyse.py` holds the
-commit (`PIN`) and the SHA-256 of all eleven files, takes them from a local checkout with `git
-show <commit>:...` (`$BEEBGAME`, then `../../beebgame`, then `../beebgame`) or else GitHub's
-archive of that commit, and refuses to run anything if one hash differs. Both routes were tested
-on 2026-10-06. If beebgame gets a licence, vendoring it like `tools/zx02src/` becomes an option;
-the pin and the hashes would carry over unchanged.
+**Vendored, unmodified, and checked every run.** beebgame took an MIT licence on 2026-10-06
+(`e07f8b2`), the same day this was built, so the template carries its `tools/dataflow` the way
+it carries `tools/zx02src`: `analyse.py` holds the commit (`PIN`) and the SHA-256 of all twelve
+files and refuses to run a copy that differs. `.gitattributes` marks the folder `-text`, so a
+Windows checkout doesn't convert the files to CRLF and fail its own check. The first version of
+this tool fetched them at run time instead, for want of a licence. That route stays for looking
+at other commits: `--try <commit>` runs one from `build/dataflow-upstream/`, and `--vendor
+<commit>` replaces the vendored copy. Both read a beebgame checkout (`$BEEBGAME`,
+`../../beebgame`, `../beebgame`) with `git show`, or else GitHub's archive of the commit.
 
-**Moving the pin** is a decision, not a refresh. Read what changed upstream, run `python
-tools/analyse.py --pin <commit>` for the new hashes, run all three on the template and on one
-real port, compare with the old results, and only then replace `PIN` and `SHA256`.
+**Moving the pin** is a decision, not a refresh. Read what changed upstream. `--try` the new
+commit on the template and on one real port, and compare with the current results. Then
+`--vendor` it, paste the `PIN` and `SHA256` it prints into `analyse.py`, and redo
+`template/tools/dataflow/VENDORED.md`'s checks. The fixes for the two problems below
+([#1](https://github.com/ebenupton/beebgame/issues/1),
+[#2](https://github.com/ebenupton/beebgame/issues/2)) are the reason to move first; drop the
+matching in-memory patch when one lands.
 
 ## The converter: what it does and cannot know
 
@@ -63,14 +69,16 @@ real port, compare with the old results, and only then replace `PIN` and `SHA256
   statement text, resolving each name through the `{ }` scopes. A wrong resolution errs
   towards "taken", which loses precision but never soundness.
 - **Two upstream functions are patched in memory** as the tools run, and nothing else is
-  changed. Both are worth reporting upstream:
+  changed. Both are reported upstream:
   - `model.Source.short` joins paths with `os.sep`, and every caller compares against `/`, so
-    on Windows nothing counts as the game's and nothing is reported.
+    on Windows nothing counts as the game's and nothing is reported
+    ([#1](https://github.com/ebenupton/beebgame/issues/1)).
   - When the range analysis runs out of its step budget (3,000,000 a round), it stops partway
     through but still calls itself converged. It caches the result as a sound starting point
     and writes annotations with no warning. `analyse.py` marks such a run unconverged, so
     annotate's own NOT-sound banner goes on every file. It also deletes the cache and prints
-    a warning. `--budget N` raises the limit.
+    a warning. `--budget N` raises the limit
+    ([#2](https://github.com/ebenupton/beebgame/issues/2)).
 
 ## Reading the results on a Baron port: two traps
 

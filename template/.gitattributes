@@ -7,6 +7,10 @@ Makefile            text eol=lf
 *.sh                text eol=lf
 tools/zx02src/**    text eol=lf
 
+# Vendored and checked by SHA-256 before it runs (tools/analyse.py): no
+# conversion at all, or a Windows checkout gets CRLF bytes and refuses itself.
+tools/dataflow/**   -text
+
 # Never text: the bytes are the data.
 *.bin               binary
 *.ssd               binary

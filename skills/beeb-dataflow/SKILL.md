@@ -10,8 +10,7 @@ form: where the analyses come from, how a Baron build becomes the debug file the
 two traps specific to Baron.
 
 **Needs:** `tools/analyse.py`, `tools/baron_dbg.py`, `tools/dataflow_config.py`, `tools/listing.py`,
-`tools/dfs.py` (all in the template); Python 3; a beebgame checkout beside the project or network
-access to GitHub the first time
+`tools/dfs.py` and the vendored `tools/dataflow/` (all in the template); Python 3
 **Reads:** `build/game.lst`, `build/game.symbols.json`, `build/game-raw.ssd` - the project's names
 for them are in `CLAUDE.md` "Build"; pass `--listing`, `--symbols`, `--disc` if they differ
 
@@ -36,7 +35,7 @@ for them are in `CLAUDE.md` "Build"; pass `--listing`, `--symbols`, `--disc` if 
 3. **For ranges, run annotate.** `python tools/analyse.py annotate` takes about 2 minutes the
    first time on the template, longer on a full game, and seconds after that. Then read
    `build/annotated/src/<file>` with `;|` and the state before each instruction. The notation
-   is in beebgame's README, "The annotations", in `build/dataflow-upstream/<commit>/README.md`.
+   is in beebgame's README, "The annotations", in `tools/dataflow/README.md`.
    `summary.md` lists the assumptions the ranges rest on. Read it before believing a `never`.
    **If it printed `WARNING: the range analysis ran out of steps`**, or the files open with
    `NOT sound`, the ranges are unusable as they stand. Say so, and either rerun with
