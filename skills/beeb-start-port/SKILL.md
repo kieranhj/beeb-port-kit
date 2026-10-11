@@ -12,7 +12,7 @@ make this an afternoon; the two ports it came from took an evening and two days 
 **Kit:** `C:\Users\khcon\OneDrive\BEEB\Repos\beeb-port-kit` (`PORTING.md` §2-4 is the source of this skill)
 **The four rules** (PORTING.md §1), in these words, at the top of the rules file:
 the original is the specification; deviations are agreed before they are built and written down after; no hardware abstraction layer, one layer at a time, visible in the emulator before the next; measure, do not recall
-**MCP config:** `.mcp.json` = `{"mcpServers":{"jsbeeb":{"type":"stdio","command":"npx","args":["jsbeeb-mcp"]}}}`
+**MCP config:** `.mcp.json` = `{"mcpServers":{"jsbeeb":{"type":"stdio","command":"npx","args":["-y","jsbeeb-mcp@4.0.0"]}}}` - the same as `template/.mcp.json`. **Pin the version**, as the build pins Baron: bare `jsbeeb-mcp` moves to the latest release on its own, and 3.4.0 -> 4.0.0 swapped jsbeeb 1.x for 2.x underneath every harness (`docs/hardware-facts.md`). Move the pin on purpose, and re-run the harnesses when you do
 
 ## Steps
 
