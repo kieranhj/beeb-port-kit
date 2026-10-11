@@ -57,8 +57,9 @@ function Find-Tool([string]$name) {
 }
 
 # Baron: pin the version - the language is still moving (sections changed on
-# 2026-09-06, the zero-page markers on 2026-09-23). 0.4.0 or newer: --warn is
-# 0.4.0's, and a 0.3.0 would fail on it rather than ignore it.
+# 2026-09-06, the zero-page markers on 2026-09-23, the symbol dump's format
+# in 0.5.0). 0.4.1 or newer: the sources use its ASSERT keyword, and --warn
+# is 0.4.0's. The kit runs 0.5.3 (../docs/toolchain-baron.md).
 $baron = Find-Tool 'baron'
 if (-not $baron) { throw "baron not found: set BARON, put baron.exe in bin\ or on the PATH - releases at https://github.com/waitingforvsync/baron/releases" }
 

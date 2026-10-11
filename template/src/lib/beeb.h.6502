@@ -52,18 +52,11 @@
 \ *	FORKED into beeb-port-kit/template 2026-09-07, unchanged.
 \ ******************************************************************
 
-\ ---- ASSERT, which Baron does not have --------------------------
-\ BeebASM had ASSERT as a directive; Baron does not, so here it is as a
-\ macro. A failure is reported at the ERROR below, with "Note: Expanded
-\ from here" naming the assertion's own line. Two shapes: with a
-\ message and without.
-MACRO ASSERT c
-    IF NOT(c) : ERROR "assertion failed" : ENDIF
-ENDMACRO
-
-MACRO ASSERT c, msg
-    IF NOT(c) : ERROR msg : ENDIF
-ENDMACRO
+\ ---- ASSERT ---------------------------------------------------
+\ Baron's own keyword since 0.4.1 (ASSERT c, or ASSERT c, "msg", values),
+\ reported at the assertion's line. This file defined it as a macro until
+\ then, and 0.4.1 refuses a macro of that name: delete the macro from any
+\ older fork before moving to 0.4.1 or later.
 
 \ ---- MOS entry points ----------------------------------------
 \ Paradroid spells these OSBYTE, OSWRCH, OSCLI, OSASCI.

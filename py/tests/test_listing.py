@@ -173,6 +173,25 @@ class Dump(unittest.TestCase):
         with self.assertRaises(ValueError):
             listing.lookup(DUMP, "done")
 
+    def test_format_2_reads_the_same(self):
+        """Baron 0.5.0's dump - by section, then by kind, each symbol a
+        {value, source, line} - flattens back to exactly the old map. Spread
+        over two sections and every kind, with an `attributes` block that
+        holds no names, as the real dump has."""
+        (main, old), = json.loads(DUMP).items()
+        kinds = ("labels", "assignments", "defines", "za_autos", "params")
+        sections = [{"parent": None, "size": 0}, {"name": "Game", "parent": 0,
+                     "size": 0, "attributes": {"org": 6400, "filename": "Game"}}]
+        for k, (name, value) in enumerate(sorted(old.items())):
+            sections[k % 2].setdefault(kinds[k % len(kinds)], {})[name] = \
+                {"value": value, "source": 0, "line": k + 1}
+        new = json.dumps({"format": 2, "assemblies": [
+            {"sources": [main, "-D RELEASE=0"], "sections": sections}]})
+        self.assertEqual(listing.dump_files(json.loads(new)), {main: old})
+        self.assertEqual(listing.values(new), listing.values(DUMP))
+        self.assertEqual(listing.symbols(new), listing.symbols(DUMP))
+        self.assertNotIn("org", listing.values(new))
+
 
 class Stream(unittest.TestCase):
     def test_shape(self):

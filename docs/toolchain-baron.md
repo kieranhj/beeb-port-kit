@@ -1,8 +1,9 @@
-# Baron, and BeebASM as the legacy (2026-09-23)
+# Baron, and BeebASM as the legacy (2026-10-11)
 
 The kit assembles with [Baron](https://github.com/waitingforvsync/baron), Rich Talbot-Watkins's
 ground-up rewrite of BeebASM (MIT, active - the sections design changed on 2026-09-06, the
-zero-page markers on 2026-09-23). `lib/` and `template/` are both Baron. BeebASM is the legacy:
+zero-page markers on 2026-09-23, `ASSERT` became a keyword in 0.4.1 and the symbol dump's format
+changed in 0.5.0). `lib/` and `template/` are both Baron. BeebASM is the legacy:
 the two shipping ports are BeebASM projects, and this file records exactly what differs so either
 direction is a short walk.
 
@@ -17,9 +18,49 @@ and a `baron.exe` that *every* BBC project on the machine resolves - 1942 among 
 replacing the exe there moves projects that never asked to move. That folder stays on the
 0.3.0 release binary of 2026-09-07; the kit runs the newer build out of its own `bin\`.
 
-## The pinned version: 0.4.0 (2026-09-23)
+## The pinned version: 0.5.3 (2026-10-11)
 
-`template\bin\baron.exe` is the **0.4.0 release binary**, downloaded from the releases page on
+`template\bin\baron.exe` is the **0.5.3 release binary**, downloaded from the releases page on
+2026-10-11 (`sha256 5f74b088 1e40d63a 97b62e1c 97f6e5d2 1549187d 7e45c129 ee8f8400 fcd561e5`).
+The 0.4.0 exe it replaced is kept beside it as `bin\baron-0.4.0.exe`. **The kit's sources now
+need 0.4.1 or later** - they use the built-in `ASSERT` - and its tools read the symbol dump in
+either format.
+
+**Two releases in between were breaking for this kit**, and each needed a change before the
+build would run:
+
+| Release | What broke | What the kit changed |
+|---|---|---|
+| 0.4.1 (2026-09-30): **`ASSERT` is a keyword** - a statement, and a function in an expression | `beeb.h.6502:60: error: Reserved macro name` - the kit's own `MACRO ASSERT` shim | The macro is deleted from `lib/beeb.h.6502` and the template's fork. The keyword takes both shapes the macro had (`ASSERT c`, `ASSERT c, "msg"`) and more (`ASSERT c, "msg ", value` joins its values as `ERROR` does). A failure is now reported **at the assertion's own line** - `src/main.6502:61:1: error: fired: 2560` - where the macro's was at its `ERROR` with a `Note: Expanded from here`. Checked by planting two false assertions in the template: both reported, exit 1 |
+| 0.5.0 (2026-10-10): **`--symbols` is section-major and typed** - `{"format": 2, "assemblies": [{"sources", "sections": [...]}]}`, each section's symbols split into `labels`, `assignments`, `defines`, `za_autos` and `params`, each symbol `{"value", "source", "line"}`, beside an `attributes` block (org, guard, filename) that holds no names | `listing.py symbols` (`TypeError: 'int' object is not iterable`) and `baron_dbg.py`, which `analyse.py` runs first | `listing.dump_files()` flattens a format-2 dump back to the old `{main source: {name: value}}` - the names are unchanged, scope prefixes and all - and both readers go through it. The old format still reads, so the kit's tools still work for a port on 0.4.x. `py/tests/test_listing.py` checks that the two formats read the same |
+
+Everything else in 0.4.1-0.5.3 is additive or a fix: `FUNCTION` errors and scoping, fuzzer
+crash fixes, two zero-page allocator fixes (0.4.2: "pessimising allocations and issuing errors
+on certain recursive code shapes"), virtual sections (0.5.0), `ZA_CANJUMP`/`ZA_CANCALL`/
+`ZA_RETURNTO` resolved across sections and a clearer unreachable-`ZA_AUTO` warning (0.5.1),
+inline BASIC (0.5.2), `TO_STRING()`/`TO_NUMBER()` (0.5.3).
+
+**Upgrading changed no bytes.** Measured 2026-10-11 with `SOURCE_DATE_EPOCH` fixed so the stamps
+agree: 0.4.0 on the sources with the macro against 0.5.3 on the sources without it.
+
+| | Result |
+|---|---|
+| The template, DEV and MASTER: `game.ssd`, `game-master.ssd` and both raw images | **byte-identical**, all four; code still 1,214 / 1,267 bytes |
+| `examples/vscroll`, `vscroll.ssd` | **byte-identical** |
+| `lib/test/test_lib.6502`, `-D RELEASE=0` and `=1` | `TEST`, `BOOT` and `INFO` **byte-identical** on both |
+| `build/game.lst` | differs **only** in the sixteen `ASSERT` lines, which the keyword does not echo the way the macro call was echoed |
+| The template and `lib/` at `--warn 2` | **silent** |
+| `python tools/analyse.py report` | 573 of 573 placed, 6 findings, 11 bytes - the figures `tools/dataflow/VENDORED.md` recorded under 0.4.0 |
+| `node tools/verify_dynamic.mjs build/game.ssd 00 0C 02` (jsbeeb 2.3.1), addresses from the new dump | `{"fields":100,"frames":50,"scrollIdle":0,"scrollAfterX":200}` - the documented figures |
+| `py/` tests | 97 OK, 2 skipped |
+
+**Not re-measured**: `make` against `build.ps1` (no `make` on this machine on the day). The
+Makefile passes the same flags to the same exe; the 0.4.0 table below is the last time the two
+were compared.
+
+## The previous pin: 0.4.0 (2026-09-23)
+
+`template\bin\baron.exe` was the **0.4.0 release binary**, downloaded from the releases page on
 2026-09-23 (`sha256 2c1183bb c293370e 586dcd10 bb8a6ec4 8f75c603 ba0e2fe3 0a5fe009 98a15a7c`).
 It replaced a `main@7213c8b` build made here from source on 2026-09-14; everything that build
 had is in 0.4.0, tagged.
@@ -95,7 +136,7 @@ So the bytes are the same bytes. What changes is the toolchain around them.
 Four things the kit asked for. They landed before any release carried them, so they were built
 from source here (`cmake -B build -G "Visual Studio 18 2026" -A x64`, submodule `richc`
 initialised first; a second build with `-DBARON_TESTS=ON` runs Baron's own suite, 420 tests,
-420 ok) - and they are all in the 0.4.0 binary now installed, tagged.
+420 ok) - and they are all in the 0.4.0 binary, tagged, and every release since.
 
 | Asked | Fixed | What it does |
 |---|---|---|
@@ -197,7 +238,7 @@ Also in the release, unasked for and worth a line each:
 | BeebASM | Here |
 |---|---|
 | `ORG` / `SAVE` / `GUARD` / `CLEAR` | `SECTION name, org=, guard=, filename=, exec=` ... `ENDSECTION`. The filename **is** the request to save. Two sections may share an address, so `PANEL`'s `CLEAR` is gone |
-| `ASSERT cond` | A two-line `MACRO ASSERT` in `beeb.h.6502` (`IF NOT(c) : ERROR ... : ENDIF`), so all 16 assertions in `main.6502` read exactly as they did. Baron reports the `ERROR` and adds `Note: Expanded from here` at the call, so an assertion still names its own line |
+| `ASSERT cond` | Baron's own `ASSERT` since 0.4.1, so all 16 assertions in `main.6502` read exactly as they did, and a failure is reported at its own line. Until 0.4.1 it was a two-line `MACRO ASSERT` in `beeb.h.6502` (`IF NOT(c) : ERROR ... : ENDIF`); 0.4.1 refuses that as a reserved name |
 | `TIME$` | Gone. `tools/build_stamp.py` (run by the `Makefile` and `build.ps1`) writes `build/build_time.6502` - one line, `BUILD_TIME = "..."` - which `main.6502` includes. Not a `-D`: **Windows PowerShell 5.1 cannot hand a quoted string containing spaces to a native exe** (three forms tried, all mangled; PowerShell 7.3+ can, re-measured on 7.6.6 - [#3](https://github.com/waitingforvsync/baron/issues/3) above). The file stays regardless: it is what makes the rebuild byte-identical. The time is the source's (`SOURCE_DATE_EPOCH`, else the last commit), so a rebuild is byte-identical on any machine |
 | `INCLUDE` resolves from the working directory | Baron resolves it **relative to the including file**: `src/main.6502` says `INCLUDE "lib/irq.6502"`, not `"src/lib/irq.6502"`. Watch for this when forking a file into a different directory. A wrong path once surfaced as a confusing parse error downstream rather than "could not read"; that was [#1](https://github.com/waitingforvsync/baron/issues/1), fixed on 2026-09-13, and a bad path now says so at the `INCLUDE` |
 | `CPU 0` | NMOS is the default; `cmos = TRUE` on a section enables the 65C02 |
@@ -296,7 +337,8 @@ Also unused so far: lists and broadcasting (a sine table in one `EQUB`), user `F
 ## Going back to BeebASM
 
 A port that wants BeebASM reverses the table above. The whole delta measured on `lib/` was six
-lines - the `ASSERT` shim in `beeb.h`, the `TIME$` line in `boot_stamp` - plus the `SECTION`
+lines - the `ASSERT` shim in `beeb.h` (deleted since: both assemblers have the keyword now),
+the `TIME$` line in `boot_stamp` - plus the `SECTION`
 wrappers in whatever includes them, and the file extensions. Everything else, macros and all,
 assembles unchanged under both. The BeebASM `lib/` and template are in this repository's
 history: commit `5355d03`, the commit before the Baron port (it was the tip of a
