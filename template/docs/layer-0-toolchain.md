@@ -194,6 +194,19 @@ upgrade changed nothing this template can see.**
 The addresses are hex: `node tools/verify_dynamic.mjs build/game.ssd 00 0C 02`. Decimal reads the
 wrong locations and returns zeros, which looks exactly like a regression.
 
+## jsbeeb-mcp pinned to 4.0.0 (2026-10-11)
+
+`.mcp.json` said `jsbeeb-mcp@^3.4.0` (jsbeeb 1.25.0) until 2026-10-11, while the kit's own
+sessions had run 4.0.0 since 2026-09-23. It now says `jsbeeb-mcp@4.0.0` exactly, the way the
+build pins Baron. npx resolved jsbeeb **2.3.2** under it on the day, and `verify_dynamic.mjs` on
+`game.ssd` gave `{"fields":100,"frames":50,"scrollIdle":0,"scrollAfterX":200}`, the figures
+above (`game-master.ssd` not re-run). The pin fixes the MCP, not the harnesses:
+`tools/jsbeeb_src.mjs` loads the **highest** jsbeeb in any npx cache, and prints which.
+
+An npx install that is interrupted leaves its cache folder without `package.json`, and every
+later `npx jsbeeb-mcp@4.0.0` then fails with npm `ENOENT` - the MCP shows "Connection closed".
+Delete that `npm-cache\_npx\<hash>` folder and let one `npx` run finish.
+
 ## Not done
 
 - An aligned switch into the rupture (`RuptAlign`); decision 3.
