@@ -59,10 +59,20 @@ how the offsets are stored:
 There are three 6502 assembly decoders, all with ROM-able code and using 8
 bytes of zero-page:
 
-* Fast and small decoder, 138 bytes: [zx02-optim.asm](6502/zx02-optim.asm)
+* Fast and small decoder, 132 bytes: [zx02-optim.asm](6502/zx02-optim.asm)
   **This is the recommended decompressor for most users**
-* Smallest decoder, 130 bytes: [zx02-small.asm](6502/zx02-small.asm)
-* Faster decoder, 175 bytes: [zx02-fast.asm](6502/zx02-fast.asm)
+* Smallest decoder, 121 bytes: [zx02-small.asm](6502/zx02-small.asm)
+* A decoder optimized for code in zero-page, 108 bytes: [zx02-zp.asm](6502/zx02-zp.asm)
+* Faster decoder, 166 bytes: [zx02-fast2.asm](6502/zx02-fast2.asm)
+
+### Decompressing data in-place
+
+The 6502 decompressors support decompressing data in place if you properly
+keep the *end* of the compressed data at least `delta` bytes before the end of
+the output buffer.
+
+The optimal value of `delta` is reported by the compressor, and in the worst
+case this is 12 bytes for each 1024 bytes of expanded data.
 
 
 ## C decompressor
@@ -110,13 +120,19 @@ The compressor accepts the following options:
 * **-o _n_**
 
   Use `n` as starting offset. The standard decompressor uses the value `1` as
-  starting offset for matches - this is a good overall value, but certain files
-  could compress better with a different value - for example, 16 bit data could
-  benefit using a starting offset of `2`.
+  starting offset for matches - this is a good overall value, as it allows to
+  encode a repeating value at the start of the buffer with only one initial
+  byte. Never the less, certain files could compress better with a different
+  value - for example, 16 bit data could benefit using a starting offset of `2`.
 
   To decompress a file compressed with this option, you need to alter the
-  decompressor code, in the `zx0_ini_block` the first byte is the starting
-  offset minus 1.
+  decompressor code, in the `zx0_ini_block`.
+
+* **-m _n_**
+
+  Use `n` as the maximum match offset to search and encode. Using a smaller
+  maximum offset is faster, and can be useful when streaming the decompression
+  data, as old data can be discarded after the offset.
 
 
 ### Options incompatible with standard decompressor

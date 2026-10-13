@@ -1,26 +1,51 @@
 # zx02, vendored
 
-Daniel Serpell's ZX02 compressor, from https://github.com/dmsc/zx02 at **`main`,
-commit `af53aeb7af7ae82fbea8b7c5d2243c51d36c0ee6`** (2025-11-23), **unmodified**. MIT
-(`LICENSE`, byte-identical to upstream's), over Einar Saukas' BSD-3 ZX0 (`LICENSE.zx0`).
-`src/dzx02.c` is upstream's decompressor; the build does not use it.
+Daniel Serpell's ZX02 compressor, from https://github.com/dmsc/zx02 at **tag `v3`,
+commit `7ffa0e782c9f5718a8d77ba021c6babc78c7fe19`** (released 2026-09-25), **unmodified**.
+MIT (`LICENSE`, byte-identical to upstream's), over Einar Saukas' BSD-3 ZX0 (`LICENSE.zx0`).
+`src/dzx02.c` is upstream's decompressor; the build does not use it. Upstream's `6502/`
+decoders, `tests/` and build files are not vendored, so `README.md`'s links into `6502/` do
+not resolve here.
 
-**Why `main` and not a tag.** The newest tag is `v2` of 2022-07-22 and it has two
-compressor bugs, both fixed on `main` and neither released:
+**v3 is the release [#11](https://github.com/dmsc/zx02/issues/11) asked for**: the author
+tagged it on 2026-09-25 "with all the fixes" and closed the issue. It is `main` as the kit
+had it (`af53aeb`, 2025-11-23) plus one commit, `7ffa0e7` "Cleanup malloc memory", which
+`memset`s the output buffer - a second guard on the uninitialised write below, which
+`f4427e7` had already stopped. The two bugs v2 (2022-07-22) has, both fixed in v3:
 
 - it wrote the slack between its size ESTIMATE and what it emitted, i.e. uninitialised
   `malloc` memory - on Windows, pieces of the environment block - so the same input gave a
-  different file in a different shell (fixed by `f4427e7`; reported as
-  [#11](https://github.com/dmsc/zx02/issues/11), which asks for a release);
+  different file in a different shell (fixed by `f4427e7`, guarded by `7ffa0e7`; the kit's
+  report, [#11](https://github.com/dmsc/zx02/issues/11));
 - its optimiser used `1024` bits as the cost of an invalid Elias code, which stops being
   prohibitive on a long input, so it could emit **a stream that is not the data**: 19,200
   bytes of a repeated pattern compressed to 99 bytes that decoded, without error, to 4,096
   WRONG bytes (upstream [#8](https://github.com/dmsc/zx02/issues/8), fixed by `5d2f2e3`).
 
-The kit briefly carried both as local patches; taking `main` whole replaced them, so this
-tree is again plain upstream and diffs cleanly against it.
+The kit briefly carried both as local patches, then took `main` whole, then `v3`; the tree
+is plain upstream and diffs cleanly against the tag. (The `README.md` vendored with `af53aeb`
+was an older one than that commit's - documentation only, every source file matched. Taking
+`v3` whole replaced it.)
 
-**Validated here before it was installed, 2026-09-23** - against the previous build, over
+**Validated here before it was installed, 2026-10-13** - `v3` built with
+`gcc -O` (MSYS2 gcc 15.2.0) against the `af53aeb` build it replaces and against the official
+`zx02-progs-v3-win64.zip` `zx02.exe` (`sha256 50732fa0...`), over 48 real data files from
+this kit and edge-beeb plus a 19,200-byte repetitive input:
+
+| Check | Result |
+|---|---|
+| Stream bytes, 49 inputs, `v3` against `af53aeb` | **all 49 identical** |
+| The same, `v3` against the official v3 exe | **all 49 identical** - the release exe is clean, unlike v2's |
+| Round-trip through `tools/zx02.py` | 49 of 49 back to the input, byte for byte |
+| Bytes after the END marker | **none**, on any of the 49 |
+| Same input, 4 environments (bare, short var, 512-byte var, `SYSTEMROOT` and `PATH` only) | identical every time, ours and the release's |
+| The repetitive input | 237 bytes, round-trips, and **equals `zx02.py`'s own output** |
+| `game.ssd` DEV and RELEASE, `game-master.ssd`, `vscroll.ssd`, at a pinned `SOURCE_DATE_EPOCH` | **byte-identical** to the `af53aeb` build's, all four (`0c523a1f...` DEV, `885be4b6...` MASTER) |
+| Booted in jsbeeb 2.3.2, both models | `verify_dynamic.mjs` 100 / 50 / 0 / 200 on each |
+| `py/` test suite | 97 OK, 2 skipped |
+| `gcc -O -std=c99 -pedantic -Wall` | warning-free |
+
+**The previous install, `af53aeb`, validated 2026-09-23** - against the v2-era build, over
 31 real data files from this kit and edge-beeb plus the repetitive case:
 
 | Check | Result |
@@ -36,11 +61,13 @@ tree is again plain upstream and diffs cleanly against it.
 | `py/` test suite | 78 pass |
 | `gcc -O -std=c99 -pedantic -Wall` | warning-free |
 
-That last row but one is the one that matters: `lib/zx02depack.6502` is the kit's own
-transcription of the format, and the boot is what proves the two still agree.
+In both tables the boot is the row that matters: `lib/zx02depack.6502` is the kit's own
+transcription of the format, and the boot is what proves the two still agree. (On 2026-10-13
+the streams and discs were byte-identical to the build that had already passed the `&4A00`
+read-back, so `verify_dynamic.mjs`'s boot was enough.)
 
-**Upgrade** by replacing `src/` from a later commit or tag and re-running exactly that
-table. A stream that changes changes the disc.
+**Upgrade** by replacing `src/` from a later commit or tag and re-running the table at
+the top. A stream that changes changes the disc.
 
 **Why it is here and not an external tool.** The disc's bytes depend on the compressor, and
 `src/lib/zx02depack.6502` decodes exactly what this one emits. The build used to run whichever

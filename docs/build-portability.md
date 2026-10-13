@@ -128,13 +128,16 @@ test to run before asking anyone else to try a build.
     message calls it "the compressed output was one byte bigger than needed" - the size
     symptom, not the uninitialised read. The ask there is a tagged release, since `main`
     is 26 commits ahead of a v2 that is four years old and is what the download gives you.
+    **Released as `v3` on 2026-09-25** "with all the fixes", and the issue closed; the kit
+    vendors `v3` since 2026-10-13, and its release `zx02.exe` gives the same streams as the
+    kit's own build (`template/tools/zx02src/VENDORED.md`).
 
     Two footnotes. The template's own `PANEL` never showed any of this (slack 0), which is
     why the kit did not find it first. And a highly repetitive input - 19,200 bytes of a
     repeated 2,560-byte pattern - makes v2 emit a stream its own decoders refuse; that is
     **not** this bug and not a decoder fault, it is
     [dmsc/zx02#8](https://github.com/dmsc/zx02/issues/8), reported by someone else and
-    already fixed on `main`. Another reason to want the release.
+    already fixed on `main` and in `v3`.
 
 17. **Line endings are fixed by `.gitattributes`, not by each clone's settings.** Git on
     Windows (`core.autocrlf=true`, the installer's default) checks text out with CRLF.
