@@ -51,7 +51,7 @@ change, stronger.
 
 5. **When addresses legitimately moved - a width change, a data removal, a relocation - diff
    the listing streams instead.** The reducer is checked in (`tools/listing.py`, forked from the
-   kit's `py/listing.py`); both ports wrote one inline each time, which is why the numbers below
+   kit's `py/beeb_port_kit/listing.py`); both ports wrote one inline each time, which is why the numbers below
    were never reproducible.
 
    ```bash

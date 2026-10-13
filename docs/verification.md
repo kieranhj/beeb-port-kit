@@ -41,7 +41,7 @@ python -m beeb_port_kit.listing symbols build/game.symbols.json         # everyt
 That prints `name = &addr` for every symbol Baron resolved - labels, `[auto]` allocations, and
 computed constants **with their values**, which is what `--symbols` bought when it landed on
 2026-09-13 (waitingforvsync/baron#5; `docs/toolchain-baron.md` has the detail). It is
-`py/listing.py` in this kit, and the same command reads the `-v` listing if that is all you have
+`py/beeb_port_kit/listing.py` in this kit, and the same command reads the `-v` listing if that is all you have
 - a build you kept the listing but not the dump for. Two things a LISTING cannot give you: a
 computed constant's value (it echoes `PLAY_R7 = 34 - FRAME_DROP_ROWS - PANEL_CYC_ROWS`
 unevaluated), and a trustworthy address for the last label of a section if it was written before
@@ -655,7 +655,7 @@ and [layer-15-endgame.md](https://github.com/kieranhj/paradroid-beeb/blob/main/d
    image is a width change or data. The emulator run afterwards then only confirms that the new
    addresses do not collide.
 
-**The reducer is checked in now**, which it never was in either port - `py/listing.py`:
+**The reducer is checked in now**, which it never was in either port - `py/beeb_port_kit/listing.py`:
 
 ```bash
 python -m beeb_port_kit.listing stream build-old/game.lst > old.txt
@@ -775,7 +775,7 @@ Recorded so the next port does not assume they are filled:
 
 - Edge Grinder has no redraw oracle (procedure 3). Its model oracles cover two static screens.
 - Neither PORT checks in the listing-stream reducer (procedure 13) or the catalogue extractor
-  (procedure 12); both were done inline. The kit ships the reducer now (`py/listing.py`,
+  (procedure 12); both were done inline. The kit ships the reducer now (`py/beeb_port_kit/listing.py`,
   2026-09-07); the catalogue extractor is still inline.
 - Paradroid's headless A/B script (procedure 14) survives only as a memory note.
 - The mid-frame bank flip, the 8K-wrap ring and the display-below-`&3000` rule are measured on

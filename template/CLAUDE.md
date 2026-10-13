@@ -94,9 +94,10 @@ INCLUDE and INCBIN resolve **relative to the including file**, not the working d
 stream through `tools/zx02.py`, rewrites its catalogue load address to `LOADER_STAGE`, refuses a
 stream that overlaps its output and lays the files out in boot order. Hand `build/game.ssd` to
 an emulator - **no padding**: jsbeeb stopped complaining in 1.9.0 and the kit booted this
-template's 2,304-byte image on both models to check (`../docs/hardware-facts.md`). `dfs.pad()`
-is for publishing, where a size that differs from the last release is a signal. Baron is silent on success and puts every error, in one
-run, on stderr as `file:line:col: error:` - so unlike beebasm there is nothing to trip
+template's image, then 2,304 bytes (2,560 now, with `INFO`), on both models to check
+(`../docs/hardware-facts.md`). `dfs.pad()` is for publishing, where a size that differs from
+the last release is a signal. Baron is silent on success and puts every error, in one run, on
+stderr as `file:line:col: error:` - so unlike beebasm there is nothing to trip
 PowerShell's `$ErrorActionPreference`; check the exit code. Every compile flag that changes the
 disc is stamped in **`INFO`, a disc file** (`BOOT_FLAG` inside `main.6502`'s `BUILD_STAMP`
 macro); add any new `DEBUG_` flag to `DEBUG_ANY` and to that macro. `*TYPE INFO` reads the
@@ -165,6 +166,13 @@ outside world enters needs `ZA_ENTRY`, an interrupt handler `ZA_INTERRUPT` - wit
 allocator will happily put the handler's state on a byte the main loop is using, and says so
 with a warning first.
 
+The rest of the map: code from `&1900` below the screen at `&3000` - **its size and free bytes
+are the `CODE` line at the end of `build/game.lst`** (2026-10-06: `&1900-&1DBE`, the end
+exclusive, 1,214 bytes and 4,674 free; 1,267 with `MASTER=1`) - `&3000` the loader's staging
+area at boot, panel `&4A00-&53FF`, strip `&5800-&7FFF`. `&0E00-&18FF` is DFS's on a Model B and
+is free once `release_fs` has had the filing system detach (`&B0-&CF` in the zero page with
+it); the template leaves both alone.
+
 **The builds pass `--warn 2`, and a clean build is one with no warnings at all.** Two of them are
 the ones a port meets, and each has an answer rather than a suppression:
 
@@ -176,10 +184,6 @@ the ones a port meets, and each has an answer rather than a suppression:
 `../docs/toolchain-baron.md` has both in full. This template needs neither: it has no wipe loop
 (the allocator proved every variable's first write and the loop went) and indexes nothing in the
 pool.
-code `&1900-&1DBD` (1,213 bytes; 1,264 with `MASTER=1`) below the screen at `&3000`, `&3000`
-the loader's staging area at boot, panel `&4A00-&53FF`, strip `&5800-&7FFF`. `&0E00-&18FF` is
-DFS's on a Model B and is free once `release_fs` has had the filing system detach (`&B0-&CF` in
-the zero page with it); the template leaves both alone.
 
 ## Assembly conventions
 

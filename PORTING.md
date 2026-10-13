@@ -384,9 +384,9 @@ the probe says which links to move.
 
 Every data file ships compressed and the loader unpacks it. Boot time in Paradroid went from
 14.4 s to 10.4 s; the lever is sectors, not file count. Use **ZX02** (`lib/zx02depack.6502`,
-`py/zx02.py`): 131 bytes of depacker against ZX0's 257 and 2.14x the decode speed for +0.11% on
+`py/beeb_port_kit/zx02.py`): 131 bytes of depacker against ZX0's 257 and 2.14x the decode speed for +0.11% on
 the packed size, measured 2026-09-07 over both ports' data. The two shipping ports are ZX0 discs
-because they predate the measurement; `lib/zx0depack.6502` and `py/zx0.py` stay for them. Pick one
+because they predate the measurement; `lib/zx0depack.6502` and `py/beeb_port_kit/zx0.py` stay for them. Pick one
 format for a project and never mix them - nothing checks that the disc and the depacker agree. There is one depacker and it is resident;
 Paradroid had two copies for a while and loaded one of them twice a session. A stream may not be
 overtaken by its own output, so an in-place unpack needs a measured margin and the build should

@@ -134,7 +134,7 @@ from the request**, the kit's rule again). `scroll` 0 -> 200 in 50 fields of X.
   `Game` (1,087 bytes DEV, 1,138 MASTER) and `PANEL` came out **identical to the BeebASM
   build**, `!BOOT` differing only in its timestamp, and both discs boot in jsbeeb with `&4A00`
   identical to `src/data/panel.bin` and `zxdst` at `&5400`. All of RELEASE=0/1 and MASTER=0/1
-  assemble, from `build.ps1` and `tools/build.sh`. Why, and the whole BeebASM delta:
+  assemble, from `build.ps1` and `tools/build.sh` (since replaced by the `Makefile`). Why, and the whole BeebASM delta:
   `../../docs/toolchain-baron.md`.
 - `RELEASE` and `MASTER` passed every time (Baron has `DEFINED()`, so this is now a choice, not
   BeebASM's no-`IFDEF` workaround). The stamp's timestamp comes from the generated

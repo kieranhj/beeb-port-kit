@@ -1115,8 +1115,10 @@ again.*
   regression in the port. Diagnosed by reading `&1900` after the boot: `0d ff 00 00...`
   under 2.3.0 where 1.25.0 had the game's `a2 ff 9a a9` (`LDX #&FF : TXS`).
   Fixed 2026-09-23: `tools/jsbeeb_src.mjs` exports `keys()`, which returns the right form
-  for whichever jsbeeb was resolved, and the harnesses say `K.SHIFT` / `K.X`. Both versions
-  now give the documented 100 / 50 / 0 / 200. **An all-zero harness result is a boot that
+  for whichever jsbeeb was resolved, and `verify_dynamic.mjs` and `probe_shot.mjs` say
+  `K.SHIFT` / `K.X`. Both versions now give the documented 100 / 50 / 0 / 200. **OPEN:
+  `examples/vscroll/tools/verify_vscroll.mjs` was missed** - it still passes `16` (SHIFT) and
+  `40` (DOWN), and under 2.3.1 throws at its first `keyDown` (run 2026-10-06). **An all-zero harness result is a boot that
   did not happen, not a dead game** - check `&1900` before believing it.
 
   The TYPE CHANGE itself is not a jsbeeb bug - it is in v2.0.0's release notes as a breaking
@@ -1164,7 +1166,7 @@ again.*
   unpacked to `&4A00` byte-identical to its source, 100 fields in 100 frames, 50 loop passes in
   those, `scroll` 0 -> 200 under 50 fields of X.
   **Padding to 200K (204,800 bytes) remains a PUBLISHING convention**: a published size that
-  differs from the last publish is a useful signal that the wrong file went out. `py/dfs.py`'s
+  differs from the last publish is a useful signal that the wrong file went out. `py/beeb_port_kit/dfs.py`'s
   `pad()` is there for that, and for nothing else. [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md) [Paradroid layer-4-player.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-4-player.md)
 - **jsbeeb emulates the VideoNuLA palette** (`?&FE23=&78 : ?&FE23=&88` gives mid grey; sixteen
   distinct entries come back under logical mapping). **Its NuLA scrolling and attribute modes are

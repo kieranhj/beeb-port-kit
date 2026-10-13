@@ -25,7 +25,7 @@ description do it.
 
 | Skill | Source | Use when |
 |---|---|---|
-| `beeb-smoke-test` | procedure 1 | A build has just been made; does it boot? Build, pad, boot on the target model, 400 frames, one screenshot |
+| `beeb-smoke-test` | procedure 1 | A build has just been made; does it boot? Build, boot the image the build ships (unpadded is fine) on the target model, 400 frames, one screenshot |
 | `beeb-cycle-timing` | procedures 4, 5 | How long does a routine take? Breakpoint pair and `elapsed_cycles`; the zero-byte stub histogram as an option |
 | `beeb-buffer-oracle` | procedure 3 | A scroll, tile writer or sprite change needs proving: diff the play buffer against an independent redraw, both dumps in one pass, both banks |
 | `beeb-frame-drops` | procedure 6 | Is the game holding its rate? Count passes against fields over exactly 100 fields, per scenario |
