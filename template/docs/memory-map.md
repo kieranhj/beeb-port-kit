@@ -1,6 +1,6 @@
 # The memory map, and what is left in it
 
-Figures are from the build of 2026-10-06 (`build/game.lst`, the `PRINT` block at its end, and
+Figures are from the build of 2026-10-13, Baron 0.5.3 (`build/game.lst`, the `PRINT` block at its end, and
 `make_disc.py`'s output). They go stale the moment anything grows: take live numbers from the
 listing.
 

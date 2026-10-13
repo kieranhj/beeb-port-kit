@@ -63,10 +63,11 @@ next session re-litigating them.
    ```
 
    `--check` assembles and validates while writing nothing, which is what this loop wants; the
-   `PRINT` figures still come out. On Baron 0.4.0 add `--warn 2`, and expect the loop to be
+   `PRINT` figures still come out. On Baron 0.4.0 or later add `--warn 2`, and expect the loop to be
    silent apart from the figures - a zero-page warning in one flag combination and not another
    is exactly what this sweep is for. (0.3.0 has no `--warn` and fails on it rather than
-   ignoring it; `..\..\Bin\baron.exe` is still 0.3.0, so check what the project resolves.)
+   ignoring it; `..\..\Bin\baron.exe` is still 0.3.0, so check what the project resolves. A
+   project on the kit's `lib/` needs 0.4.1 or later anyway, for the `ASSERT` keyword.)
    A BeebASM project runs `beebasm -i src/main.asm -do /tmp/o.ssd -opt 2 -D ...` instead, where
    the `-do` exists only to stop loose `SAVE` files.
 
