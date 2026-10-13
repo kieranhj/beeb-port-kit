@@ -198,7 +198,8 @@ class Converter:
     def __init__(self, root, listing_path, symbols_path, disc_path=None, main=None):
         self.root = Path(root).resolve()
         self.lines = _listing.parse(listing_path)
-        self.dump = json.loads(Path(symbols_path).read_text(encoding="utf-8"))
+        self.dump = _listing.dump_files(
+            json.loads(Path(symbols_path).read_text(encoding="utf-8")))
         self.disc = _dfs.read_image(disc_path).files if disc_path and \
             Path(disc_path).exists() else {}
         self.main = main or next(iter(self.dump))

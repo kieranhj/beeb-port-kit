@@ -149,11 +149,38 @@ def is_dump(source):
     return _read(source).lstrip().startswith("{")
 
 
+# The categories of a format-2 dump that hold symbols. A section's other
+# keys - `attributes` (its org, guard, filename) and its size - are not names.
+_DUMP_KINDS = ("labels", "assignments", "defines", "za_autos", "params")
+
+
+def dump_files(doc):
+    """A parsed `--symbols` dump as {main source: {name: value}}, from either
+    format Baron has written.
+
+    Up to 0.4.x the dump WAS that: one object per main source file, every
+    symbol in it. 0.5.0 made it `{"format": 2, "assemblies": [...]}`, each
+    assembly's symbols split by section and then by kind, each one a
+    `{"value", "source", "line"}`. The names are the same names - scope
+    prefixes and all - so flattening the kinds back together gives the old
+    map, and everything downstream reads one shape."""
+    if not isinstance(doc.get("format"), int):
+        return doc
+    files = {}
+    for asm in doc["assemblies"]:
+        syms = files.setdefault(asm["sources"][0], {})
+        for section in asm["sections"]:
+            for kind in _DUMP_KINDS:
+                for name, sym in section.get(kind, {}).items():
+                    syms.setdefault(name, sym["value"])
+    return files
+
+
 def values(source):
     """Every symbol in a `--symbols` dump as name -> [values], values as Baron
     resolved them: numbers, but also the strings and booleans a listing could
     never have shown. Names inside a `{ }` scope keep only their leaf name."""
-    doc = json.loads(_read(source))
+    doc = dump_files(json.loads(_read(source)))
     found = {}
 
     def add(name, value):
