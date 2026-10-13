@@ -1118,7 +1118,8 @@ again.*
   for whichever jsbeeb was resolved, and `verify_dynamic.mjs` and `probe_shot.mjs` say
   `K.SHIFT` / `K.X`. Both versions now give the documented 100 / 50 / 0 / 200. **OPEN:
   `examples/vscroll/tools/verify_vscroll.mjs` was missed** - it still passes `16` (SHIFT) and
-  `40` (DOWN), and under 2.3.1 throws at its first `keyDown` (run 2026-10-06). **An all-zero harness result is a boot that
+  `40` (DOWN), and under 2.3.1 throws at its first `keyDown` (run 2026-10-06; again on 2.3.2, 2026-10-13 -
+  `template/BUGS.md` #2). **An all-zero harness result is a boot that
   did not happen, not a dead game** - check `&1900` before believing it.
 
   The TYPE CHANGE itself is not a jsbeeb bug - it is in v2.0.0's release notes as a breaking

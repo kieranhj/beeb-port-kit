@@ -167,7 +167,7 @@ allocator will happily put the handler's state on a byte the main loop is using,
 with a warning first.
 
 The rest of the map: code from `&1900` below the screen at `&3000` - **its size and free bytes
-are the `CODE` line at the end of `build/game.lst`** (2026-10-06: `&1900-&1DBE`, the end
+are the `CODE` line at the end of `build/game.lst`** (2026-10-13, Baron 0.5.3: `&1900-&1DBE`, the end
 exclusive, 1,214 bytes and 4,674 free; 1,267 with `MASTER=1`) - `&3000` the loader's staging
 area at boot, panel `&4A00-&53FF`, strip `&5800-&7FFF`. `&0E00-&18FF` is DFS's on a Model B and
 is free once `release_fs` has had the filing system detach (`&B0-&CF` in the zero page with

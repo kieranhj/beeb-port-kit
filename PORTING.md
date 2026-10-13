@@ -562,7 +562,9 @@ order of importance:
    the first release where `cycles_run` reports what it ran, where a run after a breakpoint stop
    does not overrun, where `read_memory` can be pointed at a bank instead of inferred from `&F4`,
    and where `release_all_keys` and `keyboard_state` exist. `docs/hardware-facts.md` says which
-   notes apply only below it.
+   notes apply only below it. **Pin the exact version** (`jsbeeb-mcp@4.0.0` in the template's
+   `.mcp.json`, since 2026-10-11): bare `jsbeeb-mcp` moves on its own, and 4.0.0 brought jsbeeb
+   2.x, which changed the key names and the type harnesses pass to `keyDown`.
 3. **The owner decides, the assistant builds.** Decisions are asked as numbered questions and
    answered before code; the answers go in `decisions.md`. Taste calls (a speed, a colour, an
    auto-fire rate) are played, not calculated, and the doc says whose number it is.
