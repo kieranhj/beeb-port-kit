@@ -132,7 +132,8 @@ from the request**, the kit's rule again). `scroll` 0 -> 200 in 50 fields of X.
   one that matters being a store into the `ZA_POOL` at a literal address); the template is silent
   at that level. **0.5.3 on 2026-10-11** moved no byte either, once the kit's `ASSERT` macro
   had gone (0.4.1 made it a keyword) and `listing.py` read 0.5.0's new symbol dump
-  (`../../docs/toolchain-baron.md` has the table). Gated on byte-identity, both models:
+  (`../../docs/toolchain-baron.md` has the table), and **0.6.0 on 2026-10-21** moved none and
+  needed no change - listing and symbol dump included, `make` matching `build.ps1`. Gated on byte-identity, both models:
   `Game` (1,087 bytes DEV, 1,138 MASTER) and `PANEL` came out **identical to the BeebASM
   build**, `!BOOT` differing only in its timestamp, and both discs boot in jsbeeb with `&4A00`
   identical to `src/data/panel.bin` and `zxdst` at `&5400`. All of RELEASE=0/1 and MASTER=0/1
