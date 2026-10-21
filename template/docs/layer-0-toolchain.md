@@ -201,12 +201,35 @@ wrong locations and returns zeros, which looks exactly like a regression.
 sessions had run 4.0.0 since 2026-09-23. It now says `jsbeeb-mcp@4.0.0` exactly, the way the
 build pins Baron. npx resolved jsbeeb **2.3.2** under it on the day, and `verify_dynamic.mjs` on
 `game.ssd` gave `{"fields":100,"frames":50,"scrollIdle":0,"scrollAfterX":200}`, the figures
-above (`game-master.ssd` not re-run). The pin fixes the MCP, not the harnesses:
-`tools/jsbeeb_src.mjs` loads the **highest** jsbeeb in any npx cache, and prints which.
+above (`game-master.ssd` not re-run). The pin fixed the MCP, not the harnesses:
+`tools/jsbeeb_src.mjs` loaded the **highest** jsbeeb in any npx cache (until 2026-10-21, below).
 
 An npx install that is interrupted leaves its cache folder without `package.json`, and every
 later `npx jsbeeb-mcp@4.0.0` then fails with npm `ENOENT` - the MCP shows "Connection closed".
 Delete that `npm-cache\_npx\<hash>` folder and let one `npx` run finish.
+
+## jsbeeb-mcp 4.3.0, and the harnesses follow the pin (2026-10-21)
+
+`.mcp.json` says `jsbeeb-mcp@4.3.0`; npx resolved jsbeeb **2.10.2** under it. 4.0.0 -> 4.3.0 is
+additive but for two things a harness could meet: `type_input` presses RETURN only when the text
+does not already end in a newline, and `restore_state` refuses a state from a machine fitted
+differently (tube, Econet, station, VideoNuLA), not just another model. New: `run_until_address`,
+`start_coverage`/`stop_coverage` (by sideways bank), `load_tape`, `flush_keyboard_buffer`, Econet
+and VideoNuLA on `create_machine`, `github:` and `bitshifters:` discs. The key-name table did not
+change.
+
+**The harnesses now load the pinned emulator.** Until today `tools/jsbeeb_src.mjs` took the
+highest jsbeeb in any npx cache, so with the MCP pinned to 4.0.0 (jsbeeb 2.3.2) they had been
+running on 2.10.0, from another project's bare `npx jsbeeb-mcp`. It now reads the pin from
+`.mcp.json` and opens the cache `npx jsbeeb-mcp@<pin>` made - npx names it by the first 16 hex
+digits of the SHA-512 of the spec, checked against every cache on this machine - and refuses,
+naming the `npx` command, when that cache is missing or half-written. Without an exact pin it
+falls back to the highest and says so. It prints `[jsbeeb 2.10.2, jsbeeb-mcp@4.3.0] <path>`.
+
+Re-run on jsbeeb 2.10.2: `verify_dynamic.mjs` on `game.ssd` (`B-DFS1.2`) and `game-master.ssd`
+(`Master`) both `{"fields":100,"frames":50,"scrollIdle":0,"scrollAfterX":200}`; `boards_check.mjs`
+watford ok, solidisk ok; `examples/vscroll`'s `verify_vscroll.mjs`, fixed the same day (`BUGS.md`
+#2), passes with every figure `docs/vertical-scroll.md` has. `probe_shot.mjs` was not re-run.
 
 ## Not done
 

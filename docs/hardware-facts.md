@@ -1116,16 +1116,17 @@ again.*
   under 2.3.0 where 1.25.0 had the game's `a2 ff 9a a9` (`LDX #&FF : TXS`).
   Fixed 2026-09-23: `tools/jsbeeb_src.mjs` exports `keys()`, which returns the right form
   for whichever jsbeeb was resolved, and `verify_dynamic.mjs` and `probe_shot.mjs` say
-  `K.SHIFT` / `K.X`. Both versions now give the documented 100 / 50 / 0 / 200. **OPEN:
-  `examples/vscroll/tools/verify_vscroll.mjs` was missed** - it still passes `16` (SHIFT) and
-  `40` (DOWN), and under 2.3.1 throws at its first `keyDown` (run 2026-10-06; again on 2.3.2, 2026-10-13 -
-  `template/BUGS.md` #2). **An all-zero harness result is a boot that
+  `K.SHIFT` / `K.X`. Both versions now give the documented 100 / 50 / 0 / 200. `examples/vscroll/tools/verify_vscroll.mjs` was missed - it
+  passed `16` (SHIFT) and `40` (DOWN), and under 2.3.1 threw at its first `keyDown` (2026-10-06
+  and 2026-10-13) - until 2026-10-21, when it took `K.SHIFT` / `K.DOWN` and passed on jsbeeb
+  2.10.2 with jsbeeb 1.25.0's figures (`template/BUGS.md` #2). **An all-zero harness result is a boot that
   did not happen, not a dead game** - check `&1900` before believing it.
 
   The TYPE CHANGE itself is not a jsbeeb bug - it is in v2.0.0's release notes as a breaking
   change, and the note even names "anything driving jsbeeb headlessly by key code, jsbeeb-mcp
   included". The kit only met it unprepared because the harnesses resolve the highest jsbeeb in
-  the npx cache and the MCP was unpinned, so the version moved on its own. Both now pinned.
+  the npx cache and the MCP was unpinned, so the version moved on its own. Both now pinned: the
+  MCP in `.mcp.json`, and since 2026-10-21 the harnesses load the jsbeeb that pin installed.
   What IS reported is the silence: `via.js`'s `set()` ends `if (!mapping) return;`, so a typo,
   a `null` or a pre-2.0 integer all press nothing and say nothing -
   [mattgodbolt/jsbeeb#1172](https://github.com/mattgodbolt/jsbeeb/issues/1172), asking it to
