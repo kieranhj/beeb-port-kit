@@ -104,4 +104,4 @@ the next. `PLAN.md` here is seeded with them.
 | `examples/vscroll/` | the smooth VERTICAL scroll, play area first: its own `src/`, `build.ps1` and `tools/verify_vscroll.mjs` |
 | `docs/` | `decisions.md`, `layer-0-toolchain.md` (what was measured), `vertical-scroll.md` (the example, measured), `memory-map.md` |
 | `CLAUDE.md`, `PLAN.md`, `BUGS.md` | the working documents, seeded |
-| `.mcp.json` | the jsbeeb MCP, pinned to `jsbeeb-mcp@4.0.0`, so the emulator is a tool from the first session |
+| `.mcp.json` | the jsbeeb MCP, pinned to `jsbeeb-mcp@4.3.0`, so the emulator is a tool from the first session |

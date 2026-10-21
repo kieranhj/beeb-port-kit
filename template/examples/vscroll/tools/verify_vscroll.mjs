@@ -48,7 +48,7 @@
 // page. Take them from the listing, never from a doc, and never in decimal:
 //
 //   python ../../tools/listing.py symbols build/vscroll.symbols.json
-import { loadMachineSession } from "../../../tools/jsbeeb_src.mjs";
+import { keys, loadMachineSession } from "../../../tools/jsbeeb_src.mjs";
 const MachineSession = await loadMachineSession();
 
 // ---- the geometry, from main.6502. Change both or neither. ----------
@@ -69,7 +69,8 @@ const PHYS_RGB = [
 ];
 const FB_W = 1024, FB_H = 625;          // jsbeeb's framebuffer: 8 px a CRTC
                                         // character, 2 rows a scanline
-const KEY_DOWN = 40;                    // jsbeeb keymap.js keyCodes.DOWN
+const K = keys();                       // jsbeeb 2.0 changed keyDown from a
+                                        // number to a code string (jsbeeb_src.mjs)
 const RING_LINES = 16 * 8;              // BUF_ROWS * 8: what ypos wraps at
 const RATE_FIELDS = 50;                 // FRAME_LOCK = 1, so 50 fields must
                                         // move the view 50 scanlines
@@ -148,7 +149,7 @@ const s = new MachineSession(model || "B-DFS1.2", { tube: false });
 await s.initialise();
 await s.boot(30);
 s.loadDisc(ssd);
-s.keyDown(16); s.reset(true); await s.runFrames(50); s.keyUp(16);   // SHIFT+BREAK
+s.keyDown(K.SHIFT); s.reset(true); await s.runFrames(50); s.keyUp(K.SHIFT);   // SHIFT+BREAK
 await s.runFrames(200);                 // let the rupture settle
 
 // The field must still be 312 lines, or nothing else here means anything.
@@ -162,7 +163,7 @@ const seenLine = new Set();
 
 // Hold DOWN: one scanline a FIELD at 50 Hz, so 20 fields walk `line` through
 // all eight values twice and step the start address across two row boundaries.
-s.keyDown(KEY_DOWN);
+s.keyDown(K.DOWN);
 for (let t = 0; t < 20; t++) {
     await s.runFrames(1);               // one 50 Hz game tick = one field
     const crtc = s.readMemory(crtcAddr, 2).reduce((v, b, i) => v + (b << (8 * i)), 0);
@@ -229,7 +230,7 @@ const rate0 = s.readMemory(yposAddr, 1)[0];
 await s.runFrames(RATE_FIELDS);
 const rate1 = s.readMemory(yposAddr, 1)[0];
 const linesMoved = (rate1 - rate0 + RING_LINES) % RING_LINES;
-s.keyUp(KEY_DOWN);
+s.keyUp(K.DOWN);
 
 const pass = worstStrip === 0 && worstView === 0 && seenLine.size === 8 &&
              fieldCycles === 39936 && geomBad === 0 && worstEdge === null &&

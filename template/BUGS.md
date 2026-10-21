@@ -27,12 +27,12 @@ The cause and the change, and the check that proved it.
 
 ## 2. verify_vscroll.mjs throws on jsbeeb 2.x
 
-**Open 2026-10-06** (found in the 2026-10-06 documentation pass, a missed file in the jsbeeb 2.0
-fix). The example's harness, not the template's build.
+**Open 2026-10-06, fixed 2026-10-21** (found in the 2026-10-06 documentation pass, a missed file
+in the jsbeeb 2.0 fix). The example's harness, not the template's build.
 
 ### What was measured
-2026-10-13, jsbeeb 2.3.2 (the `jsbeeb-mcp@4.0.0` cache): `node toolserify_vscroll.mjs
-buildscroll.ssd 02 0D 10` stops at line 151, `s.keyDown(16)` (SHIFT+BREAK), in jsbeeb's
+2026-10-13, jsbeeb 2.3.2 (the `jsbeeb-mcp@4.0.0` cache): `node tools/verify_vscroll.mjs
+build/vscroll.ssd 02 0D 10` stops at line 151, `s.keyDown(16)` (SHIFT+BREAK), in jsbeeb's
 `requireKnownKeyCode`. Line 72's `KEY_DOWN = 40` and its `keyDown`/`keyUp` at 165 and 232 are the
 same mistake. jsbeeb 2.x takes `KeyboardEvent.code` strings; up to 2.3.0 a number was silently
 never pressed, from 2.3.1 it throws (`../docs/hardware-facts.md`, the jsbeeb 2.0 key note).
@@ -42,9 +42,12 @@ The disc: `vscroll.ssd` is byte-identical across Baron 0.4.0, 0.5.3 (2026-10-11)
 own harnesses, `verify_dynamic.mjs` and `probe_shot.mjs`, already take keys from `keys()` in
 `tools/jsbeeb_src.mjs` and run.
 
-### Fix (not done)
-Take SHIFT and the down key from `keys()` (it has no down-arrow entry yet: add one), then re-run and
-compare with the figures in `docs/vertical-scroll.md`.
+### Fixed (2026-10-21)
+`keys()` has a `DOWN` (`ArrowDown` on 2.x, `40` on 1.x), and the harness takes SHIFT and DOWN from
+it. Re-run on jsbeeb 2.10.2 (the `jsbeeb-mcp@4.3.0` cache): `pass: true`, and every figure in
+`docs/vertical-scroll.md`'s table the same as jsbeeb 1.25.0's - field 39,936 cycles, 50 scanlines in
+50 fields, strip 0 of 10,240, view 0 of 38,400, sliver 0 of 19,840, one lit run of 320x152,
+`linesSeen` 0-7.
 
 ## 1. The fires alternated phase with the frame-lock take
 
