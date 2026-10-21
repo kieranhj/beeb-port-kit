@@ -1,9 +1,9 @@
-# Baron, and BeebASM as the legacy (2026-10-11)
+# Baron, and BeebASM as the legacy (2026-10-21)
 
 The kit assembles with [Baron](https://github.com/waitingforvsync/baron), Rich Talbot-Watkins's
 ground-up rewrite of BeebASM (MIT, active - the sections design changed on 2026-09-06, the
 zero-page markers on 2026-09-23, `ASSERT` became a keyword in 0.4.1 and the symbol dump's format
-changed in 0.5.0). `lib/` and `template/` are both Baron. BeebASM is the legacy:
+changed in 0.5.0; 0.6.0 moved nothing here). `lib/` and `template/` are both Baron. BeebASM is the legacy:
 the two shipping ports are BeebASM projects, and this file records exactly what differs so either
 direction is a short walk.
 
@@ -18,13 +18,67 @@ and a `baron.exe` that *every* BBC project on the machine resolves - 1942 among 
 replacing the exe there moves projects that never asked to move. That folder stays on the
 0.3.0 release binary of 2026-09-07; the kit runs the newer build out of its own `bin\`.
 
-## The pinned version: 0.5.3 (2026-10-11)
+## The pinned version: 0.6.0 (2026-10-21)
 
-`template\bin\baron.exe` is the **0.5.3 release binary**, downloaded from the releases page on
-2026-10-11 (`sha256 5f74b088 1e40d63a 97b62e1c 97f6e5d2 1549187d 7e45c129 ee8f8400 fcd561e5`).
-The 0.4.0 exe it replaced is kept beside it as `bin\baron-0.4.0.exe`. **The kit's sources now
-need 0.4.1 or later** - they use the built-in `ASSERT` - and its tools read the symbol dump in
-either format.
+`template\bin\baron.exe` is the **0.6.0 release binary**, downloaded from the releases page on
+2026-10-21 (`sha256 48d651d6 489e8184 e1d4abe9 d0ca150a f992e458 62f580cf a4b55eb1 7924a0de`).
+The 0.5.3 exe it replaced is kept beside it as `bin\baron-0.5.3.exe`. The kit's sources still
+need **0.4.1 or later** (the `ASSERT` keyword); nothing in them needs 0.6.0.
+
+**A drop-in for this kit: nothing changed, and no byte moved.** Measured 2026-10-21 with
+`SOURCE_DATE_EPOCH` fixed, the same sources under 0.5.3 and under 0.6.0:
+
+| | Result |
+|---|---|
+| The template, DEV and RELEASE, Model B and `MASTER=1`: both images, the listing, the symbol dump and `game.config` | **byte-identical**, all of them; code still 1,214 / 1,267 bytes |
+| `examples/vscroll`: image, listing, symbol dump | **byte-identical** |
+| `lib/test/test_lib.6502` at `RELEASE=0` and `=1`, and `andy_test`, `probe_test`, `run_test` | **byte-identical** |
+| Everything above at `--warn 2` | **silent** |
+| `make` against `build.ps1` | the same `sha256 065d8dd6...` - the comparison the 0.5.3 upgrade could not make |
+| `python tools/analyse.py report` | 573 of 573 placed, 6 findings, 11 bytes - unchanged |
+| `node tools/verify_dynamic.mjs build/game.ssd 00 0C 02` (jsbeeb 2.10.0) | `{"fields":100,"frames":50,"scrollIdle":0,"scrollAfterX":200}` |
+| `py/` tests | 97 OK, 2 skipped |
+
+**0.6.0's six breaking changes, none of which this kit meets** - but a port might, so check for
+these before moving one:
+
+- A virtual section opened inside a real section needs its own `org` (it used to take the
+  enclosing addresses and overlap whatever followed).
+- `ZA_CANCALL`, `ZA_CANJUMP` and `ZA_RETURNTO` must name code by its **label**: a plain address
+  that lands on assembled code is an error. (The kit uses none of the three.)
+- A `ZA_AUTO` whose address is taken (`LDA #var`, `EQUB var`, `PRINT var`) but which no
+  instruction touches is an error.
+- A `FUNCTION` local is readable only once assigned, and `FUNCTION` parameters and locals are
+  **no longer in the `--symbols` dump**. `listing.dump_files()` is unaffected - the kit's dump did
+  not change by a byte - but a port's tool that looked a parameter up there will not find it.
+- `FOR`, `NEXT`, `REPLACE` and `WHERE` are keywords, so locals or `FUNCTION`s of those names
+  need renaming.
+- An `IF` in a `FUNCTION` body given a list or a string is an error (it ran neither branch).
+
+New, and worth knowing:
+
+- **`--warn 3` reports every branch that crosses a page** (`warning: Branch at &1A01 crosses a
+  page boundary (an extra cycle when taken)`). On the template it names exactly the four that
+  `tools/listing.py pages` lists - `wait_take` and three in `rupt_vsync` - so the two agree, and
+  Baron's has a file and line. **The builds stay at `--warn 2`**: a page crossing is not a
+  defect, the template has four by design, and level 3 would make "a clean build has no
+  warnings" untrue. Run it by hand after an edit near the rupture, as `listing.py pages` is.
+- **Section transforms**: `transform = "name"` on a `SECTION` passes its bytes through a Baron
+  `FUNCTION` when it closes, and Baron's `examples/compress` includes a ZX02 compressor written
+  that way. **The kit does not use it**: `make_disc.py` compresses `PANEL` with the zx02 built
+  from `tools/zx02src/` and round-trips the stream through `zx02.py`, and a second compressor
+  would be a second set of bytes to trust. Worth measuring against it before a port adopts one.
+- `FUNCTION` bodies get `FOR ... NEXT` and reassignable locals; `REPLACE`, `WHERE`, a default
+  for `FIND`, `SUM` over strings; any top-level section can be reopened; cheaper `FUNCTION`
+  calls.
+
+## The previous pin: 0.5.3 (2026-10-11)
+
+`template\bin\baron.exe` was the **0.5.3 release binary**, downloaded from the releases page on
+2026-10-11 (`sha256 5f74b088 1e40d63a 97b62e1c 97f6e5d2 1549187d 7e45c129 ee8f8400 fcd561e5`),
+kept since 2026-10-21 as `bin\baron-0.5.3.exe`. The 0.4.0 exe it replaced is kept as
+`bin\baron-0.4.0.exe`. **The kit's sources need 0.4.1 or later** - they use the built-in
+`ASSERT` - and its tools read the symbol dump in either format.
 
 **Two releases in between were breaking for this kit**, and each needed a change before the
 build would run:
@@ -54,7 +108,7 @@ agree: 0.4.0 on the sources with the macro against 0.5.3 on the sources without 
 | `node tools/verify_dynamic.mjs build/game.ssd 00 0C 02` (jsbeeb 2.3.1), addresses from the new dump | `{"fields":100,"frames":50,"scrollIdle":0,"scrollAfterX":200}` - the documented figures |
 | `py/` tests | 97 OK, 2 skipped |
 
-**Not re-measured**: `make` against `build.ps1` (no `make` on this machine on the day). The
+**Not re-measured on the day**: `make` against `build.ps1` (no `make` on this machine then; done under 0.6.0, above). The
 Makefile passes the same flags to the same exe; the 0.4.0 table below is the last time the two
 were compared.
 
@@ -325,13 +379,13 @@ land but still writes one unknowable byte, so an array rebuilt through indexed s
 a value dead.
 
 Still unused, and worth a look when a real port needs them: `ZA_DISCARD` for arrays rebuilt
-through `STA arr,X`, `ZA_CANCALL`/`ZA_CANJUMP` for dispatch tables, `BITABS`/`BITZP` for the
+through `STA arr,X`, `ZA_CANCALL`/`ZA_CANJUMP` for dispatch tables (named by label, never by address, from 0.6.0), `BITABS`/`BITZP` for the
 skip trick. 0.4.0 also made `ZA_DISCARD` and `ZA_WIPE` placement path-accurate: **a marker
 belongs to the path it is written on, with a label as the pivot** - above the label it stays on
 the arm that falls in, below it it covers every path arriving there. Write whichever you mean.
 
 
-Also unused so far: lists and broadcasting (a sine table in one `EQUB`), user `FUNCTION`s,
+Also unused so far: section transforms (0.6.0, above), lists and broadcasting (a sine table in one `EQUB`), user `FUNCTION`s,
 `BASIC` ... `ENDBASIC` for a tokenised BASIC loader, and macro overloading.
 
 ## Going back to BeebASM

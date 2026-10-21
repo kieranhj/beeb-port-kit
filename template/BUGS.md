@@ -38,7 +38,7 @@ same mistake. jsbeeb 2.x takes `KeyboardEvent.code` strings; up to 2.3.0 a numbe
 never pressed, from 2.3.1 it throws (`../docs/hardware-facts.md`, the jsbeeb 2.0 key note).
 
 ### Ruled out
-The disc: `vscroll.ssd` is byte-identical across Baron 0.4.0 and 0.5.3 (2026-10-11). The template's
+The disc: `vscroll.ssd` is byte-identical across Baron 0.4.0, 0.5.3 (2026-10-11) and 0.6.0 (2026-10-21). The template's
 own harnesses, `verify_dynamic.mjs` and `probe_shot.mjs`, already take keys from `keys()` in
 `tools/jsbeeb_src.mjs` and run.
 
