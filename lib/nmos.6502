@@ -1,0 +1,354 @@
+\ ******************************************************************
+\ *	nmos.6502 - the 65SC12's own instructions as macros, for one source
+\ *	that builds for a Master (65SC12) and a Model B (NMOS 6502)
+\ ******************************************************************
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax.
+\ *
+\ *	WHAT IT IS. One macro per 65SC12-only instruction at a site, named
+\ *	for the NMOS form that replaces it there. Without NMOS each macro IS
+\ *	the 65SC12 instruction, so a Master build is byte-identical to the
+\ *	source before the conversion; with NMOS it is the cheapest legal
+\ *	NMOS form - which is legal only where its condition (in the comment
+\ *	above each macro) holds. STZ_A is STZ where A is known 0 here, and
+\ *	STA with NMOS; STZ_LDA is STZ where A, N and Z are dead, and LDA #0 :
+\ *	STA with NMOS; and so on. The macro's name carries the proof
+\ *	obligation, so a reader (and a check) sees which one each site took.
+\ *
+\ *	HOW THE SITES ARE CHOSEN. Not by hand: template/tools/nmosify.py
+\ *	reads the dataflow annotation (tools/analyse.py annotate: the known
+\ *	registers and flags, and what is live, before every instruction),
+\ *	picks each site's form, and rewrites the sources (report | apply).
+\ *	After any later change, `nmosify.py check` re-proves every site on a
+\ *	build without NMOS, and `nmosify.py check --nmos` on a build with it.
+\ *	BOTH ARE NEEDED: the first proves each form's register or flag is
+\ *	free in the 65SC12 code; only the second sees what an NMOS form newly
+\ *	READS (a branch's flag, a register known 0, C) as the OTHER forms
+\ *	leave it. Two forms each safe alone clashed in Stryker's Run: a
+\ *	CLC/ADC #1 (INC_A_CLC) before a BRA made BCS (BRA_CS) wrong, and a
+\ *	BIT abs,X rewritten as LDA/AND before another BRA changed the flag
+\ *	that BRA had been chosen on. The macros that the analysis cannot
+\ *	prove (STZ_PHA, BVC_BIT6, BVS_BIT6) are checked by hand: mark each
+\ *	such site's comment "(hand ...)" and nmosify counts it so.
+\ *
+\ *	THE BUILD. The includer defines NMOS (0 or 1) and gives every
+\ *	section `cmos = (NMOS = 0)` (Stryker's Run: CMOS = NMOS = 0), so
+\ *	Baron REJECTS any 65SC12 instruction left in an NMOS build ("CMOS-
+\ *	only instruction", checked on Baron 0.5.3 and 0.6.0) - the macros
+\ *	need no other guard. A site the conversion cannot express (TSB, TRB,
+\ *	BIT #, BIT zp,X, (zp) without an index, JMP (abs,X)) is an
+\ *	`IF NMOS ... ELSE ... ENDIF` block written by hand; nmosify reports
+\ *	them as MANUAL.
+\ *
+\ *	WHERE IT CAME FROM. Stryker's Run (Enhanced), the Master game rebuilt
+\ *	and taken down to a Model B with sideways RAM (its decision 73,
+\ *	docs/briefs/model-b-lite.md step 1), 2026-10-24; into the kit
+\ *	2026-10-25. Measured there:
+\ *	  - 349 65SC12 instructions in its gameplay build (137 STZ, 118 BRA,
+\ *	    48 INC/DEC A, 25 PHX/PHY/PLX/PLY, 9 (zp), 6 TSB/TRB, 6 BIT #/zp,X).
+\ *	    Weighted by the profile, their NMOS forms cost at most 683
+\ *	    cycles a game-loop pass (0.9%).
+\ *	  - The plain build: 281 sites, 232 chosen by rule, 49 by hand.
+\ *	  - Without NMOS, every disc file byte-identical to the build before
+\ *	    the conversion. With it, against the same flags without it
+\ *	    (jsbeeb 2.10.2, 2026-10-24): game state identical for 4,000
+\ *	    passes in step, and for the whole game (11,412 passes) with the
+\ *	    newest frame identical every pass; speed the same (25.04
+\ *	    passes/s, 0 late frames).
+\ *	  - lib/test/nmos_test.py (2026-10-25, Baron 0.6.0, py65 1.2): every
+\ *	    macro assembles to its 65SC12 instruction's bytes without NMOS;
+\ *	    with NMOS the section assembles under cmos = FALSE; a raw STZ
+\ *	    there is refused; and each NMOS form run on the NMOS 6502 matches
+\ *	    the 65SC12 instruction run on the 65C02 over random states that
+\ *	    meet its condition (everything compared but what it says is dead).
+\ *
+\ *	COSTS are the NMOS form's against the 65SC12's, in each comment.
+\ *	Two Baron overloads per macro where the indexed form exists:
+\ *	`STZ_A addr` and `STZ_A addr, X` are separate macros.
+\ *
+\ *	THE INCLUDER DEFINES: NMOS (0/1). Fork this file into your project
+\ *	(lib/README.md's rule); keep this header.
+\ ******************************************************************
+
+\ ---- STZ ----
+\ STZ_A/X/Y: that register is 0 here (free)
+MACRO STZ_A addr
+IF NMOS
+    STA addr
+ELSE
+    STZ addr
+ENDIF
+ENDMACRO
+MACRO STZ_A addr, "X"
+IF NMOS
+    STA addr,X
+ELSE
+    STZ addr,X
+ENDIF
+ENDMACRO
+MACRO STZ_X addr
+IF NMOS
+    STX addr
+ELSE
+    STZ addr
+ENDIF
+ENDMACRO
+MACRO STZ_Y addr
+IF NMOS
+    STY addr
+ELSE
+    STZ addr
+ENDIF
+ENDMACRO
+\ STZ_LDA/LDX/LDY: that register, N and Z dead here: loaded with 0 (+2 bytes, +2 cycles)
+MACRO STZ_LDA addr
+IF NMOS
+    LDA #0
+    STA addr
+ELSE
+    STZ addr
+ENDIF
+ENDMACRO
+MACRO STZ_LDA addr, "X"
+IF NMOS
+    LDA #0
+    STA addr,X
+ELSE
+    STZ addr,X
+ENDIF
+ENDMACRO
+MACRO STZ_LDX addr
+IF NMOS
+    LDX #0
+    STX addr
+ELSE
+    STZ addr
+ENDIF
+ENDMACRO
+MACRO STZ_LDY addr
+IF NMOS
+    LDY #0
+    STY addr
+ELSE
+    STZ addr
+ENDIF
+ENDMACRO
+
+\ ---- BRA ----
+\ BRA_EQ .. BRA_VS: that flag is known here, so the branch on it is always taken (free)
+MACRO BRA_EQ target
+IF NMOS
+    BEQ target
+ELSE
+    BRA target
+ENDIF
+ENDMACRO
+MACRO BRA_NE target
+IF NMOS
+    BNE target
+ELSE
+    BRA target
+ENDIF
+ENDMACRO
+MACRO BRA_CS target
+IF NMOS
+    BCS target
+ELSE
+    BRA target
+ENDIF
+ENDMACRO
+MACRO BRA_CC target
+IF NMOS
+    BCC target
+ELSE
+    BRA target
+ENDIF
+ENDMACRO
+MACRO BRA_MI target
+IF NMOS
+    BMI target
+ELSE
+    BRA target
+ENDIF
+ENDMACRO
+MACRO BRA_PL target
+IF NMOS
+    BPL target
+ELSE
+    BRA target
+ENDIF
+ENDMACRO
+MACRO BRA_VS target
+IF NMOS
+    BVS target
+ELSE
+    BRA target
+ENDIF
+ENDMACRO
+MACRO BRA_VC target
+IF NMOS
+    BVC target
+ELSE
+    BRA target
+ENDIF
+ENDMACRO
+\ BRA_JMP: no flag known (+1 byte); never where the code runs elsewhere than it is assembled
+MACRO BRA_JMP target
+IF NMOS
+    JMP target
+ELSE
+    BRA target
+ENDIF
+ENDMACRO
+
+\ ---- INC A / DEC A ----
+\ INC_A_ADC: C is 0 here, C and V dead after (+1 byte); DEC_A_SBC: C is 1 here, likewise.
+\ Every ADC/SBC form assumes D clear (no SED in the game): the analysis does not track D
+MACRO INC_A_ADC
+IF NMOS
+    ADC #1
+ELSE
+    INC A
+ENDIF
+ENDMACRO
+MACRO DEC_A_SBC
+IF NMOS
+    SBC #1
+ELSE
+    DEC A
+ENDIF
+ENDMACRO
+\ INC_A_CLC, DEC_A_SEC: C and V dead after (+2 bytes, +2 cycles)
+MACRO INC_A_CLC
+IF NMOS
+    CLC
+    ADC #1
+ELSE
+    INC A
+ENDIF
+ENDMACRO
+MACRO DEC_A_SEC
+IF NMOS
+    SEC
+    SBC #1
+ELSE
+    DEC A
+ENDIF
+ENDMACRO
+\ INC_A_X/Y, DEC_A_X/Y: that register dead after (+2 bytes, +4 cycles)
+MACRO INC_A_X
+IF NMOS
+    TAX
+    INX
+    TXA
+ELSE
+    INC A
+ENDIF
+ENDMACRO
+MACRO INC_A_Y
+IF NMOS
+    TAY
+    INY
+    TYA
+ELSE
+    INC A
+ENDIF
+ENDMACRO
+MACRO DEC_A_X
+IF NMOS
+    TAX
+    DEX
+    TXA
+ELSE
+    DEC A
+ENDIF
+ENDMACRO
+MACRO DEC_A_Y
+IF NMOS
+    TAY
+    DEY
+    TYA
+ELSE
+    DEC A
+ENDIF
+ENDMACRO
+
+\ ---- PHX/PHY/PLX/PLY ----
+\ through A: A dead after (and N and Z for a push) (+1 byte, +2 cycles)
+MACRO PHX_A
+IF NMOS
+    TXA
+    PHA
+ELSE
+    PHX
+ENDIF
+ENDMACRO
+MACRO PHY_A
+IF NMOS
+    TYA
+    PHA
+ELSE
+    PHY
+ENDIF
+ENDMACRO
+MACRO PLX_A
+IF NMOS
+    PLA
+    TAX
+ELSE
+    PLX
+ENDIF
+ENDMACRO
+MACRO PLY_A
+IF NMOS
+    PLA
+    TAY
+ELSE
+    PLY
+ENDIF
+ENDMACRO
+
+\ STZ_PHA: no register free, but N and Z are A's (or dead): A kept on the stack (+4 bytes, +9 cycles)
+MACRO STZ_PHA addr
+IF NMOS
+    PHA
+    LDA #0
+    STA addr
+    PLA
+ELSE
+    STZ addr
+ENDIF
+ENDMACRO
+MACRO STZ_PHA addr, "X"
+IF NMOS
+    PHA
+    LDA #0
+    STA addr,X
+    PLA
+ELSE
+    STZ addr,X
+ENDIF
+ENDMACRO
+
+\ ---- BIT abs,X then BVC/BVS (V = bit 6): A dead here ----
+\ (+2 bytes, +2 cycles: bit 6 tested by AND, so C is kept as BIT keeps it; V is not set, so nothing
+\ after may read it: tools/nmosify.py check --nmos finds a BRA_VS/VC that did)
+MACRO BVC_BIT6 addr, "X", target
+IF NMOS
+    LDA addr,X
+    AND #&40
+    BEQ target
+ELSE
+    BIT addr,X
+    BVC target
+ENDIF
+ENDMACRO
+MACRO BVS_BIT6 addr, "X", target
+IF NMOS
+    LDA addr,X
+    AND #&40
+    BNE target
+ELSE
+    BIT addr,X
+    BVS target
+ENDIF
+ENDMACRO

@@ -1,0 +1,8 @@
+{
+ "about": "tools/sfxcapture.mjs's input, as an example: ENVELOPE 1,1,-2,0,0,100,0,0,126,-4,-4,-8,126,0 and two SOUNDs. Replace with the original's own numbers.",
+ "envelopes": [[1, 1, 254, 0, 0, 100, 0, 0, 126, 252, 252, 248, 126, 0]],
+ "effects": [
+  {"name": "zap", "what": "SOUND &11,1,200,5: a falling tone on envelope 1", "sound": [17, 1, 200, 5]},
+  {"name": "bang", "what": "SOUND &10,-15,6,10: white noise, loudest", "sound": [16, 65521, 6, 10]}
+ ]
+}

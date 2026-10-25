@@ -103,9 +103,18 @@ class Image:
     files: dict = field(default_factory=dict)   # name -> Entry, catalogue order
 
 
+def file_key(name, dirc="$"):
+    """The key a file has in Image.files: its name in $, "D.NAME" in any other
+    directory. A disc may hold the same name in two directories (a release
+    disc's O.GAME and R.GAME); keyed by name alone, one hid the other. From
+    Stryker's Run's release disc, 2026-10-25."""
+    return name if dirc == "$" else f"{dirc}.{name}"
+
+
 def read_image(path_or_bytes):
     """A .ssd as an Image: header and every file, in PHYSICAL order (ascending
-    start sector - DFS keeps the catalogue in the reverse of it)."""
+    start sector - DFS keeps the catalogue in the reverse of it). Keyed by
+    file_key(): "NAME" in $, "D.NAME" in directory D."""
     img = Path(path_or_bytes).read_bytes() if isinstance(path_or_bytes, (str, Path)) \
         else bytes(path_or_bytes)
     found = []
@@ -124,14 +133,15 @@ def read_image(path_or_bytes):
         start = (img[a + 7] | ((extra & 3) << 8)) * SECTOR
         found.append((start, Entry(name, bytes(img[start:start + length]), load, exe,
                                    dirc, locked)))
-    files = {e.name: e for _, e in sorted(found, key=lambda t: t[0])}
+    files = {file_key(e.name, e.dir): e for _, e in sorted(found, key=lambda t: t[0])}
     return Image(title=(img[0:8] + img[0x100:0x104]).rstrip(b"\0"),
                  cycle=img[0x104], opt=(img[0x106] >> 4) & 3, files=files)
 
 
 def read_catalogue(img):
     """The ports' original shape: name -> {'dir', 'load', 'exec', 'data'}."""
-    return {n: {"dir": f.dir, "load": f.load, "exec": f.exec, "data": f.data}
+    return {n: {"name": f.name, "dir": f.dir, "load": f.load, "exec": f.exec,
+                "data": f.data}
             for n, f in read_image(img).files.items()}
 
 
@@ -152,16 +162,25 @@ def build_image(files, layout=(), title=b"", cycle=0, opt=3,
     during a load - the assembler's own order is source order and put
     !BOOT at the far end of the disc). Every file is padded to a sector.
 
-    `files` is name -> Entry, or the read_catalogue() dict shape."""
+    `files` is key -> Entry (read_image's: the catalogue name and directory
+    are the Entry's, the key only orders it), or the read_catalogue() dict
+    shape."""
     files = {n: (f if isinstance(f, Entry) else
-                 Entry(n, f["data"], f["load"], f["exec"], f.get("dir", "$")))
+                 Entry(f.get("name", n), f["data"], f["load"], f["exec"], f.get("dir", "$")))
              for n, f in files.items()}
     order = order_files(files, layout)
     if len(order) > MAX_FILES:
         raise DiscError(f"{len(order)} files - a DFS catalogue holds {MAX_FILES}")
+    seen = set()
     for n in order:
-        if len(n) > 7 or not n.isascii():
-            raise DiscError(f"{n!r}: a DFS filename is at most 7 ASCII characters")
+        f = files[n]
+        if len(f.name) > 7 or not f.name.isascii():
+            raise DiscError(f"{f.name!r}: a DFS filename is at most 7 ASCII characters")
+        if len(f.dir) != 1 or not f.dir.isascii():
+            raise DiscError(f"{n!r}: a DFS directory is one ASCII character")
+        if (f.dir, f.name) in seen:
+            raise DiscError(f"{file_key(f.name, f.dir)!r} is on the disc twice")
+        seen.add((f.dir, f.name))
 
     sector = FIRST_SECTOR
     placed = []                                     # (name, start_sector)
@@ -188,7 +207,7 @@ def build_image(files, layout=(), title=b"", cycle=0, opt=3,
     for i, (name, start) in enumerate(reversed(placed)):
         f = files[name]
         e = 8 * (i + 1)
-        img[e:e + 7] = name.encode("ascii").ljust(7)
+        img[e:e + 7] = f.name.encode("ascii").ljust(7)
         img[e + 7] = ord(f.dir) | (0x80 if f.locked else 0)
         a = 0x100 + e
         length = len(f.data)
@@ -204,6 +223,23 @@ def build_image(files, layout=(), title=b"", cycle=0, opt=3,
 
     img[2 * SECTOR:] = data
     return bytes(img)
+
+
+def game_files(path_or_bytes, packed=(), codec=zx02):
+    """Every file as the machine has it once the loader has run: read_image()'s
+    files (key -> Entry), with each packed one decompressed by `codec` (zx02, or zx0 for the shipping discs).
+    `packed` names the keys the loader unpacks, or is a callable
+    (key, entry, files) -> bool, for a disc whose files are packed or not by
+    build (Stryker's Run's: packed where its loader carries the sign "ZX02").
+    Load addresses stay the catalogue's (where the STREAM loads). For tools and
+    harnesses that read a game's bytes from its disc: read them through this,
+    never raw, or a packed disc reads as noise. From Stryker's Run, 2026-10-25."""
+    files = read_image(path_or_bytes).files
+    test = packed if callable(packed) else (lambda k, e, fs, s=set(packed): k in s)
+    for k, e in files.items():
+        if test(k, e, files):
+            e.data = bytes(codec.decompress(e.data))
+    return files
 
 
 HOST = 0x30000                  # bits 16-17 of an 18-bit DFS address
@@ -648,12 +684,22 @@ def compare(a, b, ignore=()):
 def _main(argv):
     """python -m beeb_port_kit.dfs compare A.ssd B.ssd [--ignore NAME]...
     python -m beeb_port_kit.dfs host IMAGE.ssd
+    python -m beeb_port_kit.dfs layout IMAGE.ssd NAME...
+    python -m beeb_port_kit.dfs file IMAGE.ssd NAME [--unpack]
 
     compare: prints each image's SHA256, then either "identical images" or
     every per-file difference. Exit status 0 when every file not ignored
     matches.
     host: rewrites IMAGE in place with every catalogue load and exec
-    address the HOST's (to_host), for a disc built without make_disc.py."""
+    address the HOST's (to_host), for a disc built without make_disc.py.
+    layout: rewrites IMAGE in place with its files laid out in the NAMEs'
+    order (build_image: boot access order, so a load never seeks back - an
+    assembler writes source order, and Stryker's Run's head steps went from
+    120 to 32), the rest after them; every NAME must be on the disc. The image
+    keeps its length.
+    file: NAME's bytes as hex on stdout, for a harness in another language to
+    read a disc's file without its own DFS reader; --unpack decompresses it
+    first (game_files). NAME is a key: "D.NAME" outside $."""
     import hashlib
     if len(argv) == 2 and argv[0] == "host":
         img = read_image(argv[1])
@@ -661,6 +707,22 @@ def _main(argv):
         Path(argv[1]).write_bytes(build_image(img.files, list(img.files),
                                               img.title, img.cycle, img.opt))
         print(f"{argv[1]}: {len(img.files)} files marked as the host's")
+        return 0
+    if len(argv) in (3, 4) and argv[0] == "file" and argv[3:] in ([], ["--unpack"]):
+        files = game_files(argv[1], [argv[2]] if argv[3:] else ())
+        if argv[2] not in files:
+            raise SystemExit(f"{argv[1]}: no {argv[2]}")
+        print(files[argv[2]].data.hex())
+        return 0
+    if len(argv) >= 3 and argv[0] == "layout":
+        raw = Path(argv[1]).read_bytes()
+        img = read_image(raw)
+        missing = [n for n in argv[2:] if n not in img.files]
+        if missing:
+            raise SystemExit(f"{argv[1]}: no {', '.join(missing)}")
+        out = build_image(img.files, argv[2:], img.title, img.cycle, img.opt)
+        Path(argv[1]).write_bytes(out + bytes(max(0, len(raw) - len(out))))
+        print(f"{argv[1]}: laid out {', '.join(argv[2:])} first")
         return 0
     if len(argv) < 3 or argv[0] != "compare":
         raise SystemExit(_main.__doc__)

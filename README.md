@@ -9,6 +9,10 @@ All three were written by Claude Code with a human directing, reviewing, playing
 The first took a month. The second, reusing the first's method, took a week. The third had no
 source at all - only the arcade ROM, running in MAME - and took seven weeks, the first three at
 the second's pace. This kit is what each still had to rediscover, packaged so the next does not.
+A fourth project used the kit for another kind of job:
+[Stryker's Run](https://github.com/kieranhj/strykers-run) (BBC Master 128 and Model B, 2026-10-16 to
+10-25), a BBC original rebuilt byte for byte from its disassembly, then made faster, flicker free and
+playable on a Model B; what it added is in `PORTING.md` section 2.1c and through the docs and tools.
 
 **Be clear about what this is.** Everything under `docs/`, `skills/` and `PORTING.md` is written
 to be loaded into an agent's context: dense, exhaustive, and cited, because that is what makes an
@@ -102,15 +106,18 @@ docs/target-portability.md  which machines a port runs on: each configuration, w
 skills/                 the procedures as Claude Code skills; copy into .claude/skills/ - from
                         the smoke test and the buffer oracle to the arcade capture, the ROM
                         model probe, the oracle harness, a RAM hunt, an unattended job, a doc
-                        pass, the WIP publish and the release
+                        pass, the WIP publish, the release and the micro-optimisation grind
 lib/                    6502 includes the ports shared: depacker, IRQ owner, constants, keyboard
                         read, loader, and qdisc*.6502 - a Master's own WD1770 driver, for a game
-                        that loads after the filing system is gone. Baron syntax (the assembler
+                        that loads after the filing system is gone; nmos.6502 (65SC12 code that
+                        also builds for a Model B) and sfx50.6502 (sound effects at 50 Hz for a
+                        game that owns IRQ1V). Baron syntax (the assembler
                         the kit defaults to now); docs/toolchain-baron.md has the BeebASM delta
 py/                     the Python halves the ports shared: ZX02 and ZX0, DFS image builder, mode
                         packers, C64 readers, the art sheet pipeline, the decisions-table lint
                         (check_decisions.py), ay2sn.py (AY-3-8910 register streams to the
-                        SN76489, offline), and mame/ - running MAME as an instrument, per-frame
+                        SN76489, offline), sfx50.py (the MOS's sound effects fitted as 50 Hz
+                        ramps), and mame/ - running MAME as an instrument, per-frame
                         capture records, ROM sets and gfx layouts, rotation, a headless Z80
                         sub-CPU, and the 0-wrong scoring shape of a ROM model probe
 template/               a starter project that boots to a panel above a play area with a
@@ -118,7 +125,10 @@ template/               a starter project that boots to a panel above a play are
                         disc; docs/ with the decisions table (with a Status column), done.md
                         and a brief template; tools/ with the headless oracle harness
                         (harness.mjs), the suite runner (run_suite.py) and the command
-                        printer that reads every address off the build (verify_cmds.py);
+                        printer that reads every address off the build (verify_cmds.py), the
+                        A/B pair harness and the relocation proof (pairlock, lockstep,
+                        tracediff), probes (irqprofile, memwatch, pcprof), video with sound,
+                        nmosify and the grind's tools;
                         tools/mame/ with the Lua capture harnesses; template/examples/vscroll
                         is the other frame shape - the play area FIRST, scrolled one scanline
                         at a time under the cursor keys, with its own oracle and its

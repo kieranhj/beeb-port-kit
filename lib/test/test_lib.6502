@@ -27,6 +27,7 @@ DEBUG_DUMMY   = 1               ; a flag to see one BOOT_FLAG line emitted
 QD_NMI_A      = &A0             ; qdisc.6502: the NMI's saved A
 QD_NCH        = 5               ; qdload.6502: name characters compared
 QD_CAT_STAGE  = &2E00           ; qdload_init.6502: the catalogue's 512 bytes
+NMOS          = 1               ; nmos.6502: the NMOS forms (this section is not cmos)
 
 \ The depackers' zero-page slots. ZX02 needs all but zxlen; ZX0 needs
 \ zxlen too and zxofs as two bytes. A real port instantiates ONE depacker
@@ -83,6 +84,13 @@ INCLUDE "../qdload_init.6502"
     QD_FILE "SET1"
 .qd_cat_end
 
+INCLUDE "../nmos.6502"            \ macros only: a few instantiated in test_main
+INCLUDE "../sfx50.6502"           \ with a one-ramp effect in sfx50.py's file's shape
+.sfx_request    EQUB 0, 0, 0, 0
+.sfx_effect_t   EQUB 3, &07, &00, 0, &F8, 0, 0
+.sfx_effect_lo  EQUB LO(sfx_effect_t)
+.sfx_effect_hi  EQUB HI(sfx_effect_t)
+
 \ a caller, so every entry point is referenced at least once
 .test_main
     ldx #97 : jsr keydown_int
@@ -99,6 +107,12 @@ INCLUDE "../qdload_init.6502"
     lda #LO(name) : ldy #HI(name) : ldx #&30 : jsr qd_load_stream
     lda #LO(name) : ldy #HI(name) : ldx #&30 : jsr qd_load_part
     jsr qd_warm
+    jsr sfx_tick
+    jsr sfx_silence
+    STZ_LDA name                \ nmos.6502: three of its macros, NMOS forms here
+    INC_A_CLC                   \ (lib/test/nmos_test.py runs every one both ways)
+    BRA_JMP test_main_done
+.test_main_done
     rts
 .name EQUS "Bank0", 13
 

@@ -4,6 +4,11 @@
 #   .\build.ps1 -Run       assemble and launch b2 on the image (-Beebjit for beebjit)
 #   .\build.ps1 -Release   the build for other people: every DEBUG_ flag off
 #   .\build.ps1 -Master    the Master 128 path (MASTER=1) -> build/game-master.ssd
+#   .\build.ps1 -Shift 256            the relocation proof: Game 256 bytes higher
+#                                     -> build/game-shift256.ssd
+#   .\build.ps1 -Shift 256 -ShiftEnd  its control: the same padding where it moves
+#                                     nothing -> build/game-shift256end.ssd
+#                                     (tools/lockstep.mjs, tools/tracediff.mjs)
 #
 # Assembles with Baron (https://github.com/waitingforvsync/baron), not BeebASM:
 # ../docs/toolchain-baron.md says why and what changed. The Makefile is the same
@@ -18,7 +23,7 @@
 # it exists:
 #     $env:BARON = 'C:\...\baron.exe'
 #     $env:B2    = 'C:\...\b2.exe'
-param([switch]$Run, [switch]$Release, [switch]$Master, [switch]$Beebjit)
+param([switch]$Run, [switch]$Release, [switch]$Master, [switch]$Beebjit, [int]$Shift = 0, [switch]$ShiftEnd)
 
 $ErrorActionPreference = 'Stop'
 
@@ -30,13 +35,19 @@ if (Test-Path $local) { . $local }
 # is; a bare baron invocation must pass them too.
 $relDef = if ($Release) { 'RELEASE=1' } else { 'RELEASE=0' }
 $masDef = if ($Master)  { 'MASTER=1' }  else { 'MASTER=0' }
+# SHIFT and SHIFT_END too (Baron cannot default a -D symbol); 0 on every
+# ordinary build, which they leave byte-identical
+if ($ShiftEnd -and -not $Shift) { throw "-ShiftEnd is the control of a -Shift build: give -Shift too" }
+$shiftDef = "SHIFT=$Shift"
+$endDef   = if ($ShiftEnd) { 'SHIFT_END=1' } else { 'SHIFT_END=0' }
 # The disc title says which build it is, so *CAT tells you without booting;
 # INFO on the disc says it in full, and the boot shows it. Host filenames are
 # lowercase (b2 refuses a disc called .SSD); the title is a DFS name and is not.
 $discTitle = 'GAME' + $(if ($Master) { 'M' } else { '' })
 
 $build   = Join-Path $root 'build'
-$stem    = 'game' + $(if ($Master) { '-master' } else { '' })
+$stem    = 'game' + $(if ($Master) { '-master' } else { '' }) +
+           $(if ($Shift) { "-shift$Shift" + $(if ($ShiftEnd) { 'end' } else { '' }) } else { '' })
 $raw     = Join-Path $build "$stem-raw.ssd"
 $ssd     = Join-Path $build "$stem.ssd"
 $listing = Join-Path $build "$stem.lst"
@@ -81,7 +92,7 @@ Push-Location $root
 try {
     # The !BOOT stamp and the flags, exactly as make writes them: the source's
     # time (SOURCE_DATE_EPOCH, else the last commit), not the clock's.
-    & python 'tools\build_stamp.py' build "$stem.config" $relDef $masDef
+    & python 'tools\build_stamp.py' build "$stem.config" $relDef $masDef $shiftDef $endDef
     if ($LASTEXITCODE -ne 0) { throw "build_stamp.py failed ($LASTEXITCODE)" }
 
     # Baron resolves INCLUDE and INCBIN relative to the INCLUDING FILE; -o and
@@ -105,7 +116,7 @@ try {
     # with ZA_WIPE, an indexed read with ZA_INDEXEDBY. Warnings go to STDERR
     # and never change the exit code, and unlike beebasm's progress chatter
     # they do not trip $ErrorActionPreference (checked, PowerShell 7.6).
-    & $baron --warn 2 -o $raw --title $discTitle --opt 2 -D $relDef -D $masDef `
+    & $baron --warn 2 -o $raw --title $discTitle --opt 2 -D $relDef -D $masDef -D $shiftDef -D $endDef `
         --symbols $syms -v 'src\main.6502' |
         Out-File -FilePath $listing -Encoding utf8
     if ($LASTEXITCODE -ne 0) {

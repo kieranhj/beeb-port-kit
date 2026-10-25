@@ -11,6 +11,12 @@ Layers 0-8 for stage 1 in six - and spent the rest on RAM hunts, defects found l
 taste, the oracle suite and a release that kept taking features; the sections below say what
 would have saved each. What the ports still had to rediscover is what this kit packages.
 
+**Stryker's Run** (Master 128, then a Model B with sideways RAM; ten days, 382 commits, 80
+decisions) was a different job with the same method: a 1986 BBC original rebuilt byte for byte
+from its disassembly, then made to run at its design speed without flicker, given optional
+gameplay changes, and cut down to a Model B. Section 2.1c is what that kind of job needs; its
+measurements are throughout `docs/hardware-facts.md` and `docs/gotchas.md`.
+
 It is written to be read by a coding agent, with a human directing it, and it assumes the
 agent knows 6502 and BeebASM (the kit assembles with Baron, its successor - see
 `docs/toolchain-baron.md`). That is why it is dense: an agent that has read all of this
@@ -24,7 +30,8 @@ ports actually ran with Claude Code.
 The three ports are public and this document links into them for the worked examples:
 [paradroid-beeb](https://github.com/kieranhj/paradroid-beeb),
 [edge-beeb](https://github.com/kieranhj/edge-beeb) and
-[1942-beeb](https://github.com/kieranhj/1942-beeb). Their `docs/` directories are the long form of
+[1942-beeb](https://github.com/kieranhj/1942-beeb), and so is the rebuild,
+[strykers-run](https://github.com/kieranhj/strykers-run). Their `docs/` directories are the long form of
 everything here. A game with no source - an arcade ROM, or any binary you can only run under
 emulation - also wants [`docs/arcade-porting.md`](docs/arcade-porting.md).
 
@@ -99,6 +106,53 @@ decode and replayed over the port's own trace, so the arcade's oracle and the po
 model. [`docs/arcade-porting.md`](docs/arcade-porting.md) is the guide - rotation and named spaces,
 the hardware-format traps, DIP switches as a measurement, the ROM checksum, the sound CPU - and the
 skills `beeb-arcade-capture` and `beeb-rom-model-probe` are the two procedures as checklists.
+
+### 2.1c When the job is to rebuild a BBC original and improve it
+
+Stryker's Run had a disassembly of the BBC game itself, so there was no machine to choose and no
+art to convert: the specification is the binary, and the job is to change how it runs without
+changing what it plays like. The order that worked, each step proven before the next:
+
+1. **Choose the reference disc by its bytes.** Two discs of the same release differed: one had
+   seven scenery bytes zeroed that no code writes, and a different CRTC R8. The one matching the
+   disassembly's tables became the reference (its decision 1). Keep it out of git if it is not yours
+   to publish, and make the build's comparison skip itself when it is absent.
+2. **Rebuild it byte for byte** from a converted disassembly (`tools/disasm2baron.py` there: the
+   bytes re-decoded from the hex, a corrections list, labels from the annotations, `name = * + 1`
+   for every self-modified operand; it refuses to overwrite the hand-maintained sources once they
+   exist). `dfs.compare` against the reference is the test, and the tag that marks it is where any
+   later doubt about "what the original did" is settled (`make original` builds that tag's source).
+3. **Make it relocatable, and prove it by moving it.** Every absolute reference becomes a symbol;
+   the proof is the source built shifted by whole pages against a control padded so both load in
+   the same time. Moving by whole pages keeps every page crossing, so a correct relocation runs
+   cycle for cycle like the control even with VIA-timer randomness: 30,000 frames identical, and
+   the first differing instruction named when not (the kit's `template/tools/lockstep.mjs` and
+   `tracediff.mjs`, verification procedure 21; the template builds `-Shift 256 [-ShiftEnd]`).
+   This found two places where the original's behaviour depended on its layout (BUGS #1, #2).
+4. **Measure where the time goes before changing anything** (`template/tools/irqprofile.mjs`, `pcprof.mjs`):
+   the MOS's interrupt work was 21% of the CPU, which nobody had guessed.
+5. **Replace the random numbers with a seeded generator** (its decision 17), so a game replays
+   exactly from its input, and **drive two builds by game-loop pass, not by frame**: the same keys
+   each pass, so a faster build plays the same game and state can be compared every pass
+   (the kit's `template/tools/pairlock.mjs`, verification procedure 20). Keys timed by frame or cycle played a different game and its figures
+   were wrong (31 against 41 late frames on one seed).
+6. **Keep an oracle build that is slow and obviously right** (`DEBUG_FULLREDRAW`: everything
+   redrawn every frame) and never let a fast path into it; every renderer change produces the same
+   screens as it.
+7. **Play the original and the rebuild side by side** (`tools/sidebyside.mjs`: both on the same
+   input, game state compared every pass, a video with both machines' sound). It found a clobbered
+   generator a watch had cleared (BUGS #12).
+8. **Put every change to how the game plays under a flag, off by default**, with the flag-off build
+   proven identical (its decision 43); when the owner wants the changes on a disc, it is a second
+   disc, and the original's own menu can carry both (section 10).
+9. **When a fix changes the game, compare with the old build with the bug undone in its emulator**
+   (`--unclobber`), or the gate measures two games.
+
+The rest of the kit applies as written. What is different is the risk: a game you did not write
+has couplings nobody documented - logic that reads what the plotter leaves in zero page, a walk
+that runs off one table into the next, a call that relies on a MOS routine's undocumented
+registers (gotchas, classes 4-7) - and the relocation proof and the side-by-side run are what find
+them.
 
 ### 2.2 Choose the machine
 
@@ -489,6 +543,18 @@ bytes at the same addresses - which is also why no screenshot of the background 
 it is switched off while text is on screen (decision 64), where a shear reads as a fault. Choose
 one, write it down, and make an oracle fail on a late flip where the policy forbids one.
 
+**Or keep the MOS for its tick only, and measure what that costs.** Stryker's Run's original
+chained every interrupt to the MOS: 21.0% of the CPU, the 100 Hz tick alone 16% (sound queues 6.8%,
+and a keyboard scan every tick while a key is held, 6.3%). Owning vsync and its own timers, with
+the MOS's System VIA IRQ mask (`&0279`) keeping vsync from the MOS so a vsync landing in the ~30
+cycles of a chain is not lost (BUGS #3: 12 fields in 1,000) and `&0242` zeroed so the tick never
+scans, took it to 10.6%; its own 50 Hz sound effect driver (decision 25, `lib/sfx50.6502`) in
+place of the MOS's took it to 2.2%. Two rules from it: **never chain a timer of your own** (the MOS
+offers an interrupt it does not recognise to every paged ROM, 1,165 cycles a field), and **a
+replaced MOS call returns everything it returned**, documented or not (OSBYTE 19's X and Y, BUGS
+#5). The front end can go on running under the MOS: Stryker's Run switches at the start and end of
+a game, and its harness checks the MOS's state is handed back as it was.
+
 Edge Grinder ticks the game logic twice per display frame so the C64's 50 Hz constants transcribe
 unaltered at 25 Hz. 1942 did the same for an arcade at 59.6 Hz by **treating it as 50** (its
 decision 10): logic at 25 Hz, every per-frame delta doubled, so the arcade's one pixel every two
@@ -546,6 +612,28 @@ Three more that 1942 measured, once its cast outgrew the descriptor table (decis
   compiled enemy bullet is written by a tool from the same cell the interpreted path draws, so an
   art change cannot leave the two disagreeing (and the tool must run after every art change).
 
+And four from Stryker's Run, which made a game that drew everything with EOR on one screen into a
+double-buffered, masked one (layers 2-4 there):
+
+- **Draw from per-screen records.** The logic stops drawing; a renderer keeps what each screen
+  shows per object and brings the hidden screen up to date at the end of a pass (decision 21). It
+  is slower at first - every change is drawn into both screens: 17.8 to 11.6 passes a second - and
+  layer 3 won it back with the rest of this list.
+- **Masked over a save block beats EOR on a double buffer** (decision 24): an EOR change is an erase
+  and a draw, on each of two screens. Overlapping objects come off in reverse order, and **only the
+  objects drawn over the one that changes need come off** (decision 37: the whole world's late
+  frames 594 to 414).
+- **Save only the zero page the logic reads.** A renderer that borrows the game's zero page needs
+  back only the bytes the logic reads before it writes them; found by first-access analysis over
+  four seeds (`tools/zplive.mjs`), 8.3k cycles a pass to 0.5k.
+- **Measure what an object is drawn over before choosing how to draw it.** 94.6% of the enemy
+  helicopters' draws covered nothing but sky, so they became rectangles copied from an image built
+  once, a column of sky each side, which erase their own trail as they move: their cycles 9.0k to
+  6.25k a pass, the whole world's late frames 336 to 176 (decision 61).
+- **Compile only the commonest kinds, found by count**, and let kinds never drawn together share a
+  save area: the player's 14 commonest (sprite, flip, line) kinds as code, 117 bytes of saves for
+  14 (decision 29).
+
 A wrap that is not row-aligned (16,384 / 640 = 25.6 rows) means a sprite's columns can straddle
 the buffer end. Test once per sprite, not per row, and take the cheap path when it cannot.
 
@@ -581,6 +669,13 @@ through a whole driven game, BREAK included (decision 141's measurement: `&0100-
 `&0220-&027F`, `&02B0-&03FF` and more, `docs/hardware-facts.md`). A map of what the MOS leaves is
 not a map of what is free - read what the port already put there.
 
+**Patch the bank selects at load rather than paying for indirection.** Stryker's Run's Model B
+build takes Paradroid's probe's four banks and rewrites every bank-select immediate at start-up
+from a table of sites the build makes (`.bks_*` labels): the game runs at any four banks for no
+cycles (its decision 74). Anything that reads a bank number *as data* then sees the machine's
+numbers, not the logical ones - one table walk did (BUGS #17) - so prove it with the banks moved
+(jsbeeb's `B-DFS1.2` has RAM in all eight).
+
 ### 5.7 The disc: compress everything, one resident depacker, load in order
 
 Every data file ships compressed and the loader unpacks it. Boot time in Paradroid went from
@@ -594,6 +689,12 @@ overtaken by its own output, so an in-place unpack needs a measured margin and t
 fail if it is violated. On a Master, a file unpacked over HAZEL's DFS pages is the last disc
 access; one kept inside `&C300-&DEFF` is not, provided later disc calls are OSFILE loads, saves or
 deletes (hardware-facts, HAZEL).
+
+**Lay the disc out in load order.** An assembler writes files in source order; Stryker's Run's was
+the reverse of its boot, and re-laying it (`python -m beeb_port_kit.dfs layout`) took the boot from
+120 head steps to 32. Its loader unpacks each file to the load address the catalogue gives (OSFILE
+5), the in-place margin checked at build time (`dfs.check_stream`); its relocation-test builds stay
+unpacked, so a shifted build and its control still load in the same time.
 
 The mode change is the first thing boot does if there is a loading picture and the last if there
 is not; either way every load is blanked (R8, and R10 for the cursor) and every screen is revealed
@@ -756,6 +857,43 @@ includes. A wrong address plays happily for thousands of frames before it runs o
 
 Do not add sound effects the original does not have.
 
+**Own IRQ1V and the MOS's SOUND and ENVELOPE go with it.** Do not re-compose the effects: capture
+the MOS playing the original's own blocks (`template/tools/sfxcapture.mjs`: each SOUND and
+ENVELOPE block fired from a stopped CPU, the chip's writes by tick), fit them as 50 Hz ramps
+(`py/beeb_port_kit/sfx50.py`) and play them from the vsync with `lib/sfx50.6502`. Stryker's Run:
+the interrupts' share of the CPU 10.9% to 2.2%, its 8 effects in 158 bytes (its decision 25), the
+kit's fitter making those 158 bytes again from its capture. The MOS's driver is stateful - in 38
+of 48 pairs an effect started over another ends differently from one started in silence - and
+sfx50 is not: decide whether that matters to the game. Fit with `--pad-end` unless you are
+matching an existing build: without it every effect ends a field early (Stryker's Run's shipped
+effects included).
+
+---
+
+## 9b. A Master game down to a Model B
+
+Stryker's Run's "Redux Lite" took a game that needed a Master - 65SC12 code, shadow RAM, ANDY and
+HAZEL - to a Model B with 64K of sideways RAM in any four banks
+([docs/briefs/model-b-lite.md](https://github.com/kieranhj/strykers-run/blob/main/docs/briefs/model-b-lite.md)). In order:
+
+1. **The instructions.** Write every 65SC12 instruction through `lib/nmos.6502` (one macro each,
+   the instruction's own bytes without `NMOS`, the cheapest legal NMOS form with it), every
+   section `cmos = (NMOS = 0)` so Baron refuses one written raw. Annotate the build without NMOS
+   (`tools/analyse.py annotate`), then `tools/nmosify.py report` and `apply`. After every change run
+   **both** checks: `check` on the build without NMOS (each form's register or flag still free) and
+   `check --nmos` on the build with it (what each form newly reads), because two forms each safe
+   alone can clash. The Master build stays byte-identical. Stryker's Run: 281 sites, at most 683
+   cycles a pass (0.9%).
+2. **The memory.** No ANDY, no HAZEL, no shadow: about 11.5K needed a home. Pack what is used in
+   only one part of the game and unpack it when that part begins before dropping anything; then
+   give cycles back for RAM, and list each trade to win back (its decision 75: the whole world's
+   late frames 126 to 251).
+3. **The banks**: Paradroid's probe and the bank selects patched at start-up (section 5.6).
+4. **The display.** Other machines' shadow RAM does not double-buffer (hardware-facts, Model B),
+   so one screen is raced against the beam: draw in the blank lines and behind the beam, and draw
+   anything the scroll moves under (the player) before the beam reaches it, or it shows a column
+   off (its decisions 77-79; `beamcheck.mjs` there counts the bytes written ahead of the beam).
+
 ---
 
 ## 10. Release
@@ -786,20 +924,29 @@ Do not add sound effects the original does not have.
   landed inside it, one of them a whole enemy engine between rc4 and rc5. Skill `beeb-release` is
   the checklist: the release build and the suite on it, the target matrix, real hardware, every
   `BUGS.md` row closed or accepted, the catalogue and sector budget, `INFO` naming the commit.
+- **Two builds on one disc behind the original's own menu.** Stryker's Run's release disc puts the
+  original and the rebuild in DFS directories `O` and `R`, each with its own `!BOOT`, so neither
+  build changes; the original release's BASIC menu is tokenised at build time, its picture's two
+  choices redrawn in the artist's font cut from the picture itself, and the machine's name poked in
+  ([docs/briefs/release-disc.md](https://github.com/kieranhj/strykers-run/blob/main/docs/briefs/release-disc.md)). A disc tool that keys files by
+  name alone loses one of `O.GAME` and `R.GAME` (`dfs.file_key`, fixed 2026-10-25); the DFS limits
+  are single-letter directories, 31 catalogue entries and 800 sectors for both builds together.
+- **ASSERT the loader's size.** A one-page `!BOOT` is a hard limit: a machine-check message pushed
+  Stryker's Run's 38 bytes past `&0A00` in debug builds only.
 
 ---
 
 ## 11. What it costs
 
-| | Paradroid | Edge Grinder | 1942 |
-|---|---|---|---|
-| Source | Disassembly, version proved on day 2 | Clean source | None: the arcade ROM under MAME |
-| Machine | Model B + SWRAM | Master 128 | Master 128 |
-| Layers 0 to 6 | ~3 weeks | 2 days | 6 days (Layers 0-8, stage 1) |
-| To release candidate | 30 days | 5 days (art and one music decision open) | 38 days; v1.0 at 47 |
-| Commits | 406 | 66 | 483 |
-| Docs | ~15,000 lines | ~7,000 lines | ~30,000 lines |
-| Decisions of record | ~60 in layer docs | 74 in one table | 161 in one table |
+| | Paradroid | Edge Grinder | 1942 | Stryker's Run (a rebuild) |
+|---|---|---|---|---|
+| Source | Disassembly, version proved on day 2 | Clean source | None: the arcade ROM under MAME | Disassembly of the BBC original |
+| Machine | Model B + SWRAM | Master 128 | Master 128 | Master 128; then Model B + SWRAM |
+| Layers 0 to 6 | ~3 weeks | 2 days | 6 days (Layers 0-8, stage 1) | Day 1: byte-identical, relocatable, measured, own IRQ, double-buffered; day 5: a steady 25 Hz |
+| To release candidate | 30 days | 5 days (art and one music decision open) | 38 days; v1.0 at 47 | A release disc of both builds on day 8; the Model B disc on day 10 |
+| Commits | 406 | 66 | 483 | 382 |
+| Docs | ~15,000 lines | ~7,000 lines | ~30,000 lines | ~8,000 lines |
+| Decisions of record | ~60 in layer docs | 74 in one table | 161 in one table | 80 in one table |
 
 The gap between the first two is the process, carried over, and the machine: the first port's
 month bought the second port's week. The third ran at the second's pace while the layer plan
@@ -863,6 +1010,24 @@ order of importance:
     left shut, the suite detached with its output outside the home folder, no publishing, and a
     branch ledger in the report.
 
+### The micro-optimisation grind
+
+Once a port is correct and its suite compares a build against its control by pass (verification
+procedure 20), the skill `beeb-micro-grind` grinds the whole program. The method is Eben Upton's,
+the "suggested farm" in beebgame's `tools/dataflow/README.md` (there, Commando's code shrunk by
+about 400 bytes); Stryker's Run turned it on cycles. beebgame's analyses annotate
+every instruction, the code is cut into 32-instruction windows weighted by measured cycles
+(`pcprof.mjs`), optimiser agents propose and skeptic agents try to refute, and survivors go in one
+at a time through the gate, kept only if every check passes and the game is no slower
+(`template/tools/grind.py`, `grind_config.py`). Before the first round: a no-op gate within its
+noise, a negative control the gate refuses, and a check for every rarely-taken path. Stryker's Run
+kept 256 of 580 candidates; a pass's work went 43,036 to 39,112 cycles in round 1 and 34,422 to
+31,869 in round 3. The commonest losers: optimising the wrong common case; a byte saved that
+slides a hot branch across a page (20-60 cycles a pass); a `JSR label+1` caller broken on a path
+the gate never ran (its BUGS #11). It costs hundreds of agents a round, and after a gate `build/`
+holds the gate's last build: rebuild before reading it.
+([docs/grind/README.md](https://github.com/kieranhj/strykers-run/blob/main/docs/grind/README.md))
+
 ---
 
 ## 13. Where to look in the ports
@@ -892,4 +1057,12 @@ the third:
 - [1942 `docs/brief-boss-as-background.md`](https://github.com/kieranhj/1942-beeb/blob/master/docs/brief-boss-as-background.md)
   and [`docs/report-ram-2026-10-06.md`](https://github.com/kieranhj/1942-beeb/blob/master/docs/report-ram-2026-10-06.md):
   a brief from proposal to "what landed", and an overnight RAM hunt's morning report.
-- All three `BUGS.md` files, end to end.
+- [Stryker's Run `docs/step2-layer4-costing.md`](https://github.com/kieranhj/strykers-run/blob/main/docs/step2-layer4-costing.md): 50 Hz
+  modelled field by field from measured passes before it was built, and set aside; the options
+  costed and the ones built that lost.
+- [Stryker's Run `docs/briefs/model-b-lite.md`](https://github.com/kieranhj/strykers-run/blob/main/docs/briefs/model-b-lite.md): a double-buffered
+  Master game cut down to one screen raced against the beam on a Model B, the NMOS conversion, and
+  the cycles given back for RAM, listed to win back.
+- [Stryker's Run `docs/grind/README.md`](https://github.com/kieranhj/strykers-run/blob/main/docs/grind/README.md): the micro-optimisation grind's
+  ledger - every proposal, its skeptics, its gate result.
+- All four `BUGS.md` files, end to end (Stryker's Run's #12, #15 and #17 especially).

@@ -188,6 +188,23 @@ def _run_upstream(up, tool, args, budget=None):
     if budget:
         os.environ["RANGES_BUDGET"] = str(budget)
     sys.path.insert(0, up)
+    # The interrupt's MOS exits as declared in the config (tools/isr_model.py), patched into
+    # this process only; tools/dataflow/ stays byte-exact. Off unless the config sets
+    # ISR_MODEL = True. (Stryker's Run's hook, 2026-10-16.)
+    # The LAST --config, as upstream's argparse takes it: `analyse.py report --config F` passes
+    # the default first (main's) and F after it (the pass-through extras).
+    at = [i for i, x in enumerate(args) if x == "--config"]
+    cfg = args[at[-1] + 1] if at else None
+    if cfg:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("dataflow_config_isr", cfg)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        if getattr(m, "ISR_MODEL", False):
+            sys.path.insert(0, str(TOOLS))
+            import analysis as _analysis
+            import isr_model
+            isr_model.install(_analysis, m)
     import runpy
     sys.argv = [os.path.join(up, tool)] + args
     runpy.run_path(sys.argv[0], run_name="__main__")

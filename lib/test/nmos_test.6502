@@ -1,0 +1,277 @@
+\ ******************************************************************
+\ *	nmos_test.6502 - every macro in lib/nmos.6502, both ways
+\ ******************************************************************
+\ *	Not a game. Section NMACRO has each macro once, after a label
+\ *	t_NAME, then t_NAME_end and a BRK (and for a branch, t_NAME_t and a
+\ *	BRK: the taken path). Without NMOS, section NRAW has the 65SC12
+\ *	instruction each macro must be, in the same order, so the two files
+\ *	must be byte-identical. lib/test/nmos_test.py assembles it three
+\ *	ways and runs both builds' code on py65; from the kit's root:
+\ *
+\ *	  python lib/test/nmos_test.py
+\ *
+\ *	NMOS_NEG=1 puts one raw STZ in NMACRO: with NMOS=1 Baron must
+\ *	refuse it (the negative control: cmos = FALSE is really on).
+\ ******************************************************************
+CMOS = NMOS = 0
+INCLUDE "../nmos.6502"
+
+SECTION NMACRO, org = &2000, filename = "NMACRO", cmos = CMOS
+.t_stz_a
+    STZ_A &70
+.t_stz_a_end
+    BRK
+.t_stz_a_x
+    STZ_A &1234, X
+.t_stz_a_x_end
+    BRK
+.t_stz_a_zx
+    STZ_A &70, X
+.t_stz_a_zx_end
+    BRK
+.t_stz_x
+    STZ_X &1234
+.t_stz_x_end
+    BRK
+.t_stz_y
+    STZ_Y &70
+.t_stz_y_end
+    BRK
+.t_stz_lda
+    STZ_LDA &70
+.t_stz_lda_end
+    BRK
+.t_stz_lda_x
+    STZ_LDA &1234, X
+.t_stz_lda_x_end
+    BRK
+.t_stz_ldx
+    STZ_LDX &1234
+.t_stz_ldx_end
+    BRK
+.t_stz_ldy
+    STZ_LDY &70
+.t_stz_ldy_end
+    BRK
+.t_stz_pha
+    STZ_PHA &70
+.t_stz_pha_end
+    BRK
+.t_stz_pha_x
+    STZ_PHA &1234, X
+.t_stz_pha_x_end
+    BRK
+.t_bra_eq
+    BRA_EQ t_bra_eq_t
+.t_bra_eq_end
+    BRK
+.t_bra_eq_t
+    BRK
+.t_bra_ne
+    BRA_NE t_bra_ne_t
+.t_bra_ne_end
+    BRK
+.t_bra_ne_t
+    BRK
+.t_bra_cs
+    BRA_CS t_bra_cs_t
+.t_bra_cs_end
+    BRK
+.t_bra_cs_t
+    BRK
+.t_bra_cc
+    BRA_CC t_bra_cc_t
+.t_bra_cc_end
+    BRK
+.t_bra_cc_t
+    BRK
+.t_bra_mi
+    BRA_MI t_bra_mi_t
+.t_bra_mi_end
+    BRK
+.t_bra_mi_t
+    BRK
+.t_bra_pl
+    BRA_PL t_bra_pl_t
+.t_bra_pl_end
+    BRK
+.t_bra_pl_t
+    BRK
+.t_bra_vs
+    BRA_VS t_bra_vs_t
+.t_bra_vs_end
+    BRK
+.t_bra_vs_t
+    BRK
+.t_bra_vc
+    BRA_VC t_bra_vc_t
+.t_bra_vc_end
+    BRK
+.t_bra_vc_t
+    BRK
+.t_bra_jmp
+    BRA_JMP t_bra_jmp_t
+.t_bra_jmp_end
+    BRK
+.t_bra_jmp_t
+    BRK
+.t_inc_a_adc
+    INC_A_ADC
+.t_inc_a_adc_end
+    BRK
+.t_dec_a_sbc
+    DEC_A_SBC
+.t_dec_a_sbc_end
+    BRK
+.t_inc_a_clc
+    INC_A_CLC
+.t_inc_a_clc_end
+    BRK
+.t_dec_a_sec
+    DEC_A_SEC
+.t_dec_a_sec_end
+    BRK
+.t_inc_a_x
+    INC_A_X
+.t_inc_a_x_end
+    BRK
+.t_inc_a_y
+    INC_A_Y
+.t_inc_a_y_end
+    BRK
+.t_dec_a_x
+    DEC_A_X
+.t_dec_a_x_end
+    BRK
+.t_dec_a_y
+    DEC_A_Y
+.t_dec_a_y_end
+    BRK
+.t_phx_a
+    PHX_A
+.t_phx_a_end
+    BRK
+.t_phy_a
+    PHY_A
+.t_phy_a_end
+    BRK
+.t_plx_a
+    PLX_A
+.t_plx_a_end
+    BRK
+.t_ply_a
+    PLY_A
+.t_ply_a_end
+    BRK
+.t_bvc_bit6
+    BVC_BIT6 &1234, X, t_bvc_bit6_t
+.t_bvc_bit6_end
+    BRK
+.t_bvc_bit6_t
+    BRK
+.t_bvs_bit6
+    BVS_BIT6 &1234, X, t_bvs_bit6_t
+.t_bvs_bit6_end
+    BRK
+.t_bvs_bit6_t
+    BRK
+IF NMOS_NEG
+    STZ &70                     \ must not assemble with NMOS
+ENDIF
+.t_last
+ENDSECTION
+
+IF NMOS = 0
+SECTION NRAW, org = &3000, filename = "NRAW", cmos = TRUE
+    STZ &70
+    BRK
+    STZ &1234,X
+    BRK
+    STZ &70,X
+    BRK
+    STZ &1234
+    BRK
+    STZ &70
+    BRK
+    STZ &70
+    BRK
+    STZ &1234,X
+    BRK
+    STZ &1234
+    BRK
+    STZ &70
+    BRK
+    STZ &70
+    BRK
+    STZ &1234,X
+    BRK
+    BRA r_bra_eq_t
+    BRK
+.r_bra_eq_t
+    BRK
+    BRA r_bra_ne_t
+    BRK
+.r_bra_ne_t
+    BRK
+    BRA r_bra_cs_t
+    BRK
+.r_bra_cs_t
+    BRK
+    BRA r_bra_cc_t
+    BRK
+.r_bra_cc_t
+    BRK
+    BRA r_bra_mi_t
+    BRK
+.r_bra_mi_t
+    BRK
+    BRA r_bra_pl_t
+    BRK
+.r_bra_pl_t
+    BRK
+    BRA r_bra_vs_t
+    BRK
+.r_bra_vs_t
+    BRK
+    BRA r_bra_vc_t
+    BRK
+.r_bra_vc_t
+    BRK
+    BRA r_bra_jmp_t
+    BRK
+.r_bra_jmp_t
+    BRK
+    INC A
+    BRK
+    DEC A
+    BRK
+    INC A
+    BRK
+    DEC A
+    BRK
+    INC A
+    BRK
+    INC A
+    BRK
+    DEC A
+    BRK
+    DEC A
+    BRK
+    PHX
+    BRK
+    PHY
+    BRK
+    PLX
+    BRK
+    PLY
+    BRK
+    BIT &1234,X : BVC r_bvc_bit6_t
+    BRK
+.r_bvc_bit6_t
+    BRK
+    BIT &1234,X : BVS r_bvs_bit6_t
+    BRK
+.r_bvs_bit6_t
+    BRK
+ENDSECTION
+ENDIF
