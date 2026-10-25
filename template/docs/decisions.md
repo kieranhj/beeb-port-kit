@@ -7,7 +7,7 @@ re-litigated without a new row saying why.
 
 **A row is short**: the question, the answer, one line of reason and a link to the brief or layer
 doc that holds the evidence. A row that grows into an essay - with its status jammed into the Date
-cell - is the failure this layout exists to prevent (1942-beeb's decision 15 ran to 12K).
+cell - is the failure this layout exists to prevent (1942-beeb's decision 15 ran to 10K).
 
 **Status**, the lifecycle, and the first thing a reader looks at:
 
