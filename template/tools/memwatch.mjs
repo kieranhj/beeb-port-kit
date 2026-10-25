@@ -2,7 +2,7 @@
 // by phase and by the instruction that made it - without a change to the harness.
 //
 // beeb-port-kit template, MIT, Kieran Connell 2026. From Stryker's Run's tools/zpwatch.mjs
-// (2026-10-22, BUGS #12 there: the port's PRNG state at &92/&93 was also the original's scratch
+// (2026-10-18, BUGS #12 there: the port's PRNG state at &92/&93 was also the original's scratch
 // in a death routine; a watch over the front end and 30,000 fields of play had found no other
 // user, because no harness had died - the watch proves only the paths the harness ran).
 //
