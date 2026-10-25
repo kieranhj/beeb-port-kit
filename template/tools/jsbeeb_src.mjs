@@ -160,16 +160,65 @@ export function resolveJsbeebSrc() {
 export function keys() {
     const { version } = resolveJsbeebSrc();
     const major = parseInt(version, 10);
-    const modern = !Number.isNaN(major) && major >= 2;
+    return keysFor(!Number.isNaN(major) && major >= 2);
+}
+
+function keysFor(modern) {
     return modern
         ? { SHIFT: "ShiftLeft", CTRL: "ControlLeft", ESCAPE: "Escape",
             SPACE: "Space", RETURN: "Enter",
             X: "KeyX", Z: "KeyZ", K: "KeyK", M: "KeyM", L: "KeyL", P: "KeyP", Q: "KeyQ",
-            DOWN: "ArrowDown" }
+            UP: "ArrowUp", DOWN: "ArrowDown", LEFT: "ArrowLeft", RIGHT: "ArrowRight" }
         : { SHIFT: 16, CTRL: 17, ESCAPE: 27,
             SPACE: 32, RETURN: 13,
             X: 88, Z: 90, K: 75, M: 77, L: 76, P: 80, Q: 81,
-            DOWN: 40 };
+            UP: 38, DOWN: 40, LEFT: 37, RIGHT: 39 };
+}
+
+/** The jsbeeb version the harnesses load ("2.10.2"), for a report line. */
+export function version() {
+    return resolveJsbeebSrc().version;
+}
+
+/**
+ * THE KEY POLICY: a key argument of the WRONG TYPE for this jsbeeb is translated
+ * if `keys()` knows it, and REFUSED - thrown - if it does not. Never pressed as
+ * nothing.
+ *
+ * 1942 for the BBC Master carried this as `withNumericKeys` (its
+ * tools/jsbeeb_src.mjs, 2026-09-23): every one of its harnesses booted with
+ * `keyDown(16)` for SHIFT+BREAK, 2.3.0 took a string, the number named no key,
+ * and every oracle reported "never reached" on a good image. jsbeeb 2.3.1 throws
+ * on an unknown code by itself (mattgodbolt/jsbeeb#1172), but not on a number
+ * that happens to be a valid code in some other sense, and not under 1.x for a
+ * string: this wrapper makes both directions loud on every version. Add a key to
+ * `keys()` rather than here.
+ *
+ * keyDownRaw([col, row]) - the BBC matrix position - did not change across 2.0
+ * and is untouched. A project that needs a modifier held with certain matrix
+ * keys can wrap keyDownRaw the same way: 1942's `withDebugCtrl` held CTRL for
+ * as long as S, I or B was down, because its debug keys wanted CTRL from
+ * decision 136 and thirty harnesses pressed them by four idioms - one wrapper,
+ * not thirty edits. It is a pattern, not something the template needs.
+ */
+function withKeyPolicy(MachineSession, modern) {
+    const both = [keysFor(true), keysFor(false)];
+    const table = new Map();
+    for (const name of Object.keys(both[0])) table.set(both[modern ? 1 : 0][name], both[modern ? 0 : 1][name]);
+    const want = modern ? "string" : "number";
+    const code = (k) => {
+        if (typeof k === want) return k;
+        if (!table.has(k)) {
+            throw new Error(`key ${JSON.stringify(k)} is a ${typeof k}, this jsbeeb wants a ${want}, and `
+                + "keys() in tools/jsbeeb_src.mjs has no translation: add it there, or press the BBC "
+                + "matrix position with keyDownRaw([col, row])");
+        }
+        return table.get(k);
+    };
+    return class extends MachineSession {
+        keyDown(k, shiftDown = false) { return super.keyDown(code(k), shiftDown); }
+        keyUp(k) { return super.keyUp(code(k)); }
+    };
 }
 
 /** Import MachineSession, announcing the jsbeeb it came from. */
@@ -177,5 +226,6 @@ export async function loadMachineSession() {
     const { src, version, mcp } = resolveJsbeebSrc();
     console.error(`[jsbeeb ${version}${mcp ? `, jsbeeb-mcp@${mcp}` : ""}] ${src}`);
     const { MachineSession } = await import(`file:///${src}/machine-session.js`);
-    return MachineSession;
+    const major = parseInt(version, 10);
+    return withKeyPolicy(MachineSession, !Number.isNaN(major) && major >= 2);
 }
