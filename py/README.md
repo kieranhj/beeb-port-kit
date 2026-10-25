@@ -130,5 +130,14 @@ image.ssd` rewrites the image in place with every catalogue load and exec addres
 `&FFFFxxxx`. The assemblers write 16-bit addresses, which a second processor reads as the
 parasite's. The template's vscroll example does this in its `build.ps1`.
 
+**Files in two directories, packed files, load order** (from Stryker's Run, 2026-10-25): `read_image`
+keys a file outside `$` as `"D.NAME"` (`file_key`), so a release disc's `O.GAME` and `R.GAME` no longer
+hide each other; `build_image` writes the catalogue from each `Entry`'s own name and directory.
+`game_files(image, packed)` is the disc as the machine has it once the loader has unpacked it (`packed`:
+the keys, or a predicate) - harnesses read a packed disc's files through it, never raw.
+`python -m beeb_port_kit.dfs layout image.ssd !BOOT LOADER GAME ...` re-lays an image in boot order in
+place (an assembler writes source order: Stryker's Run's head steps went from 120 to 32), and
+`... file image.ssd NAME [--unpack]` prints a file's bytes as hex for a harness in another language.
+
 **The assembler's own image is not bootable** once the loader expects compressed streams. Hand the image
 this writer produces to the emulator, never the raw one.

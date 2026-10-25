@@ -55,7 +55,10 @@ identical across it.
 - **Code versus data** comes from the listing: every emitted statement, macros expanded, with
   its address and bytes, in its `SECTION`. Section bytes come from the raw disc, so data the
   listing elides with `...` is exact; a section not saved to the disc falls back to the
-  listing's bytes and says so.
+  listing's bytes and says so. A `SECTION` inside another (a block copied down at start-up,
+  rephased) takes its bytes from the disc file of the section that carries it; until
+  2026-10-25 the inner `ENDSECTION` ended the outer section too and lost the rest of it (found
+  by Stryker's Run). A disc of packed files is read through `read_disc` (`dfs.game_files`).
 - **The source line** is not in a Baron listing, so the converter re-finds it. It walks the
   sources from the main file, following `INCLUDE` and `MACRO` as the listing does, and matches
   each listed statement to the next one in its file. Inside an expansion, the call's line is

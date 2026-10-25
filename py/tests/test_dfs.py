@@ -52,6 +52,56 @@ class Catalogue(unittest.TestCase):
         with self.assertRaises(dfs.DiscError):
             dfs.build_image({"BIG": dfs.Entry("BIG", bytes(800 * 256))})
 
+    def test_same_name_in_two_directories(self):
+        # a release disc's two builds: O.GAME and R.GAME (Stryker's Run's O.MGAME, R.MGAME)
+        files = {"!BOOT": dfs.Entry("!BOOT", b"*RUN MENU\r"),
+                 "O.GAME": dfs.Entry("GAME", b"old" * 100, 0x1900, 0x1900, "O"),
+                 "R.GAME": dfs.Entry("GAME", b"new" * 100, 0x1900, 0x1900, "R")}
+        back = dfs.read_image(dfs.build_image(files, ["!BOOT", "O.GAME", "R.GAME"]))
+        self.assertEqual(list(back.files), ["!BOOT", "O.GAME", "R.GAME"])
+        self.assertEqual(back.files["O.GAME"].data, b"old" * 100)
+        self.assertEqual(back.files["R.GAME"].data, b"new" * 100)
+        self.assertEqual((back.files["R.GAME"].name, back.files["R.GAME"].dir), ("GAME", "R"))
+        self.assertEqual(dfs.file_key("GAME", "R"), "R.GAME")
+        self.assertEqual(dfs.read_catalogue(dfs.build_image(files))["O.GAME"]["name"], "GAME")
+        with self.assertRaises(dfs.DiscError):                  # one catalogue entry twice
+            dfs.build_image({"A": dfs.Entry("GAME", b"x", dir="R"),
+                             "B": dfs.Entry("GAME", b"y", dir="R")})
+
+    def test_game_files_unpacks_what_the_loader_unpacks(self):
+        raw = bytes(range(256)) * 8
+        files = {"LOADER": dfs.Entry("LOADER", b"ZX02"),
+                 "GAME": dfs.Entry("GAME", zx02.compress(raw), 0x3000, 0x3000),
+                 "R.GAME": dfs.Entry("GAME", raw, 0x1900, 0x1900, "R")}
+        img = dfs.build_image(files)
+        got = dfs.game_files(img, ["GAME"])
+        self.assertEqual(got["GAME"].data, raw)
+        self.assertEqual(got["GAME"].load, 0x3000, "the catalogue's, where the stream loads")
+        self.assertEqual(got["R.GAME"].data, raw, "not named: as it is")
+        # a predicate, as for a disc packed or not by build
+        signed = dfs.game_files(img, lambda k, e, fs: k == "GAME" and b"ZX02" in fs["LOADER"].data)
+        self.assertEqual(signed["GAME"].data, raw)
+        self.assertEqual(dfs.game_files(img)["GAME"].data, files["GAME"].data)
+
+    def test_layout_and_file_commands(self):
+        import io, tempfile, contextlib
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "t.ssd"
+            p.write_bytes(dfs.pad(dfs.build_image(self.files(), ["GAME", "BANK0", "!BOOT"])))
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(dfs._main(["layout", str(p), "!BOOT", "GAME"]), 0)
+            img = p.read_bytes()
+            self.assertEqual(len(img), dfs.DISC_200K, "the image keeps its length")
+            self.assertEqual(list(dfs.read_image(img).files), ["!BOOT", "GAME", "BANK0"])
+            self.assertEqual(img[2 * 256:2 * 256 + 4], b"*RUN")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(dfs._main(["file", str(p), "!BOOT"]), 0)
+            self.assertEqual(bytes.fromhex(out.getvalue().strip()), b"*RUN GAME\r")
+            with self.assertRaises(SystemExit):
+                dfs._main(["layout", str(p), "NOSUCH"])
+
 
 class Streams(unittest.TestCase):
     """Both codecs, since the kit ships a depacker for each: new ports are
