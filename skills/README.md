@@ -1,7 +1,7 @@
 # Skills
 
 The kit's procedures written as Claude Code skills: one directory per skill, one `SKILL.md`
-each, no scripts. Each is a numbered checklist with the exact commands or jsbeeb MCP calls, the
+each, no scripts (but `beeb-micro-grind`, which carries the two workflow scripts its agents run). Each is a numbered checklist with the exact commands or jsbeeb MCP calls, the
 trap it guards against inline, and the per-project parameters looked up from the project's
 `CLAUDE.md` or the assembler's own output rather than hardcoded (`tools/listing.py symbols`
 reads them out of Baron's symbol dump, or its listing; zero-page addresses allocated by Baron
@@ -49,6 +49,7 @@ description do it.
 | `beeb-release` | PORTING.md §10 | Cutting a release candidate or a release: features frozen at rc1, then the release build, the whole suite, the target matrix, real hardware, every bug closed or accepted, the disc's sector and catalogue budget, `INFO` naming the commit |
 | `beeb-publish-wip` | PORTING.md §10 | Only when asked to publish: two discs from one commit (`-wip` debug, `-rc` release), the same names every time, a publishing-log commit, both emulator links. "Give me a build" means the local disc |
 | `beeb-doc-pass` | PORTING.md §3, §3.3 | The docs have drifted: every fact into its one file, `CLAUDE.md` back inside its budget, `PLAN.md` cut to what is left, evidence to `done.md`, every decision's Status, generated pages regenerated, a stale-mention sweep. Documents only |
+| `beeb-micro-grind` | Stryker's Run's grind; `template/tools/grind.py`, `grind_config.py`, `pcprof.mjs` | Asked to grind or micro-optimise everything, once the gate is the port's suite: beebgame's annotations, 32-instruction windows weighted by measured cycles, an optimiser agent per window, two or three skeptics per candidate, then `grind.py run` applies the survivors a batch at a time through the gate, kept only if every check passes and no game is slower. Hundreds of agents a round; Stryker's Run kept 256 of 580 |
 
 Every skill that touches the emulator names the MCP tools by the names in `jsbeeb-mcp`'s
 `server.js` (`create_machine`, `boot_disc`, `run_frames`, `run_for_cycles`, `read_registers`,
