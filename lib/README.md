@@ -2,8 +2,11 @@
 
 Eight Baron includes (plain 6502, NMOS) that were identical or near-identical between the
 [Paradroid](https://github.com/kieranhj/paradroid-beeb) and
-[Edge Grinder](https://github.com/kieranhj/edge-beeb) ports, made generic once. MIT, Kieran
-Connell.
+[Edge Grinder](https://github.com/kieranhj/edge-beeb) ports, made generic once, and five more
+from the third port, [1942](https://github.com/kieranhj/1942-beeb), a Master-only game that
+kept reading the disc after its boot: its own 1770 driver (four files) and BREAK-clears-RAM.
+MIT, Kieran Connell; the 1770 driver is derived from scarybeasts' quicdisc, relicensed for
+this use (its header has the wording).
 
 ## The fork-and-hack rule
 
@@ -45,6 +48,16 @@ to its BeebASM build.
 | `boot_stamp.6502` | **The stamp is a disc file, `INFO`** (Paradroid b5ffa94, 2026-09-11), so `*TYPE INFO` reads the build back at any prompt and not only while it scrolls past at boot. Five macros: `BOOT_STAMP_HEAD title` (title, "DEV build" unless `RELEASE`, `VERSION_LINE` and `ASSERT DEBUG_ANY = 0` under it), `BOOT_FLAG flag, text` (one line per flag that is on), `BOOT_STAMP_TIME` (`BUILD ` + `BUILD_TIME`) - the includer wraps those three in a macro of its own, written ONCE, so `INFO` and the boot message cannot drift - then `BOOT_FILE_HEAD` and `BOOT_FILE_TAIL runfile`, which build `!BOOT`: **a `*RUN` stub, the only shape** (Paradroid 61500a8, 2026-09-13, hexwab), printing its own copy of the stamp and OSCLIing `RUN <file>`. Disc option **2** on every build, `exec =` the section's start, and an address the stub can RUN at - not `&7E00`, MODE 7's screen; the template uses `&0900`. The `*EXEC` text shape and `BOOT_RUN` are GONE: `*EXEC` writes into `&1100-&1900`, so it cannot coexist with `OSBYTE 140` or with a game living there (`loader.6502`), and it needs a language ROM | `RELEASE`, `BUILD_TIME`, `DEBUG_ANY`, `VERSION_LINE` (a string) |
 | `swram_probe.6502` | Written for the Model B; runs on a Master too. Paradroid's `PARSWR` as of 7f91e77 (2026-09-11). It probes the sixteen slots with distinct values, which catches bank aliasing, and skips slots the MOS found a ROM in. Solidisk-style boards are refused. The highest four RAM banks are handed to the game at `SWR_HAND`, then it RTSes to BASIC. It prints **every bank found** as well as the four taken, in mixed case. A Master 128 that is short is told `(Set LK18 and LK19 west?)`. On success it calls OSBYTE 114,1 so the game's mode change isn't a shadow one. With exactly three clean banks, a ROM image in sideways RAM (ZMMFS) becomes the fourth bank. **That puts two duties on the game (header): fill that bank after the last filing-system call, and zero its `&02A1` byte first.** A standalone overlay `*RUN` from `!BOOT` before the game. `test/probe_test.6502` builds it as a bootable disc; `../docs/hardware-facts.md` §5 has what each path printed in jsbeeb | `SWR_HAND`, `SWR_MAGIC`, and the `CLEAR`/`ORG`/`SAVE` wrapper (in the header) |
 
+### From 1942: reading the disc after the boot, and a BREAK that cleans up
+
+| File | What it is | The includer defines |
+|---|---|---|
+| `qdisc.6502` | **Master only.** A DFS-free, non-blocking sector reader for the WD1770, after scarybeasts' quicdisc: the game calls `release_fs` (`*FX 140,0`) after its boot and then drives the controller itself, a self-modifying NMI routine at `&0D00` storing each byte. `qd_seek`, `qd_read` (a run of sectors on one track, ended by FORCE INTERRUPT at the page count), `qd_busy`, `qd_wait`, `qd_warm` (keep the motor spinning before a load you can see coming). The routine is DISARMED (`RTI`) between reads, because on an Acorn board the NMI is DRQ OR INTRQ and a seek's completion would otherwise store a junk byte. 35 cycles a byte, counted; 35.4 measured. **The kit's third answer** to "does the game read the disc after it starts" - `loader.6502`'s contract has the other two. Header: the E-bit settle on a real 1770 (15-30 ms every read), a busy 1770 ignoring commands, the target staying paged for the whole read | `QD_NMI_A`, one zero-page byte (1942: `&A0`, the MOS's NMI-owner workspace). It owns `&0D00-&0D31` |
+| `qdisc_init.6502` | Boot-only half: `qd_cfg` (**before** `*FX 140`: the drive the game was run from, out of OSGBPB 5, and `*CONFIGURE FDRIVE`'s step rate out of CMOS byte 11 - **2 and 3 clamped to 12 ms**, because they mean 20/30 ms on a 1770 and 2/3 ms on a 1772), the NMI routine's source, and `qd_init` (patch every drive select, restore and seek; install; restore to track 0) | nothing more |
+| `qdload.6502` | Files by NAME after the release: `qd_load_stream` has `load_stream`'s contract (A/Y the name, X the page, leaves `zxsrc`), `qd_load_part` loads sectors `qd_poff`..+`qd_plen` of a file. Blocks; `qd_err` says if a run failed four times. Only the files listed with `QD_FILE` are known, matched on their first `QD_NCH` characters, directory ignored, at most 255 sectors each | `zxsrc`, `QD_NCH` (1-7), and after the include `.qd_cat`, one `QD_FILE "NAME"` a file, `.qd_cat_end` |
+| `qdload_init.6502` | Boot-only half: `qd_boot` (after the release) installs the driver and reads the catalogue's two sectors once, filling the table; returns how many listed files were not on the disc. **Fixed on the way in**: 1942's copy never matched the LAST catalogue entry - the disc's first file (`Y < 8N` where entry N-1 is at `8N`) | `QD_CAT_STAGE`, a page-aligned 512 bytes it may overwrite |
+| `break.6502` | **BREAK clears RAM.** `brk_arm` (call it first): `*FX 200,2`, and the BREAK intercept at `&0287` (`*FX 247`) pointing at `brk_clear`, which stores 2 at `&0258` and `JMP (&FFFC)`s so the reset's second pass clears. MOS 3.20 clears memory at a reset only if the system VIA's IER is 0 or `(&0258 >> 1) = 1`, so `*FX 200,2` alone is enough until the game writes `&0258`; the intercept covers a game that uses that page. **Nothing of the game's may live at `&0287-&0289`** (1942 BUGS.md #92: two variables at `&0288` made a BREAK in play `JMP &005D`) | nothing; `brk_clear` must be resident |
+
 ## Proving ZX02 is the one to use
 
 `test/bench/bench_depack.py` is where the ZX02-against-ZX0 numbers come from: it assembles both
@@ -71,6 +84,17 @@ the day it was written. The first port to call it, 1942, found it put its stream
 | `test/andy_test.6502` (Master) | `unpack_andy` puts a 64-byte pattern at `&8100` in ANDY and puts ROMSEL back | `&0900` holds the pattern and `&0A00` reads `40 81 <bank>` |
 | `test/run_test.6502` | the three the 2026-09-11 audit found had never run: `load_bank` (a stream into sideways bank 4), `install_irq`/`uninstall_irq` (the MOS clock stops and restarts), `keydown_inkey` (a key held through the emulator) | `&0900` holds the pattern, `&0A00` = `40 80`, `&0A02` = 4; the clock is frozen across 50 fields and moves after the uninstall; `&0A13` = 50; `&0A20` = 0 with the key held, `&80` without |
 
+And four headless ones, which assemble their own disc, boot it on jsbeeb (the one
+`template/.mcp.json` pins, found by `template/tools/jsbeeb_src.mjs`), check everything and say
+so in the **exit code**. From the kit's root, with `template/bin` populated:
+
+| Test | What it proves | Measured |
+|---|---|---|
+| `node lib/test/qdisc_test.mjs` (`qdisc_test.6502`) | the four 1770 files: `qd_cfg`, `*FX 140`, `qd_boot`; the file table against the catalogue (its first and last entries, and one file not on the disc); every track of both sides of a patterned DOUBLE-sided disc byte-exact, with a sentinel after the buffer and a SEEK before each read; a run inside a track; `qd_load_stream` of four files and `qd_load_part` across two track boundaries, each with a sentinel and a `qd_warm` before it | jsbeeb 2.10.2, 2026-10-25: 161 reads, 0 bytes wrong, 0 sentinels moved; 5 loads exact; 35.4 cycles a byte in the NMI; a whole track 506,810 cycles, a one-track seek 12,151 (FDRIVE 0 in jsbeeb's CMOS). Without the last-entry fix the table check fails (measured) |
+| `node lib/test/break_test.mjs` (`break_test.6502`) | `break.6502`, four cases from one snapshot, IER non-zero (`&53`, the MOS's): no `*FX 200` keeps RAM; `*FX 200,2` clears; `*FX 200,2` then `&0258` = 0 KEEPS it; `brk_arm` then `&0258` = 0 clears. Each time the MOS must come back and answer `*FX 0` | jsbeeb 2.10.2 Master, 2026-10-25: all four as stated, `&3000-&5FFF` and the program itself zeroed in the two that clear |
+| `node lib/test/model_stub_test.mjs` | `py/beeb_port_kit/dfs.model_stub`: a game built for `&0E00` behind the stub runs on a Master; a B (DFS 1.2) and a B1770 print the message, and BASIC answers `PRINT 6*7`. Control: the same game as a plain `!BOOT` at `&0E00` hangs a B inside the DFS | jsbeeb 2.10.2, 2026-10-25: as stated; the plain `!BOOT` left both Bs in DFS code (PC `&DC5D`, `&8E14`) with BASIC dead |
+| `node lib/test/range_free.mjs DISC DRIVER.mjs` | NOT a pass/fail on the kit: the **"is this RAM free?" instrument**, from 1942's `measure_lowram` and `measure_break`. Your DRIVER module plays the game; it hooks every write into the ranges (default: the MOS low RAM a Master game might take) and names the writer, then fills each block with four patterns and presses BREAK. `range_free_example.mjs` is its sanity check: on `break_test`'s disc, where the MOS still owns the IRQ, it must FAIL | the example: 27 bytes written by the MOS in `&0240-&02CD`; BREAK needs `&0200-&027F` and `&0280-&02FF` |
+
 Between them, every routine in `lib/` has now been run, not just assembled, except the ZX0
 depacker (stepped in py65 by the bench below, and it is what both shipping discs use).
 
@@ -79,7 +103,7 @@ header**, so the first caller knows it's first.
 
 ## Proving it assembles
 
-`test/test_lib.6502` includes `beeb.h.6502`, a dummy zero page, every routine with dummy hooks,
+`test/test_lib.6502` includes `beeb.h.6502`, a dummy zero page, every routine with dummy hooks (the 1770 driver and `break.6502` too, since 2026-10-25),
 both depackers, the ZX02 one twice (Paradroid instantiated its depacker twice), the probe, and `INFO` plus a
 `!BOOT` in both shapes. From the kit's root:
 
@@ -103,4 +127,9 @@ lines the `RELEASE` you passed puts in it.
 - Paradroid's sound-tick paging shim inside the IRQ. Put it in your VSync hook; `irq.6502`'s
   header says how (save ROMSHAD, not ROMSEL).
 - Paradroid's `*LOAD`-through-OSCLI loader. OSFILE is the smaller thing to generalise.
-- Any 65C12 opcode. Both ports are `CPU 0`; decide before you use one.
+- Any 65C12 opcode. Both ports are `CPU 0`; decide before you use one. (1942's 1770 files used
+  `STZ`, `BRA`, `PHY`; the copies here are rewritten in plain 6502 so they assemble in a
+  section without `cmos = TRUE`.)
+- 1942's background reader (`bgread.6502`: rationed sector reads during play, into a bank the
+  game is not drawing from, with the NMI's target outside anything ROMSEL or ACCCON moves). It
+  is a pattern on top of `qdisc.6502`, not a library; its header in that repository says how.

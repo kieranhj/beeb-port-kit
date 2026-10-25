@@ -42,6 +42,12 @@ compress() and in_place_delta() for one of those, and pair it with
 lib/zx0depack.6502. The formats are NOT interchangeable and nothing checks
 that the disc and the depacker agree except you.
 
+model_stub() builds a !BOOT that runs the game on a Master (or whatever
+OSBYTE 0 answers you accept) and prints a message and returns to BASIC on
+anything else - from the 1942 port's make_disc.py, byte-identical to what
+it shipped (py/tests/test_model_stub.py), and booted on jsbeeb's B, B1770
+and Master by lib/test/model_stub_test.mjs.
+
 THE RAW IMAGE IS NOT BOOTABLE once the loader expects compressed streams:
 always hand the image this writer produces to an emulator.
 """
@@ -455,6 +461,152 @@ def check_stream(name, stream, packed, dest, raw, top=None, in_place=False,
         margin = stream - need
     return {"headroom": None if top is None else top - stream - n,
             "in_place_margin": margin}
+
+
+# --- the model check: a !BOOT that refuses the wrong machine politely -------
+#
+# From the 1942 port's tools/make_disc.py model_stub() (KC 2026-10-19: "the
+# loader needs to abort if the model isn't Master"). A game that needs a
+# Master cannot check for one INSIDE itself if it loads low: a Model B's DFS
+# keeps its workspace at &0E00-&18FF, and a !BOOT built for &0E00 HUNG INSIDE
+# ITS OWN LOAD there - MEASURED in jsbeeb on a B with DFS 1.2 and a B with the
+# 1770 DFS - so the game never got control to say anything. So !BOOT becomes
+# STUB + IMAGE in one file, loaded at `org` (default &5000, free on every
+# model in MODE 7: a B's screen is at &7C00, PAGE &1900). The stub asks OSBYTE
+# 0 (X = 1) for the OS; on an accepted answer - default 3 (MOS 3.x, Master 128)
+# and 5 (MOS 5.x, Master Compact) - it copies the image down to `dest` and
+# jumps to `entry`; on anything else it prints `text` through OSASCI and RTSes
+# to BASIC with the filing system untouched. It costs no catalogue entry.
+# lib/test/model_stub_test.mjs boots one on jsbeeb's B, B1770 and Master.
+# OSBYTE 0's X: 0 OS 1.00 / Electron, 1 OS 1.2 (B), 2 OS 2.00 (B+), 3 Master
+# 128, 4 Master ET, 5 Master Compact - the AUG; 1 and 3 measured in jsbeeb.
+
+STUB_ORG = 0x5000
+STUB_ZP = 0x70                  # src, dst: user zero page, before the game runs
+
+
+def model_stub(image, dest, entry, text="This game needs a BBC Master",
+               org=STUB_ORG, accept=(3, 5), zp=STUB_ZP, top=0x7C00,
+               lowest=0x1900):
+    """(file bytes, load, exec) for a !BOOT that runs `image` - which belongs
+    at `dest` and starts at `entry` - only on a machine whose OSBYTE 0 answer
+    is in `accept`, and prints `text` on any other. Load and exec are both
+    `org`, 16-bit: pass the Entry through to_host() like any other file, and
+    boot the disc with *OPT 4,2 (*RUN).
+
+    Refuses (DiscError) a stub that would not work: below `lowest` (a B's DFS
+    workspace ends at &18FF and PAGE is &1900), past `top` (MODE 7's screen),
+    an image whose copy would overwrite the stub while it runs, `text` over
+    254 bytes or containing a 0, or no accepted model at all. A newline in
+    `text` is written as CR (OSASCI turns it into CR LF)."""
+    image = bytes(image)
+    if isinstance(text, str):
+        text = text.replace("\r\n", "\r").replace("\n", "\r").encode("ascii")
+    text = bytes(text)
+    if not text.endswith(b"\r"):
+        text += b"\r"
+    if b"\0" in text or len(text) > 254:
+        raise DiscError("model_stub: the text is printed by LDA text,X up to a 0: "
+                        "at most 254 bytes, none of them 0")
+    accept = tuple(accept)
+    if not accept or not all(0 <= a <= 255 for a in accept):
+        raise DiscError("model_stub: accept names the OSBYTE 0 answers to run on")
+    if not 0 <= zp <= 0xFC:
+        raise DiscError("model_stub: zp is four bytes of zero page")
+    n = len(image)
+    full, rem = n // 256, n % 256
+    zs, zd = zp, zp + 2
+    code, lab, fix = bytearray(), {}, []     # fix: (offset, label, kind)
+
+    def op(*b):
+        code.extend(b)
+
+    def br(opc, to):                         # a relative branch to a label
+        op(opc, 0)
+        fix.append((len(code) - 1, to, "rel"))
+
+    def here(name):
+        lab[name] = len(code)
+    op(0xA9, 0x00)                      # LDA #0
+    op(0xA2, 0x01)                      # LDX #1
+    op(0xA0, 0xFF)                      # LDY #&FF
+    op(0x20, 0xF4, 0xFF)                # JSR OSBYTE    -> X: the OS
+    for a in accept:
+        op(0xE0, a)                     # CPX #a
+        br(0xF0, "ok")                  # BEQ ok
+    op(0xA2, 0x00)                      # LDX #0
+    here("msg")
+    op(0xBD, 0, 0)                      # LDA text,X
+    fix.append((len(code) - 2, "text", "abs"))
+    br(0xF0, "bye")                     # BEQ bye
+    op(0x20, 0xE3, 0xFF)                # JSR OSASCI
+    op(0xE8)                            # INX
+    br(0xD0, "msg")                     # BNE msg
+    here("bye")
+    op(0x60)                            # RTS           back to BASIC, the DFS intact
+    here("ok")
+    op(0xA9, 0)                         # LDA #LO(image)
+    fix.append((len(code) - 1, "image", "lo"))
+    op(0x85, zs)                        # STA src
+    op(0xA9, 0)                         # LDA #HI(image)
+    fix.append((len(code) - 1, "image", "hi"))
+    op(0x85, zs + 1)                    # STA src+1
+    op(0xA9, dest & 0xFF)               # LDA #LO(dest)
+    op(0x85, zd)                        # STA dst
+    op(0xA9, (dest >> 8) & 0xFF)        # LDA #HI(dest)
+    op(0x85, zd + 1)                    # STA dst+1
+    op(0xA0, 0x00)                      # LDY #0
+    op(0xA2, full & 0xFF)               # LDX #full pages
+    br(0xF0, "rem")                     # BEQ rem
+    here("page")
+    op(0xB1, zs)                        # LDA (src),Y
+    op(0x91, zd)                        # STA (dst),Y
+    op(0xC8)                            # INY
+    br(0xD0, "page")                    # BNE page
+    op(0xE6, zs + 1)                    # INC src+1
+    op(0xE6, zd + 1)                    # INC dst+1
+    op(0xCA)                            # DEX
+    br(0xD0, "page")                    # BNE page
+    here("rem")                         # Y = 0 on every way in
+    op(0xC0, rem)                       # CPY #rem
+    br(0xF0, "go")                      # BEQ go
+    op(0xB1, zs)                        # LDA (src),Y
+    op(0x91, zd)                        # STA (dst),Y
+    op(0xC8)                            # INY
+    br(0xD0, "rem")                     # BNE rem       (always: rem < 256)
+    here("go")
+    op(0x4C, entry & 0xFF, (entry >> 8) & 0xFF)  # JMP entry
+    here("text")
+    code.extend(text + b"\0")
+    lab["image"] = len(code)
+    for at, to, kind in fix:
+        a = org + lab[to]
+        if kind == "rel":
+            d = lab[to] - (at + 1)
+            if not -128 <= d <= 127:
+                raise DiscError(f"model_stub: branch to {to} out of range")
+            code[at] = d & 0xFF
+        elif kind == "abs":
+            code[at], code[at + 1] = a & 0xFF, a >> 8
+        elif kind == "lo":
+            code[at] = a & 0xFF
+        else:
+            code[at] = a >> 8
+    data = bytes(code) + image
+    if full > 255:
+        raise DiscError("model_stub: the image is over 64K")
+    if org < lowest:
+        raise DiscError(f"model_stub: org {org:#06x} is below {lowest:#06x} - a Model B's "
+                        "DFS works in &0E00-&18FF and hangs loading a !BOOT there")
+    if org + len(data) > top:
+        raise DiscError(f"model_stub: the !BOOT reaches {org + len(data):#06x}, past "
+                        f"{top:#06x} (MODE 7's screen)")
+    if not (dest + n <= org or dest >= org + len(data)):
+        # wholly below the stub, or wholly above the file: anything else
+        # overwrites the stub's own loop or the bytes it has still to copy
+        raise DiscError(f"model_stub: copying {n} bytes to {dest:#06x} would overwrite the "
+                        "stub or the image while it runs")
+    return data, org, org
 
 
 # --- comparing two images -------------------------------------------------

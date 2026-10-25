@@ -74,7 +74,10 @@
 \ *	    nothing. OSBYTE 200, X = 3 at the top of main makes BREAK a
 \ *	    power-on reset (bit 1) and disables ESCAPE (bit 0):
 \ *	        lda #200 : ldx #3 : ldy #0 : jsr osbyte
-\ *	    Do it FIRST, before anything can be broken into.
+\ *	    Do it FIRST, before anything can be broken into. break.6502's
+\ *	    brk_arm does it (X = 2), and arms the &0287 intercept that keeps
+\ *	    it true once the game has used &0258 - which MOS 3.20 reads at
+\ *	    the BREAK, so a game that overwrites it gets a soft BREAK anyway.
 \ *
 \ *	THE INCLUDER DEFINES, before this file is included:
 \ *	  zxsrc, zxdst (ZP)   the depacker's pointers (zx02depack.6502)
@@ -257,6 +260,14 @@ ENDIF
 \ the end. A port that loads once but has not decided yet: leave the
 \ call out and keep the NMI claim, and take the zero page and &0E00
 \ only when the decision is made.
+\ A THIRD ANSWER, MASTER ONLY, FOR A PORT THAT LOADS BETWEEN LEVELS: call
+\ release_fs after the boot's loads AND read the disc yourself, through
+\ the 1770 directly - qdisc.6502 (raw sectors, by NMI, non-blocking) and
+\ qdload.6502 (files by name out of a catalogue cached at boot, with
+\ load_stream's contract: qd_load_stream). No OS call is made after the
+\ release, so the workspace is the game's, and loads still work: the 1942
+\ port loaded every stage seam that way, and read in the background
+\ during play. Saving is still out: nothing there writes.
 \ AND THE DISC MUST BOOT BY *RUN, NOT *EXEC, if the game lives in
 \ &1100-&1900: that is DFS's random-access buffer area, and running
 \ there works only because *LOAD - and *RUN, which is *LOAD plus a jump

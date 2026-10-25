@@ -1,0 +1,81 @@
+\ ******************************************************************
+\ *	break.6502 - BREAK clears RAM: *FX 200,2, and the BREAK intercept
+\ *	that keeps it true when the game has used &0258
+\ ******************************************************************
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, plain 6502.
+\ *	Master (MOS 3.20) measured; see below for the Model B.
+\ *
+\ *	WHY. A game that takes HAZEL, the sideways banks, page &0D's NMI
+\ *	or the MOS's low RAM leaves wreckage a SOFT BREAK keeps: the next
+\ *	program finds no DFS, or a stale NMI routine, or half a game. A BREAK
+\ *	that clears memory is a clean machine. 1942 BUGS.md #92 is what
+\ *	happens otherwise (KC, a real Master: "pressing BREAK from the game
+\ *	leaves the machine in a very bad state").
+\ *
+\ *	THE MOS's RULE, MEASURED off MOS 3.20's reset code at &8046 (1942,
+\ *	2026-10-18): a reset clears &0000-&DFFF (shadow and HAZEL included)
+\ *	only if the system VIA's IER is 0 - a power-on - OR (&0258 >> 1) = 1,
+\ *	i.e. &0258 = 2 or 3, which *FX 200,2 / 200,3 set. So:
+\ *	  - brk_arm's *FX 200,2 alone is enough FOR A GAME THAT NEVER WRITES
+\ *	    &0258. (X = 2 leaves ESCAPE enabled; 3 disables it as well.)
+\ *	  - A game that uses &0220-&027F as RAM (1942's side plane did -
+\ *	    lib/test/range_free.mjs is what says such a range is free) loses
+\ *	    the 2, and with the VIA's interrupts on (IER non-zero, which is
+\ *	    every game with irq.6502) the reset then keeps RAM. THE BREAK
+\ *	    INTERCEPT (*FX 247-249: a JMP at &0287) puts it back:
+\ *	    brk_clear stores 2 at &0258 and JMPs through the reset vector,
+\ *	    and the second pass clears - which wipes &0287 too, so it runs
+\ *	    once.
+\ *	The MOS calls the intercept twice per reset: early with C CLEAR,
+\ *	and again after the reset with C SET (ignored here).
+\ *
+\ *	NOTHING OF THE GAME'S MAY LIVE AT &0287-&0289 once brk_arm has run.
+\ *	&0287 is the JMP and &0288-&0289 its address; a BREAK JUMPS THROUGH
+\ *	them. 1942 put two variables at &0288 (BUGS.md #92, rc4): the first
+\ *	tick turned the intercept into JMP &005D and a BREAK in play ran zero
+\ *	page. A BREAK-read test of the MOS's low RAM (measure_break) does not
+\ *	see this - the MOS does not READ &0288, it jumps through it.
+\ *	AND brk_clear MUST BE RESIDENT: it runs from wherever it was
+\ *	assembled, in the RAM the game left, at the moment of the BREAK.
+\ *
+\ *	TESTED: lib/test/break_test.6502 + break_test.mjs (jsbeeb Master,
+\ *	headless) - a pattern in &1000-&2FFF and the VIA's IER on, &0258
+\ *	trashed, BREAK: kept without the intercept, zeroed with it.
+\ *	NOT MEASURED: the Model B (OS 1.20's reset differs - a port that
+\ *	runs there must measure it), MOS 3.5 / the Compact.
+\ *
+\ *	THE INCLUDER DEFINES nothing (beeb.h.6502 for osbyte). Call brk_arm
+\ *	FIRST at the top of main, before anything can be broken into.
+\ *	Baron: mark brk_clear ZA_ENTRY if your zero page is ZA_AUTO - the
+\ *	MOS enters it, nothing in the program calls it.
+\ *
+\ *	Fork this into your project; keep this header.
+\ ******************************************************************
+
+BRK_INTERCEPT = &0287           ; *FX 247: JMP opcode; *FX 248/249: its address
+MOS_BRK_FLAG  = &0258           ; *FX 200's byte: bit 1 = clear memory on BREAK
+
+\ ---- brk_arm: *FX 200,2 and the intercept. Clobbers A, X, Y. -------
+.brk_arm
+    lda #200                    ; *FX 200,2: BREAK clears memory, ESCAPE stays
+    ldx #2
+    ldy #0
+    jsr osbyte
+    lda #LO(brk_clear)          ; the address first, the JMP last, so a BREAK
+    sta BRK_INTERCEPT + 1       ; in between finds no half of it
+    lda #HI(brk_clear)
+    sta BRK_INTERCEPT + 2
+    lda #&4C                    ; JMP abs
+    sta BRK_INTERCEPT
+    rts
+
+\ ---- brk_clear: the MOS calls this at a BREAK ----------------------
+.brk_clear
+{
+    bcs out                     ; C set: the call after the reset - not ours
+    lda #2
+    sta MOS_BRK_FLAG
+    jmp (&FFFC)                 ; reset again; this pass clears
+    .out
+    rts
+}

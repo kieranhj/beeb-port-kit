@@ -1,0 +1,228 @@
+\ ******************************************************************
+\ *	qdisc_test.6502 - qdisc.6502 + qdload.6502 on a real boot, driven
+\ *	by qdisc_test.mjs (the disc is ITS: it adds the second side and
+\ *	the pattern, then checks what lands at every breakpoint)
+\ ******************************************************************
+\ *	Master only. From the 1942 port's src/test/qdisc_test.6502 and
+\ *	tools/verify_qdisc.mjs, with the named-file half added. From the
+\ *	kit's root:
+\ *	  node lib/test/qdisc_test.mjs        (assembles this itself)
+\ *
+\ *	WHAT IT DOES:
+\ *	  0. qd_cfg while the DFS is up, then *FX 140,0, then SEI: from here
+\ *	     the only thing taking CPU from the idle counts is the 1770's NMI;
+\ *	  1. qd_boot: the catalogue into the table - every file on the disc
+\ *	     (the first and the last catalogue entries among them) and one,
+\ *	     NOPE, that is not: A must come back 1 (qt_booted);
+\ *	  2. every track of side 0 and then side 1, 0-79, read whole (10
+\ *	     sectors) into QT_BUF with a sentinel after it, a SEEK before
+\ *	     each read - its completion interrupt is the one the disarmed
+\ *	     routine must ignore - and a run inside a track, sectors 3-7 of
+\ *	     track 40 (qt_done after each);
+\ *	  3. qd_load_stream of each file and qd_load_part of FILEB's sectors
+\ *	     13-29, which cross two track boundaries, each with a sentinel
+\ *	     after it and a qd_warm before it (qt_loaded after each);
+\ *	  4. qt_end.
+\ ******************************************************************
+INCLUDE "../beeb.h.6502"
+
+QD_NMI_A     = &A0              ; qdisc.6502: the NMI's saved A
+QD_NCH       = 7                ; qdload.6502: whole names
+QD_CAT_STAGE = &2E00            ; qdload_init.6502: the catalogue's 512 bytes
+
+QT_BUF   = &3000                ; up to 18K, below MODE 7's &7C00
+QT_SENTV = &5A
+
+SECTION zeropage, org = &70, guard = &90
+.zxsrc    SKIP 2                ; qdload.6502's load_stream contract
+.qt_track SKIP 1                ; &72
+.qt_side  SKIP 1                ; &73
+.qt_first SKIP 1                ; &74  the first sector read
+.qt_pages SKIP 1                ; &75
+.qt_idle  SKIP 3                ; &76  idle-loop passes during the READ
+.qt_phase SKIP 1                ; &79  0 whole tracks, 1 the run
+.qt_ok    SKIP 1                ; &7A  the status after the read
+.qt_sp    SKIP 2                ; &7B  -> the sentinel
+.qt_lid   SKIP 1                ; &7D  which load (qt_loaded)
+.qt_miss  SKIP 1                ; &7E  qd_boot's answer
+ENDSECTION
+
+SECTION Test, org = &1900, guard = QD_CAT_STAGE, filename = "QDTEST", exec = qt_main
+.qt_main
+{
+    jsr qd_cfg                  ; the DFS is still up: ask it and the CMOS
+    lda #140                    ; *TAPE: the DFS lets go of the NMI
+    ldx #0
+    ldy #0
+    jsr osbyte
+    sei                         ; the MOS's interrupts off: only the NMI runs now
+    jsr qd_boot
+    sta qt_miss
+    jmp qt_booted
+}
+.qt_booted                      ; THE ORACLE CHECKS THE TABLE HERE
+{
+    lda #0
+    sta qt_phase
+    sta qt_side
+    sta qt_track
+    .track
+    jsr one_read
+    inc qt_track
+    lda qt_track
+    cmp #80
+    bne track
+    lda qt_side
+    bne runs
+    inc qt_side
+    lda #0
+    sta qt_track
+    beq track                   ; (always)
+
+    .runs                       ; a run inside a track: sectors 3-7 of 40, side 0
+    lda #1
+    sta qt_phase
+    lda #0
+    sta qt_side
+    lda #40
+    sta qt_track
+    lda #3
+    sta qt_first
+    lda #5
+    sta qt_pages
+    jsr read_it
+    jmp qt_loads
+}
+
+\ ---- 3. by name: one load a pass, the oracle's breakpoint after each
+.qt_loads
+    lda #0
+    sta qt_lid
+.qt_load_one
+    ldx qt_lid
+    lda loads_pages, x          ; the sentinel after the file's last page
+    jsr set_sentinel
+    jsr qd_warm                 ; a seek on the spot: its INTRQ meets RTI
+    ldx qt_lid
+    lda loads_kind, x
+    bne qt_part
+    lda loads_lo, x
+    ldy loads_hi, x
+    ldx #HI(QT_BUF)
+    jsr qd_load_stream
+    jmp qt_loaded
+.qt_part
+    lda #13
+    sta qd_poff
+    lda #17
+    sta qd_plen
+    lda loads_lo, x
+    ldy loads_hi, x
+    ldx #HI(QT_BUF)
+    jsr qd_load_part
+.qt_loaded                      ; THE ORACLE'S BREAKPOINT FOR EACH LOAD
+    inc qt_lid
+    lda qt_lid
+    cmp #NLOADS
+    bne qt_load_one
+.qt_end
+    jmp qt_end                  ; the oracle stops here
+
+\ the loads: kind 0 = qd_load_stream, 1 = qd_load_part (FILEB 13-29)
+NLOADS = 5
+.loads_kind  EQUB 0, 0, 0, 0, 1
+.loads_lo    EQUB LO(n_qdtest), LO(n_filea), LO(n_fileb), LO(n_boot), LO(n_fileb)
+.loads_hi    EQUB HI(n_qdtest), HI(n_filea), HI(n_fileb), HI(n_boot), HI(n_fileb)
+.loads_pages EQUB 0, 3, 40, 1, 17   ; the sentinel's page (QDTEST: the oracle's)
+.n_qdtest EQUS "QDTEST", 13
+.n_filea  EQUS "FILEA", 13
+.n_fileb  EQUS "FILEB", 13
+.n_boot   EQUS "!BOOT", 13
+
+\ A = pages: the byte at QT_BUF + 256 * pages gets the sentinel (0 = none)
+.set_sentinel
+{
+    beq none
+    clc
+    adc #HI(QT_BUF)
+    sta qt_sp+1
+    lda #0
+    sta qt_sp
+    tay
+    lda #QT_SENTV
+    sta (qt_sp), y
+    .none
+    rts
+}
+
+\ one whole track: sectors 0-9
+.one_read
+    lda #0
+    sta qt_first
+    lda #10
+    sta qt_pages
+\ falls into read_it
+.read_it
+    lda qt_pages
+    jsr set_sentinel
+    lda qt_track
+.qt_sk                          ; THE ORACLE TIMES THE SEEK FROM HERE
+    jsr qd_seek
+    jsr qd_wait
+    lda #LO(QT_BUF)
+    sta qd_dst
+    lda #HI(QT_BUF)
+    sta qd_dst+1
+    lda #0
+    sta qt_idle : sta qt_idle+1 : sta qt_idle+2
+    lda qt_first
+    ldx qt_pages
+    ldy qt_side
+.qt_rd                          ; THE ORACLE TIMES THE READ FROM HERE
+    jsr qd_read
+{
+    .idle                       ; THE IDLE LOOP: 17 cycles a pass
+    inc qt_idle                 ; 5
+    bne i1                      ; 3 (taken)
+    inc qt_idle+1
+    bne i1
+    inc qt_idle+2
+    .i1
+    lda QD_CMD                  ; 4
+    lsr a                       ; 2  BUSY -> C
+    bcs idle                    ; 3
+    lda QD_CMD
+    sta qt_ok
+}
+.qt_done                        ; THE ORACLE'S BREAKPOINT FOR EACH READ
+    rts
+
+INCLUDE "../qdisc.6502"
+INCLUDE "../qdisc_init.6502"
+INCLUDE "../qdload.6502"
+INCLUDE "../qdload_init.6502"
+.qd_cat
+    QD_FILE "QDTEST"
+    QD_FILE "FILEA"
+    QD_FILE "NOPE"
+    QD_FILE "FILEB"
+    QD_FILE "!BOOT"
+.qd_cat_end
+.qt_last
+ENDSECTION
+
+\ ---- the files: patterns, so a shifted or short load shows ----------
+SECTION FileA, org = &3000, filename = "FILEA"   ; 2 sectors and a part
+FOR i = 0..599
+    EQUB (i * 7 + 3) AND 255
+NEXT
+ENDSECTION
+SECTION FileB, org = &3000, filename = "FILEB"   ; 40 sectors: crosses tracks
+FOR i = 0..10239
+    EQUB (i * 13 + (i >> 8) * 5 + 1) AND 255
+NEXT
+ENDSECTION
+
+SECTION Boot, org = &7E00, guard = &7F00, filename = "!BOOT"
+    EQUS "*RUN QDTEST", 13
+ENDSECTION
