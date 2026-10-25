@@ -1,9 +1,20 @@
 # Verification: the measuring and checking procedures
 
-Fifteen procedures, numbered so a reader can pick one by number. Each gives the manual route
-first - what to do by hand in [jsbeeb](https://bbc.xania.org), b2 or beebjit - and then, in a short
-sub-block, the same thing as calls to the jsbeeb MCP server (`jsbeeb-mcp` on npm, used from
-Claude Code). Nothing in the MCP block is needed to follow the manual one.
+Nineteen procedures, numbered so a reader can pick one by number. Procedures 1-15 give the
+manual route first - what to do by hand in [jsbeeb](https://bbc.xania.org), b2 or beebjit - and
+then, in a short sub-block, the same thing as calls to the jsbeeb MCP server (`jsbeeb-mcp` on npm,
+used from Claude Code). Nothing in the MCP block is needed to follow the manual one. Procedures
+16-19 are **headless**: Node harnesses that drive jsbeeb's `MachineSession` directly, hook the
+CPU, check a model and return an exit code - the form a check takes once it has to run on every
+build, unattended, and be believed. "Headless harnesses", before them, is the skeleton they share.
+
+The two ports this was first written from verified by hand, through the MCP. 1942 for the BBC
+Master (2026-09-07 to 10-23) ended with 148 headless command lines run ten at a time after every
+build, and most of what it learned about verification is about making that suite **believable**:
+an oracle that answers zeros with exit 0 (its `BUGS.md` #9), a harness that echoes the stage it
+asked for (#39), a debug key that repaired the corruption the real path made (#35), a run that
+never pressed a key (#31). Those lessons are procedures 16-19 and the rules in "Headless
+harnesses".
 
 Every procedure here was used more than once across the two ports, and most of them were learned
 the expensive way: a screenshot said "fine" while the buffer was a column out; a smooth-looking
@@ -24,7 +35,7 @@ so rather than filling the gap from imagination.
 
 ---
 
-## Before you start: three conventions
+## Before you start: six conventions
 
 **Addresses come from the build, every time.** Builds keep Baron's symbol dump
 (`--symbols build/game.symbols.json`) and its `-v` listing in `build/`; main-RAM addresses shift
@@ -56,6 +67,36 @@ The BeebASM equivalent, for the two shipping ports:
 
 `-do` is there only to stop beebasm dropping loose `SAVE` files in the project root; Baron writes
 nothing without `-p` or `-o`, so it needs no such guard.
+
+**Generate the command lines, never write them down.** A doc that carries a worked command with
+addresses in it is a measurement of nothing waiting to happen. 1942's rules file carried
+`verify_dynamic ... 10 12 ...`; the sprite table moved, `frame_count` went `&10` to `&12` and
+`scroll` took `&10`, and the line reported **13,696 frames** where the answer is 50 - in the right
+shape, with exit code 0. So the template's `tools/verify_cmds.py` prints every oracle's line from
+the symbol dump, with a `zp()` guard that refuses a name above `&FF` (the label `frame` is not the
+variable `frame_count`), and a harness built on `tools/harness.mjs` resolves its own names with
+`need()`, which exits 2 rather than default. **An address that is an argument with a default is
+the same bug**: 1942's `measure_budget.mjs` defaulted `spr_live`, the band dedup moved it one
+byte, and it answered "51 blits fit a tick" against the true 13.
+
+**Name the bank on every read AND every write of a switched window.** `&3000-&7FFF` on a Master
+is main or shadow, `&8000-&BFFF` is a sideways bank or ANDY, and jsbeeb's `readMemory` and
+`writeMemory` default to whatever the CPU has paged *at that instant*. Procedure 3 says so for
+reads; it is just as true of writes. 1942's `verify_bossfly` poked its invincibility cheat into
+the double-buffered window without `{shadow: false}`; a build whose boot was an odd number of
+fields longer put the write in the other buffer, the cheat run and the no-cheat run came back
+byte-identical, and the 4,200-tick run reported "the boss never appeared" - a perfect
+description of a defect that was not there (2026-09-19). `harness.mjs`'s `rd`/`wr` **throw**
+without a bank in either window; `"paged"` is the explicit way to say "whatever is in".
+
+**Label every figure MEASURED, COUNTED or PROJECTED**, and say what measured it and when. A
+COUNTED figure is cycles added up off the listing; a PROJECTED one is arithmetic on other
+figures. 1942's counted figures were wrong by a fifth, once by 2.5x, and once in sign - decision
+103 was costed at -13 cycles a blit and the build measured +7, because the count priced the path
+that got cheaper and forgot the branch on the one that did not. Its `docs/performance.md` carries
+the label on every row, and "a counted cycle figure is suspect" became a standing rule. Compare
+two measured figures only from the same jsbeeb: 2.3.0 against 1.25.0 changed three of nine
+harness reports (procedure 19).
 
 **Snapshot the state you are going to measure from.** `save_state` keeps a whole machine
 server-side under an ID and `restore_state` puts any session of the same model back to it -
@@ -769,6 +810,234 @@ The checklist for a new check:
 
 ---
 
+## Headless harnesses
+
+Procedures 1-15 are run by hand or by an agent through the MCP, one call at a time. That is the
+right instrument for finding out; it is the wrong one for **knowing, on every build**, that
+nothing found out has since broken. 1942's suite was 148 Node scripts that boot the disc in
+jsbeeb's own `MachineSession` (the class the MCP server drives), hook the CPU, drive the game,
+check a model, and exit 0 or not. The template carries the skeleton:
+
+| File | What it is |
+|---|---|
+| `template/tools/harness.mjs` | `open()` resolves `sym`/`need`/`zp`/`define`/`asmConst` from the build's symbol dump before any boot; `boot()`; `rd`/`wr`/`byte`/`word` with the bank required; `onExec`, `onWrite`, `crtc()`, `runTo`, `where()`; `coverage()`; `finish()` |
+| `template/tools/jsbeeb_src.mjs` | finds the jsbeeb the pinned MCP runs, prints `[jsbeeb x.y.z]`, `version()`, and a key policy that **throws** on a key of the wrong type rather than pressing nothing |
+| `template/tools/verify_dynamic.mjs` | the smallest oracle on it: four counts and the panel, asserted |
+| `template/tools/verify_cmds.py` | every oracle's command line from the dump, each with the reason the run exists; `--json` for the runner |
+| `template/tools/run_suite.py` | runs them N at a time; the verdict is the exit code |
+| `template/tools/floorfit.mjs` | procedure 19's cost model |
+| `template/examples/vscroll/tools/record_vscroll.mjs`, `check_vscroll.py` | procedure 17, worked on the template's own scroll |
+
+**The exit code is the verdict, and the contract is three-valued:**
+
+- **0** - it ran, it sampled something, it took every path it names, and every sample agreed.
+- **1** - something disagreed, **or it sampled nothing, or a path it needs was never taken.** A
+  check that ran over nothing is not a pass. 1942's sprite oracle prints "NO SPRITES WERE DRAWN:
+  this proved nothing" and exits 1.
+- **2** - it could not judge: usage, a symbol not in the build, a stale build (`asmConst` finds
+  the dump and the source disagreeing), a disc that never booted. `boot()` exits 2 if the field
+  counter has not moved in ten fields, because every way of getting a boot wrong - a key the
+  emulator never pressed, a disc that did not load, the wrong address for the counter - looks
+  like "the program does nothing", and must not be scored as a result.
+
+Never grep the output for "pass": field names match it. Until 2026-10-25 the kit's own
+`verify_dynamic.mjs` printed its JSON and exited 0 whatever the numbers said, which is 1942's
+`BUGS.md` #9 exactly - an oracle there answered a well-formed object of **zeros** with exit 0 for
+weeks, and nobody noticed because nothing asked it to fail. Measured on the rebuilt one
+(2026-10-25, jsbeeb 2.10.2): both discs 100/50/0/200, exit 0; `scroll` given as `&0C`, exit 1;
+`field_count` given as `&0E`, exit 2 with the PC at `main_loop.wait_take+2`. **And one wrong
+address it cannot catch**: `flip_field` (`&0D`) for the field counter passes, because at a 25 Hz
+lock the take copies `field_count` into it every other field and it too advances 100 in 100. A
+counting oracle is defeated by a correlated variable; that is why the default form takes the
+name from the dump and the explicit form is for documents that already carry it.
+
+**Hooks, not timers.** Break on the loop - `onExec(main_loop)`, `onExec(<the instruction after
+jsr draw>)` - rather than sampling every N fields: at a busy moment a tick overruns its fields and
+a timed read catches a half-drawn buffer. On a machine with sideways RAM, gate the hook on the
+paging: `onExec(addr, fn, {romsel: 5})` takes a hit only with `(ROMSEL AND &8F) = 5` - bank 5 in
+**and ANDY out**, because on a Master an address below `&9000` in bank 5 is also ANDY's, and
+1942's breakpoint on a bank-5 `stage_restart` at `&86D1` fired every tick on the in-play text
+running at the same address in ANDY. Hooks stay dark until `boot()` returns (`afterBoot`, the
+default), because the filing system runs its own code at your overlay addresses while it loads.
+`onWrite(lo, hi, fn)` hands each write the PC, the cycle count, the paging and **the CRTC's own
+counters** (`horizCounter`, `vertCounter`, `scanlineCounter`, in-adjust): a raster-phase claim -
+"this write lands in the horizontal blanking of line 280, every field" - is proved by recording
+where each write fell, which is how 1942's `verify_panel.mjs` proved its shadow-only panel
+(0 of 3,584 pixels, the fire at `horizCounter` 74-82 in 792 of 798 fields, 2026-10-07).
+
+**A harness that gives up says where.** `runTo(addr, budget)` returns null with `where()` - the
+PC symbolised, ROMSEL, ACCCON, the stack's top, the MOS's error pointer `(&FD)` - because "never
+reached" with no PC is a lost session; a run-away `JSR` into a table whose first byte is `&00` is
+a BRK into the MOS and BASIC, and looks like a hang (1942 `BUGS.md` #24, #29). Give every tick a
+cycle budget, and size it for the slowest legitimate tick: a disc load inside a tick is millions
+of cycles (1942's seam ticks reached 4.3M with the drive spinning up after two minutes idle).
+
+**One JSON line, last, with the jsbeeb version in it**, and explanations on stderr. The version is
+a variable (procedure 19); a figure without it cannot be compared with the next one.
+
+**Two rules every oracle keeps, and neither is about code:**
+
+1. **Prove every new oracle FAILS on the unfixed build** - or, for a new check with nothing to
+   fix, on a deliberately broken input. An oracle never seen failing has not been shown able to.
+   1942's oracles agreed with a wrong port in its `BUGS.md` #16, 18, 27, 34, 45, 51, 61, 69, 74
+   and 91, each time by **borrowing from the port**: the same table (#16: every oracle checked the
+   sprite cells against the table the port shipped, and all scored zero while two small planes
+   flew where a four-engine bomber belonged - a screenshot caught it), the same arithmetic, the
+   port's own substitute asserted, an assertion where the original's invariant should have been.
+   From #43 on its fixes record "fails the old build". The template's `record_vscroll` carries its
+   control in the suite: `MUTATE=adj` pokes one byte of the adjust table and must exit 1
+   (`verify_cmds` marks it `expect: 1`); measured 36 wrong, all at `ypos` = 3 mod 8. Keep **data
+   oracles** (does the buffer hold the exported bytes?) and **behaviour oracles** (does the object
+   do what the original's does?) separate: a plane circling for ever is drawn perfectly. And read
+   shipped bytes back out of RAM, in every bank a stray write could reach: 1942's `verify_table`
+   is the only check that looks at the descriptor table in memory, which is why it alone saw the
+   MOS's sound driver eating it (#15), and a blit that escaped the top of the screen ring landed
+   in the paged bank, never in the buffer the sprite oracle was diffing (#31).
+2. **A debug shortcut measures a different game. Drive the real path, and read the state back -
+   never echo what you asked for.** 1942's stage-skip key redraws both screen buffers, which
+   repaired exactly the corruption a broken set load made, so `verify_seam` pokes a set's last
+   stage and raises the landing's own request instead (#35). A harness pressed the skip key for
+   six frames, the press fell inside a masked disc load and vanished, and every run past the first
+   boss scored an EARLIER stage than it named - with `stage` in the report an echo of the argument
+   (#39, open six days; the fix holds the key until the game's own stage byte moves, and fails
+   unless it lands where asked). A shortcut is fine for getting somewhere; what is measured there
+   must be the game's own path.
+
+---
+
+## 16. A coverage-gated pass
+
+A pass is worth exactly what the run covered. **A harness reports its own coverage, and fails if
+a path it names was never taken.** 1942's `verify_sprite.mjs` (2026-09-15 onwards) counts every
+path its blitter has - four pre-shift phases, the clip on each edge, the row that straddles the
+16K wrap, a cell at a negative X drawn unclipped, each arm of the derived address - and prints
+"PATHS NEVER TAKEN, so this run does not clear them" and exits 1 on any zero. The negative-X arm
+went in after `BUGS.md` #84: that case had been wrong for a month under a passing oracle, because
+nothing in the run ever put a cell there.
+
+```js
+const cov = h.coverage();
+cov.need("wrapDown", 1, "the ring's wrap, 127 -> 0");
+cov.need("phase3", 1);
+// ... in the hooks:  cov.hit("wrapDown")
+h.finish(report, wrong === 0, { samples: judged, cover: cov });   // a gap is exit 1
+```
+
+1. List the paths **from the code under test** - every branch that changes what is drawn or
+   decided - and name a coverage counter for each before writing the check.
+2. Count them in the hooks. Count the *case*, not the call: "a sprite at X -1..-4 with a 2-unit
+   offset" is a path; "`spr_draw` entered" is not.
+3. `need(name, n)` the ones a pass requires. A path the run *cannot* reach (a short run that never
+   crosses a wrap) is not waived silently: give the run the length it needs (procedure 18), or
+   take the requirement off that one run with the reason written beside it - 1942's 120-tick EDGE
+   run drops only the wrap requirement, and says why in the code.
+4. `REQUIRE=` lets one oracle serve several runs that must each cover a different kind (1942's
+   `verify_smallpay` names the kills each stage's run must have paid for).
+
+---
+
+## 17. Record / replay: one model, re-seeded every step
+
+For anything with **logic** - a mover, a spawner, a sound player, a scroll's state machine - the
+strongest check is the reference model, run over the port's own recorded inputs, compared step
+by step. 1942's `verify_turner.mjs` records every entry to the turner routine (one arcade frame of
+one plane) with the fields and the player position it read, spawns `check_turner.py`, and that
+replays `probe_turner.py`'s model - the same model scored 0 wrong against MAME over the whole
+arcade game - over the port's frames: 0 wrong in 76,386 class-0 and 45,691 class-1 frames
+(2026-10-22). **One model for both sides**: the original's capture judges the model, and the model
+judges the port. `verify_class2`, `verify_side` and `verify_sound` are the same shape.
+
+The template's worked example is the vertical scroll's logic,
+`template/examples/vscroll/tools/record_vscroll.mjs` and `check_vscroll.py`:
+
+1. **Record by hook**: `onExec(main_loop)` - `ypos` and the keys held as the pass begins;
+   `onExec(main_loop.wait_take)` - `ypos` as the pass left it; `onExec(rupt_vsync)` - a field, the
+   take; `onWrite(&FE00, &FE01)` - each CRTC register written and which handler wrote it. Write
+   the events, in order, to a trace file.
+2. **Write the model from the specification, not from the 6502.** The 6502 wraps with a compare
+   and a reload; the model says "one scanline a held key a pass, round a ring of `BUF_ROWS * 8`"
+   in modular arithmetic. The 6502 takes the CRTC address off two tables; the model computes
+   `(BUF_BASE + row * ROW_BYTES) / 8`. Take the geometry constants from the build (`asmConst`),
+   never its formulas.
+3. **Re-seed the model from the port at every step.** Each step starts from the state the port had
+   at the top of that step, not from the model's previous answer, so one wrong step is reported
+   at the step where it happened instead of every step after it differing.
+4. **Exclude by name and count**: events before the first take are "the CRTC holds the boot's
+   values", 1 of them. A residual you cannot name is a defect you have not found.
+5. **One command, one verdict**: the recorder spawns the checker and exits with its exit code, so
+   the suite runner sees one line.
+
+Measured 2026-10-25 (jsbeeb 2.10.2, B-DFS1.2): 5,535 events, 1,951 judged, 0 wrong, 325 takes,
+all eight lines, both wraps, 3.4 s; the `MUTATE=adj` control 36 wrong, exit 1.
+
+---
+
+## 18. Driven runs, and run length as coverage
+
+**A run that presses no key tests the attract screen.** Until 2026-09-15 1942's sprite oracle
+pressed SHIFT to boot and never another key, so in every run it had made the ship never moved,
+never fired and **nothing ever died**: no explosion, no power-up, no wide shot, at half the real
+sprite load. Holding fire doubled the blits. Then **2,600 ticks did not reproduce `BUGS.md` #31 and
+6,000 did** - the run's length was part of what it covered.
+
+1. **Drive it**: hold fire; force the events the run must contain (a death, a power-up of each
+   kind, a sprite at each screen edge) by poking the state the original's own code would set, at
+   the point it would set it - not by a shortcut (the second rule above).
+2. **Hold invincibility for the long runs** (a debug byte, written with its bank named), and run
+   the deaths as their own runs: a run that dies keeps restarting the same stretch.
+3. **Break from tick zero.** A settle before the first sample hides the opening: 1942's take-off
+   and its quiet first four seconds were invisible to every oracle that settled first.
+4. **Order matters within a run**: 1942's `verify_player` runs the death test before the edge
+   clamps, because driving into the top edge for 150 ticks is how the ship gets killed, and after
+   it the life count is pinned at zero and "one life lost" cannot be falsified.
+5. **Play the whole game, not level 1**: a lock-up on stage 28 reached the third release candidate,
+   found by playing, because the suite ran only stage 1 and a boss stage - and those never show
+   the five text lines that overwrote the code (1942 #90). And **ask what the run behind a constant COVERED**:
+   1942 sized a store on a "798 bytes peak" taken on one stage, with no fire held, so nothing ever
+   died and no explosion was blitted; the real worst was 1,364 on stage 28, and the overrun wrote
+   516 bytes into the game state.
+6. **Write the signature of a known false failure into the oracle's doc**: 1942's sprite oracle
+   does not follow a checkpoint restart, and a driven run past a death reads 175 ticks wrong on a
+   correct picture. "175" is the number to recognise, written beside the command.
+
+---
+
+## 19. The floor-fit cost model
+
+"How many objects fit a frame?" is a fit of work against load, and **the mean is useless for it**:
+per-tick work swings by orders of magnitude for reasons that are not the load - 1942's stage seam
+was a 663,371-cycle tick, a death's buffer refill ~660,000 - and a least-squares fit over every
+tick regressed to a **negative** cost a blit. Take the **minimum** work at each load value with at
+least five samples - the clean tick - and fit fixed + slope through those
+(`template/tools/floorfit.mjs`, from 1942's `measure_budget.mjs`):
+
+```bash
+node tools/floorfit.mjs rows.json blits work 79872     # rows: [{blits, work}, ...]
+node tools/floorfit.mjs --selftest                      # the mean fit failing beside it
+```
+
+Collect the rows with two hooks: `onExec(main_loop)` reads the cycle counter at the top of the
+tick and `onExec(<the end of the tick's work>)` reads it again with the load (`nobj`, the blit
+count) beside it. 1942 measured 7,257 fixed + 5,218 a blit, so **13 objects fit** a 79,872-cycle
+tick (2026-09-15). The self-test plants that line with seam-sized outliers on the low counts: the
+floor fit returns 7,289 + 5,218, the mean fit 67,673 and **-506** a blit.
+
+- **Read the slope, not the peak.** The peak is whichever tick was busiest in that run, and it
+  moves between builds that cost the same: decision 103 moved 1942's peak 978 cycles and its
+  slope 7.
+- **Measure before and after as a pair**: same day, same jsbeeb, same run length, same drive.
+- **The emulator version is a variable.** jsbeeb 2.3.0 against 1.25.0, measured the same day on
+  nine of 1942's oracles: all nine passed on both, six reports byte-identical, three different in
+  their numbers (4,528 blits and 74 overruns against 4,543 and 77 over 1,500 ticks). Every harness
+  prints `[jsbeeb x.y.z]`; compare a cycle or blit figure only with one from the same version.
+- A figure from this is MEASURED; label it so (the conventions above), with the run that produced
+  it and its date. A routine-by-routine split of the same tick is 1942's `profile_routines.mjs`
+  shape: a `debugInstruction` hook that resolves each PC **through the paging** - `&8000-&BFFF` by
+  ROMSEL's bank and its ANDY bit, `&C000-&DFFF` by ACCCON's Y - and charges the cycles to the
+  routine it ran in.
+
+---
+
 ## Gaps
 
 Recorded so the next port does not assume they are filled:
@@ -777,7 +1046,12 @@ Recorded so the next port does not assume they are filled:
 - Neither PORT checks in the listing-stream reducer (procedure 13) or the catalogue extractor
   (procedure 12); both were done inline. The kit ships the reducer now (`py/beeb_port_kit/listing.py`,
   2026-09-07); the catalogue extractor is still inline.
-- Paradroid's headless A/B script (procedure 14) survives only as a memory note.
+- Paradroid's headless A/B script (procedure 14) survives only as a memory note. The kit's
+  headless skeleton (`template/tools/harness.mjs`, procedures 16-19) is what to build one on; no
+  A/B *pair* harness - two builds stepped to an equal state in one script - ships with it yet.
+- The headless suite is jsbeeb-only. b2, b-em and real hardware are still checked by hand
+  (procedure 11), and 1942's hardware-only findings - the 1770's head settle, the drive's step
+  rate, BREAK - were found by playing on a Master, not by an oracle.
 - The mid-frame bank flip, the 8K-wrap ring and the display-below-`&3000` rule are measured on
   one or two emulators and on no hardware (procedure 11).
 - Procedure 9's BASIC loop is reconstructed from the doc's description of the method, not
