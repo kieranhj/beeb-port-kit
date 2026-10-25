@@ -856,6 +856,43 @@ includes. A wrong address plays happily for thousands of frames before it runs o
 
 Do not add sound effects the original does not have.
 
+**Own IRQ1V and the MOS's SOUND and ENVELOPE go with it.** Do not re-compose the effects: capture
+the MOS playing the original's own blocks (`template/tools/sfxcapture.mjs`: each SOUND and
+ENVELOPE block fired from a stopped CPU, the chip's writes by tick), fit them as 50 Hz ramps
+(`py/beeb_port_kit/sfx50.py`) and play them from the vsync with `lib/sfx50.6502`. Stryker's Run:
+the interrupts' share of the CPU 10.9% to 2.2%, its 8 effects in 158 bytes (its decision 25), the
+kit's fitter making those 158 bytes again from its capture. The MOS's driver is stateful - in 38
+of 48 pairs an effect started over another ends differently from one started in silence - and
+sfx50 is not: decide whether that matters to the game. Fit with `--pad-end` unless you are
+matching an existing build: without it every effect ends a field early (Stryker's Run's shipped
+effects included).
+
+---
+
+## 9b. A Master game down to a Model B
+
+Stryker's Run's "Redux Lite" took a game that needed a Master - 65SC12 code, shadow RAM, ANDY and
+HAZEL - to a Model B with 64K of sideways RAM in any four banks
+([docs/briefs/model-b-lite.md](https://github.com/kieranhj/strykers-run/blob/main/docs/briefs/model-b-lite.md)). In order:
+
+1. **The instructions.** Write every 65SC12 instruction through `lib/nmos.6502` (one macro each,
+   the instruction's own bytes without `NMOS`, the cheapest legal NMOS form with it), every
+   section `cmos = (NMOS = 0)` so Baron refuses one written raw. Annotate the build without NMOS
+   (`tools/analyse.py annotate`), then `tools/nmosify.py report` and `apply`. After every change run
+   **both** checks: `check` on the build without NMOS (each form's register or flag still free) and
+   `check --nmos` on the build with it (what each form newly reads), because two forms each safe
+   alone can clash. The Master build stays byte-identical. Stryker's Run: 281 sites, at most 683
+   cycles a pass (0.9%).
+2. **The memory.** No ANDY, no HAZEL, no shadow: about 11.5K needed a home. Pack what is used in
+   only one part of the game and unpack it when that part begins before dropping anything; then
+   give cycles back for RAM, and list each trade to win back (its decision 75: the whole world's
+   late frames 126 to 251).
+3. **The banks**: Paradroid's probe and the bank selects patched at start-up (section 5.6).
+4. **The display.** Other machines' shadow RAM does not double-buffer (hardware-facts, Model B),
+   so one screen is raced against the beam: draw in the blank lines and behind the beam, and draw
+   anything the scroll moves under (the player) before the beam reaches it, or it shows a column
+   off (its decisions 77-79; `beamcheck.mjs` there counts the bytes written ahead of the beam).
+
 ---
 
 ## 10. Release

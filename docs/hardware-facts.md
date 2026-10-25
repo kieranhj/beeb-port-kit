@@ -987,6 +987,10 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   vsync and the MOS kept only the tick (decision 14), 2.2% once the game's own 50 Hz sound driver
   replaced the MOS's (decision 25).
   Measured: 2026-10-16, jsbeeb 2.5.0 (`tools/irqprofile.mjs`, frames 4000-5000). [strykers-run docs/step2-layer1.md](https://github.com/kieranhj/strykers-run/blob/main/docs/step2-layer1.md)
+- **MOS 1.20 and MOS 3.20 write the same SN76489 bytes in the same ticks** for the same SOUND and
+  ENVELOPE blocks: Stryker's Run's 8 effects fired from BASIC on jsbeeb's `B-DFS1.2` and Master,
+  and in the game on the Master. A capture made on one fits the other.
+  Measured: 2026-10-25, jsbeeb 2.10.2 (`template/tools/sfxcapture.mjs`).
 - **An interrupt the MOS does not recognise is offered to every paged ROM** (service call 5,
   `&EE72`) before IRQ2V: a User VIA T1 palette split cost 1,165 cycles a field that way. Service
   your own timers and RTI yourself; never chain them.

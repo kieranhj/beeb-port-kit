@@ -505,6 +505,11 @@ code runs more than 512 bytes past its last label; and a hand-written shift map 
 one bank's padding changed direction (Stryker's Run's own `tracediff.mjs` on its current pair).
 Derive the map from both symbol dumps. Source: the kit's `tracediff.mjs`, 2026-10-25.
 
+**An interrupt entry with System VIA T1's flag up is not one MOS tick.** Counting the MOS's ticks
+by IRQ entries with T1's flag set gave 3,192 entries for 1,176 ticks from BASIC, and double counts
+300 cycles apart on a game disc: interrupts nest and re-enter. Place ticks on a grid at T1's period
+(20,000 cycles). Source: the kit's `sfxcapture.mjs`, 2026-10-25.
+
 **A breakpoint in sideways RAM must check ROMSEL.** Two of Stryker's Run's harnesses hooked a PC
 in bank 7 and fired on bank 6's code at the same address: 30 false failures, and 0 ticks counted.
 Source: strykers-run commits `1fd31bd`, `76bff0b`.
@@ -683,6 +688,18 @@ address): a build whose plot calls did nothing diverged within 1,745-4,261 passe
 already skipped 1-6 columns in the original where clipping left the x advanced (BUGS #4). When
 the drawing moves out of the logic, the logic's calls still walk the sprite as the plotter did.
 Source: [strykers-run decision 21](https://github.com/kieranhj/strykers-run/blob/main/docs/decisions.md), [strykers-run BUGS.md #4](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
+
+**Two substitutions each safe alone can clash.** Stryker's Run's NMOS conversion chose each
+65SC12 instruction's NMOS form from the flags and registers free at its site; a `CLC : ADC #1`
+form put before a `BRA` that had been turned into a branch on C changed the C it tested, and a `BIT
+abs,X` form changed the V a later `BVS` read. Each check of one site passed; only a second check
+on the converted build, of what each form newly reads, sees the pair.
+Source: [strykers-run docs/briefs/model-b-lite.md](https://github.com/kieranhj/strykers-run/blob/main/docs/briefs/model-b-lite.md) step 1.
+
+**An annotation goes stale when the sources move.** A tool that matches the analysis's annotated
+lines to today's sources by line reports failures that are only drift (Stryker's Run's own
+`nmosify` gave 47 against an annotation the kit's, which reads the annotation alone, gave 0). Re-
+annotate before trusting a line-matched result. Source: the kit's `nmosify.py`, 2026-10-25.
 
 **A walk past a table's end reads the next table as data, harmlessly until that table changes.**
 Stryker's Run's scenery walk, near the end of the world, reads past `scenery_data_two` into the

@@ -1119,6 +1119,17 @@ are caught at frames 99 and 110, `tracediff` naming the write and the label.
   the CRTC-derived crop cannot describe, and before calling a clip's silence a capture fault check
   the chip's write count: a game may simply be silent there.
 
+## 23. Two small oracles from the Model B work
+
+- **Semantic equivalence by random states** (`lib/test/nmos_test.py`, with py65): each NMOS form
+  and the 65SC12 instruction it replaces run on two simulated CPUs from 400 random states that meet
+  the form's precondition (the register known 0, the flag known), and the results compared: 34
+  sites, 0 differences. The control that makes it believable: weaken four preconditions and 156 of
+  1,700 trials differ.
+- **A chip-register replay** (`lib/test/sfx50_test.mjs`): two fitted effects played at once by
+  `lib/sfx50.6502` under `lib/irq.6502`, the SN76489's registers read at every vsync against the
+  fitter's own field-by-field model, then silence: 0 wrong on the Master and the B.
+
 ---
 
 ## Gaps
