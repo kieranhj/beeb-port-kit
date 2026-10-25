@@ -51,6 +51,14 @@ CC = cc
 # Set by the `release` and `master` targets through a recursive make.
 RELEASE = 0
 MASTER  = 0
+# The relocation proof (tools/lockstep.mjs, tracediff.mjs): Game SHIFT bytes
+# higher, or with SHIFT_END=1 the same padding at its end, where it moves
+# nothing - the control. 0 on every ordinary build, which they leave
+# byte-identical. `make SHIFT=256 STEM=game-shift256` and
+# `make SHIFT=256 SHIFT_END=1 STEM=game-shift256end` are build.ps1's
+# -Shift 256 and -Shift 256 -ShiftEnd.
+SHIFT     = 0
+SHIFT_END = 0
 # The disc's boot option, 2 on every build: SHIFT+BREAK *RUNs !BOOT, the
 # stub boot_stamp.6502 assembles, which prints the build stamp and runs the
 # game. Never 3: an *EXEC boot writes into DFS's &1100-&1900 (lib/loader.6502
@@ -92,7 +100,7 @@ ZX02SRC = \
 # target whose recipe RAN as updated - so everything would rebuild, always.
 all:
 	@$(PYTHON) tools/build_stamp.py $(BUILD) $(STEM).config \
-	    RELEASE=$(RELEASE) MASTER=$(MASTER)
+	    RELEASE=$(RELEASE) MASTER=$(MASTER) SHIFT=$(SHIFT) SHIFT_END=$(SHIFT_END)
 	@$(MAKE) $(SSD)
 
 debug: all
@@ -109,7 +117,7 @@ master:
 # name (`make build/game.ssd`); `all` always stamps first.
 $(CONFIG):
 	$(PYTHON) tools/build_stamp.py $(BUILD) $(STEM).config \
-	    RELEASE=$(RELEASE) MASTER=$(MASTER)
+	    RELEASE=$(RELEASE) MASTER=$(MASTER) SHIFT=$(SHIFT) SHIFT_END=$(SHIFT_END)
 
 # Baron's own image. NOT bootable: the loader expects a compressed PANEL.
 # A failed assembly removes it, so a half-written image never looks current.
@@ -117,7 +125,7 @@ $(CONFIG):
 # literal address); warnings go to stderr and never change the exit code.
 $(RAW): $(SRC) $(CONFIG)
 	$(BARON) --warn 2 -o $(RAW) --title $(TITLE) --opt $(BOOTOPT) \
-	    -D RELEASE=$(RELEASE) -D MASTER=$(MASTER) \
+	    -D RELEASE=$(RELEASE) -D MASTER=$(MASTER) -D SHIFT=$(SHIFT) -D SHIFT_END=$(SHIFT_END) \
 	    --symbols $(SYMS) -v src/main.6502 \
 	    > $(LST) || { rm -f $(RAW) $(SYMS); exit 1; }
 

@@ -25,6 +25,17 @@
 \ *	  MASTER      0/1  the Master 128 path: loader.6502's load_hazel
 \ *	                   and unpack_andy assemble, and the stamp says so. The
 \ *	                   template uses no shadow RAM, ANDY or HAZEL.
+\ *	  SHIFT       n    the relocation proof (tools/lockstep.mjs and
+\ *	                   tracediff.mjs): n bytes of padding at the start of
+\ *	                   Game, so its code runs n bytes HIGHER; 0 is every
+\ *	                   ordinary build. A whole number of pages, so every
+\ *	                   page crossing stays where it was
+\ *	  SHIFT_END   0/1  the shift's CONTROL: the same n bytes at Game's END,
+\ *	                   where they move nothing, so the two discs hold files
+\ *	                   of the same sizes in the same places, load in the
+\ *	                   same time, and run cycle for cycle alike while every
+\ *	                   address moved with its target (Stryker's Run's
+\ *	                   decision 7)
 \ *	Baron has no TIME$, so the build's timestamp comes from a file
 \ *	tools/build_stamp.py writes before assembling, build/build_time.6502,
 \ *	holding one line: BUILD_TIME = "07 Sep 2026 15:47:31" - the source's
@@ -41,6 +52,8 @@ INCLUDE "../build/build_time.6502"      ; BUILD_TIME, written by the build scrip
 
 ASSERT (RELEASE = 0) OR (RELEASE = 1)
 ASSERT (MASTER = 0) OR (MASTER = 1)
+ASSERT (SHIFT AND &FF) = 0, "SHIFT must be whole pages"
+ASSERT (SHIFT_END = 0) OR (SHIFT_END = 1)
 
 \ ---- debug flags: add every new one to DEBUG_ANY and to BUILD_STAMP -
 DEBUG_ANY     = 0
@@ -205,6 +218,7 @@ ZA_AUTO1 fill_unit
 \ *	where *RUN Game enters; `guard` is the screen it must not reach.
 \ ******************************************************************
 SECTION Game, org = CODE_ORG, guard = CODE_TOP, filename = "Game", exec = main
+    SKIP SHIFT * (1 - SHIFT_END) ; the relocation test: everything after it SHIFT higher
 .start
 
 .main
@@ -284,6 +298,7 @@ SECTION Game, org = CODE_ORG, guard = CODE_TOP, filename = "Game", exec = main
     bpl not_left
     sec                         ; scroll -= STEP, wrapping below 0
     lda scroll
+    step_left = * + 1           ; the operand: pairlock.mjs's negative control pokes it
     sbc #SCROLL_STEP
     sta scroll
     lda scroll+1
@@ -469,6 +484,7 @@ INCLUDE "lib/boot_stamp.6502"
 .panel_filename EQUS "PANEL", 13
 
 .end
+    SKIP SHIFT * SHIFT_END      ; the relocation control's padding
 ENDSECTION
 
 \ ******************************************************************
@@ -497,6 +513,7 @@ ENDSECTION
 MACRO BUILD_STAMP
     BOOT_STAMP_HEAD "beeb-port-kit template"
     BOOT_FLAG MASTER, "MASTER: Master 128 build"       \ legal under RELEASE
+    BOOT_FLAG SHIFT, "SHIFT: a relocation test build"  \ the same in both halves of the pair
     BOOT_STAMP_TIME
 ENDMACRO
 

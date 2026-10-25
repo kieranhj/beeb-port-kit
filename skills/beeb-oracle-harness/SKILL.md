@@ -87,6 +87,15 @@ is a worked one.
    switch that pokes one byte; `verify_cmds.py` marks the line `expect: 1`). An oracle never seen
    failing has not been shown able to.
 
+**For "the change left the game alone"** - an optimisation, a renderer against its
+draw-everything twin, a relocation - the oracle is the other build, and the template has the
+pair already: `tools/pairlock.mjs CONFIG CONTROL.ssd TEST.ssd` gives both builds the same keys
+per game-loop PASS (so a faster build plays the same game) and compares the config's state
+ranges, and with `--screen` the shown screen, at the start of every pass; `--poke P:ADDR=B` is
+its negative control. `tools/lockstep.mjs` and `tracediff.mjs` are the relocation proof
+(`build.ps1 -Shift 256` against `-Shift 256 -ShiftEnd`). A config is a few lines
+(`template/examples/pairlock/`); do not write another pair harness.
+
 10. **Add its line to `tools/verify_cmds.py`** with the reason the run exists beside it, and run
     the suite (`beeb-run-suite`). Record the figure with the jsbeeb version, the date and what the
     run covered: "0 wrong of 1,951, 325 takes, both wraps, jsbeeb 2.10.2, 2026-10-25".
