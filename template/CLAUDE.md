@@ -4,11 +4,22 @@ Guidance for Claude Code when working in this repository. This is a port started
 beeb-port-kit template; `../PORTING.md` (or the kit's copy) is the method, `PLAN.md` the live
 plan, `docs/decisions.md` the record.
 
+**THIS FILE HAS A BUDGET: about 40K, and it is loaded every session.** It holds rules, measured
+facts and traps - nothing else. What landed and how goes to `docs/done.md`; an oracle's long
+description to a docs file of its own; a figure that moves on every edit (free bytes, cycle
+counts) is read off the build, and this file says where, not what; anything per level or per
+asset is a generated page. 1942-beeb's grew 22K -> 167K before it was cut back to 31K, and every
+session paid for the difference.
+
 ## Project overview
 
 A port of *[the original]* to the BBC Micro, in 6502 assembly for [Baron](https://github.com/waitingforvsync/baron) (BeebASM's successor - `../docs/toolchain-baron.md` says what differs). **`PLAN.md` is the
 live planning document**: read it before starting work. Completed layers keep their notes in
-`docs/`, one file per layer, plus `docs/decisions.md`.
+`docs/`, one file per layer, plus `docs/decisions.md`. After the layers, work comes as **briefs**
+(`docs/brief-*.md`, from `docs/brief-TEMPLATE.md`): one per job too big or too cross-cutting for a
+layer - a level set, a boss, the front end, a RAM hunt - each saying at its top whether it is a
+PROPOSAL, a PLAN, BUILT or SUPERSEDED. **`docs/done.md`** is what has landed, with the number that
+says so: a line leaves `PLAN.md` by moving there, never by being deleted.
 
 ## The four rules
 

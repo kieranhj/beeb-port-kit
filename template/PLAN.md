@@ -2,7 +2,9 @@
 
 The live plan. One paragraph per layer, revised as work proceeds; the layer numbering is
 `../PORTING.md` §4's. A layer is done when it is visible in the emulator and its `docs/` file,
-its `docs/decisions.md` rows and this page are written.
+its `docs/decisions.md` rows and this page are written. **This page is what is LEFT**: a finished
+item leaves it, and its evidence moves to `docs/done.md`. Someone should be able to read it in two
+minutes.
 
 ## State
 
@@ -27,6 +29,12 @@ once** (decision 4, added the same day at KC's request), and every kit piece has
 | 10 | **Art.** The hand-authored pass and its pipeline | TODO |
 | 11 | **Balance, memory, compatibility.** | TODO |
 | 12 | **Release.** Release build, redefinable keys, pause, the padded disc, publication | TODO |
+
+## Briefs
+
+After the layers, work comes as briefs (`docs/brief-*.md`, from `docs/brief-TEMPLATE.md`), one per
+job, in the owner's priority order: one line each here - what is left, why it matters, the brief,
+and the decision it waits on. None yet.
 
 ## Parked
 
