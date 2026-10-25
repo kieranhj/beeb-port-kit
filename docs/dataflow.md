@@ -164,3 +164,95 @@ The rules, the same as beebgame's README "a suggested farm", which is where they
 
 Mechanical edits that are meant to change nothing else still get `beeb-identical-build`'s
 listing-stream diff.
+
+## An interrupt that exits into the MOS: `isr_model.py` (2026-10-25)
+
+Upstream takes the interrupt (`ISR_ROOTS`) to read and write ALL memory if anything it reaches
+has an exit the analysis cannot follow - a `JMP` to the MOS, a `JMP (vector)`, a self-modified
+operand - or a store through a pointer. Then no byte is a known value anywhere, and the ranges,
+known values and the findings built on them go. `lib/irq.6502` ends in `RTI`, so the template
+never meets it; a handler that chains to the MOS to keep its tick, or a music handler that calls
+OSWORD through `JMP (WORDV)`, does. Every one of Stryker's Run's did, and its analysis knew no
+memory byte until it wrote `tools/isr_model.py` (2026-10-16).
+
+`template/tools/isr_model.py` is that file. `tools/analyse.py` installs it in the analysis's
+own process (`tools/dataflow/` untouched: its SHA-256 check still passes) when
+`dataflow_config.py` sets `ISR_MODEL = True`; it is off in the template. Then each site in
+`ISR_MOS_EXITS` (`'file:line'` as `report.md`'s notes print it) is the MOS, returning having
+touched only `MOS_WORKSPACE` (ranges you declare: an ASSUMPTION from the memory map, the
+config's comment has Stryker's Run's); `ISR_POINTER_STORES` bounds a store through a pointer;
+`ISR_PRESERVES` names what a handler saves and restores. Any exit not named still means all
+memory, with a note naming it; a site named but not reached stops the run (exit 1), so a site
+gone stale when code moved is an error. `report.md`'s Model notes say which were modelled.
+
+`--config` goes BEFORE the job: `python tools/analyse.py --config F report`. After it,
+argparse puts `--config F` among the pass-through extras, so the default config is passed too,
+first; upstream takes the last, and the hook does likewise since 2026-10-25 (Stryker's Run's
+took the first, and with `report --config F` ran without the model while upstream read F).
+
+**Measured, 2026-10-25:**
+
+- The template, `ISR_MODEL` off (the default): `report`'s output and every file in
+  `build/dataflow/` identical to before the hook (6 findings, 11 bytes; the interrupt reads 9
+  and writes 6 universe bytes). On (`--config` a copy with `ISR_MODEL = True`): the same
+  findings and the same 9/6 bytes, and the model's note.
+- A copy whose `irq_handler` ends `JMP irq_chain` to a `JMP &FFFF` patched with the old IRQ1V
+  (a chain to the MOS): off, the interrupt reads and writes all 33 universe bytes and 6 findings
+  (10 bytes) - `reg_xfer` gone, since nothing is known across it. On, with the `JMP &FFFF`
+  named and Stryker's Run's `MOS_WORKSPACE`: reads 12, writes 10, and 7 findings (12 bytes),
+  the `reg_xfer` back. On with nothing named: the note "unknown exit at src/lib/irq.6502:141
+  (jmp $FFFF)" and all memory, as upstream. A named site the interrupt does not reach: "isr_model:
+  the config names sites the interrupt does not reach", exit 1.
+
+## Using it to take a Master port down to a Model B: `nmosify.py` (2026-10-25)
+
+From Stryker's Run (its decision 73, `docs/briefs/model-b-lite.md` step 1). A Master port's
+65SC12 instructions are rewritten as `lib/nmos.6502`'s macros, one per instruction at a site,
+each named for the NMOS form its state allows; the annotation (`python tools/analyse.py
+annotate`) is the state. `template/tools/nmosify.py`:
+
+```
+python tools/nmosify.py [--v-dead] report        # every site, its form; MANUAL for the rest
+python tools/nmosify.py [--v-dead] apply         # the sources rewritten
+python tools/nmosify.py [--v-dead] check         # on the build WITHOUT NMOS: every form still allowed
+python tools/nmosify.py [--v-dead] check --nmos  # on the build WITH NMOS: what the forms newly read
+```
+
+The rules are `nmos.6502`'s: a register known 0 for an `STZ` (free), else a dead one loaded with
+0; a flag known for a `BRA` (free), else `JMP`; `INC A`/`DEC A` by `ADC`/`SBC #1` where C is
+known and C, V dead, else `CLC`/`SEC` first, else through a dead X or Y; `PHX`..`PLY` through a
+dead A. `TSB`, `TRB`, `BIT #`, `BIT zp,X`, `(zp)` and anything after a `:` are MANUAL: an `IF
+NMOS ... ELSE ... ENDIF` by hand, which the report then counts as `IF NMOS`. A form the analysis
+cannot prove (`STZ_PHA`, `BVC_BIT6`) is checked by reading its callers and its line marked
+`(hand`.
+
+**Both checks, always.** `check` proves each form's register or flag free in the 65SC12 code;
+it cannot see what an NMOS form newly READS, because there the instruction reads nothing.
+`check --nmos` reads the NMOS build's annotation: a `BRA_xx`'s flag, an `STZ_A`'s zero
+register, an `INC_A_ADC`'s C, as the other forms leave them. Stryker's Run found two clashes
+that way, each from two forms safe alone; the kit's demonstration (below) makes one. Each
+refuses an annotation of the wrong build (exit 2): an NMOS form of several instructions is
+annotated one state per instruction only in the NMOS build.
+
+**V.** The analysis keeps V live almost everywhere (few instructions write it), so the `INC A`
+forms that need C and V dead are rarely allowed. `--v-dead` takes V as dead but where a
+`BVC`/`BVS` reads it straight after a `BIT`, `ADC`, `SBC`, `CLV`, `PLP` or `RTI`, and checks
+that claim over the whole annotation first (a V reader after a label, or after anything else,
+refuses it). Stryker's Run assumed it in `check` alone, by hand; here both halves take it.
+
+**Measured, 2026-10-25:**
+
+- The template has no 65SC12 instruction: `report` 0 sites, `check` 0, exit 0.
+- A copy of the template with seven written into `fill_play` (two `STZ`, `PHX`/`PLX`, two `INC
+  A`, a `BRA`), its section `cmos = (NMOS = 0)`: `report --v-dead` chose `STZ_LDA` x2, `PHX_A`,
+  `PLX_A`, `INC_A_CLC` x2, `BRA_CS` (10 bytes at most); `apply`; rebuilt without `NMOS`, the
+  disc byte-identical to before; `check` 7 hold; built with `NMOS` (assembles under `cmos =
+  FALSE`); `check --nmos`: **1 DOES NOT** - the `BRA_CS` after the `INC_A_CLC`, whose `CLC`
+  leaves C unknown at the branch. The clash, by construction, and only the second half sees it.
+- Stryker's Run's own annotation (read-only, a build without `NMOS`, 2026-10-25 01:52):
+  `check --v-dead` 292 hold, 16 by hand, 10 not in that build, 0 no longer hold; `report` 41
+  sites, all in `IF NMOS` blocks. Without `--v-dead`, 2 `INC_A_CLC` fail on V (Stryker's Run
+  dropped V in `check` only). Its own copy of the tool, which zips the annotation against the
+  current sources by line, reported 47 failures on the same annotation: the sources had moved
+  since it was made. The kit's reads the annotation alone (the source text is in it), and
+  `apply` refuses a line that no longer matches.

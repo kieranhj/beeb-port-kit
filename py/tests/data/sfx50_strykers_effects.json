@@ -1,0 +1,10 @@
+[
+{"key": "0", "name": "00", "sound_channel": 16, "what": "explosion: noise (soldier, helicopter, grenade)"},
+{"key": "8", "name": "08", "sound_channel": 17, "what": "exploding soldier, grenade: tone 2 sweep, silent (the noise's pitch)"},
+{"key": "16", "name": "10", "sound_channel": 17, "what": "exploding helicopter: tone 2 sweep, silent (the noise's pitch)"},
+{"key": "24", "name": "18", "sound_channel": 19, "what": "firing grenade"},
+{"key": "32", "name": "20", "sound_channel": 18, "what": "firing bullet"},
+{"key": "40", "name": "28", "sound_channel": 18, "what": "player landing"},
+{"key": "48", "name": "30", "sound_channel": 19, "what": "player jumping"},
+{"key": "56", "name": "38", "sound_channel": 16, "what": "exploding grenade: noise"}
+]
