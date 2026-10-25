@@ -1038,6 +1038,89 @@ floor fit returns 7,289 + 5,218, the mean fit 67,673 and **-506** a blit.
 
 ---
 
+## 20. Keys by pass: the A/B pair harness
+
+Two builds that must play the same game - an optimisation against its control, a renderer
+against its draw-everything oracle, a fix against the build before it - are driven by game-loop
+**pass**, not by frame. A faster build is further into its loop when a frame-timed key goes down,
+and plays another game: Stryker's Run's first frame-timed costing tools reported 31 late frames
+where the same seed by pass gave 41 ([layer 4 costing](https://github.com/kieranhj/strykers-run/blob/main/docs/step2-layer4-costing.md)).
+
+```bash
+node tools/pairlock.mjs CONFIG CONTROL.ssd TEST.ssd [--passes N] [--seed S] [--screen]
+node tools/pairlock.mjs CONFIG BUILD.ssd BUILD.ssd --poke 50:ADDR=B      # the negative control
+node tools/passbench.mjs CONFIG DISC [DISC2 ...]                         # speed on the same game
+```
+
+`template/tools/passplay.mjs` is the one keys-by-pass module (the seeded generator and the
+driver); the config (`template/examples/pairlock/`) names the loop label whose execution counts a
+pass, the state ranges to compare, the start presses, and how to pin anything seeded from a timer
+or from the boot's length. `pairlock` stops each machine at the start of every pass, compares the
+state (and with `--screen` the shown screen, by ACCCON's D), then sets that pass's keys; exit 1
+names the first differing pass, range and bytes, and a run whose state never changed also fails.
+
+1. **Run the build against itself first** (exit 0) **and against a `--poke`** (exit 1 at or after
+   the poked pass). Without both, a pass that compared nothing looks like a pass.
+2. **Seed the randomness.** A game whose random numbers come from a VIA timer read does not
+   replay; replace them with a seeded generator, or, to compare with an original you may not
+   change, have the emulator put the generator's byte in A after the original's timer read without
+   touching its RAM (Stryker's Run's `sidebyside.mjs`; sketched in `template/tools/video.mjs`).
+3. **Fill what the emulator zeroes alike in both machines** (HAZEL, on a Master: Stryker's Run's
+   mountains read it, BUGS #9).
+4. **After a fix that changes the game, undo the bug in the control's emulator** rather than
+   compare two games: Stryker's Run's gate called a fix 71.6 cycles a pass slower until the old
+   build's clobber was undone (`--unclobber`), and then it was 33.0 faster
+   ([BUGS #12](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md)).
+
+Measured 2026-10-25, jsbeeb 2.10.2: the template against itself 600 passes, exit 0 on B and
+Master, its poke caught at pass 54; on Stryker's Run's discs the kit's `pairlock` gave its own
+`passlock`'s verdict on every pair tried (identical; a poked table first differing at pass 1,369;
+an NMOS build's screen at pass 1,762).
+
+## 21. The relocation proof
+
+For a source rebuilt from a disassembly, or any source that claims every address is a symbol:
+build it with the code moved by a whole number of pages and a control with the same padding
+elsewhere (`build.ps1 -Shift 256` and `-Shift 256 -ShiftEnd`; `make SHIFT=256 [SHIFT_END=1]`), so
+both discs hold files of the same size, load in the same time and keep every page crossing. A
+correct relocation then runs **cycle for cycle** like the control, even with VIA-timer
+randomness.
+
+```bash
+node tools/lockstep.mjs CONFIG CONTROL.ssd SHIFTED.ssd [--frames F]      # the first frame that differs
+node tools/tracediff.mjs CONFIG CONTROL.ssd SHIFTED.ssd [--start LABEL]  # the first instruction or write
+```
+
+`tracediff` matches the two builds' program counters through both symbol dumps - each section's
+extent and labels, so a loader overlaid under the game and generated code far past its last label
+are matched too - and refuses a pair whose labels moved by anything but whole pages. A write that
+differs under the same control flow is a data address that did not move; a PC that differs is a
+jump that did not. Stryker's Run's proof was 30,000 frames identical (its decision 7), and it found
+two places where the original's behaviour depended on its layout. Prove the instrument with a
+deliberately broken shifted build: the template's two (a table read and a `JMP` left absolute)
+are caught at frames 99 and 110, `tracediff` naming the write and the label.
+
+## 22. Watches and profiles inside any harness
+
+- **`node --import ./tools/memwatch.mjs tools/ANY_HARNESS.mjs ...`** (`MEMWATCH=a2-a6,bc-bd`,
+  `MEMWATCH_PHASES=name@label`, `MEMWATCH_BANKS=SECTION:bank`) records every read, write and
+  execute of those addresses in that harness's machines, by phase, with the code that made each.
+  **"No access" is a claim about the paths that harness ran**: repeat it under the harnesses that
+  reach a death, the game over, the front end and the end of the game (Stryker's Run's generator
+  was put on bytes a 30,000-frame watch had cleared and a death routine used, BUGS #12). jsbeeb
+  reports a zero-page read's address but not its value.
+- **`irqprofile.mjs DISC`** charges every interrupt to the VIA flags it cleared, and the MOS's
+  share to the innermost subroutine it called, keeping a stack because the MOS's tick re-enables
+  interrupts. Re-run 2026-10-25 on Stryker's Run's original: 18.8% of the CPU in interrupts (its
+  layer 1 recorded 21.0% on jsbeeb 2.5.0), the tick 13.9%.
+- **`pcprof.mjs DISC`** is the per-instruction profile the grind weights its windows by.
+- **`video.mjs DISC OUT.mp4`** records fields at 50 fps with the SN76489 muxed in (ffmpeg from
+  `--ffmpeg`, `$FFMPEG`, the PATH or imageio-ffmpeg). Give the crop by hand for a rupture, which
+  the CRTC-derived crop cannot describe, and before calling a clip's silence a capture fault check
+  the chip's write count: a game may simply be silent there.
+
+---
+
 ## Gaps
 
 Recorded so the next port does not assume they are filled:
@@ -1046,9 +1129,9 @@ Recorded so the next port does not assume they are filled:
 - Neither PORT checks in the listing-stream reducer (procedure 13) or the catalogue extractor
   (procedure 12); both were done inline. The kit ships the reducer now (`py/beeb_port_kit/listing.py`,
   2026-09-07); the catalogue extractor is still inline.
-- Paradroid's headless A/B script (procedure 14) survives only as a memory note. The kit's
-  headless skeleton (`template/tools/harness.mjs`, procedures 16-19) is what to build one on; no
-  A/B *pair* harness - two builds stepped to an equal state in one script - ships with it yet.
+- Paradroid's headless A/B script (procedure 14) survives only as a memory note. The A/B pair
+  harness it wanted ships since 2026-10-25 (procedure 20, from Stryker's Run); until then this
+  entry said none did.
 - The headless suite is jsbeeb-only. b2, b-em and real hardware are still checked by hand
   (procedure 11), and 1942's hardware-only findings - the 1770's head settle, the drive's step
   rate, BREAK - were found by playing on a Master, not by an oracle.

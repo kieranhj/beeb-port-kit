@@ -1455,6 +1455,11 @@ again.*
   (12.68 s to 12.38 s). Packing the files with ZX02 shrank the disc 40% but saved only ~1 s of a
   12 s boot, the unpack costing ~60 cycles a byte written. Measured: 2026-10-24, jsbeeb 2.10.2.
   [strykers-run docs/done.md](https://github.com/kieranhj/strykers-run/blob/main/docs/done.md)
+- **Where the picture is in jsbeeb's framebuffer**: x = (R0 + 1 - R2 - (R3 AND 15) / 2) x a
+  character's width - 8, y = (lines - R7 x (R9 + 1)) x 2, a character 8 pixels wide at 2 MHz and 16
+  at 1 MHz, a scanline two rows. Every MOS mode 0-2 and 4-5 puts it at (200, 64), 640 x 512, on the
+  B and the Master; Stryker's Run's game screen at (200, 112), 640 x 400. Not valid under a rupture.
+  Measured: 2026-10-25, jsbeeb 2.10.2 (`template/tools/capture.mjs`).
 - **A memory watch sees a zero-page read's address but not its value**, so a liveness count by
   watch counts by address; check the source for indexed accesses that could reach the byte.
   Measured: 2026-10-18, jsbeeb 2.5.0. [strykers-run BUGS.md #12](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md)

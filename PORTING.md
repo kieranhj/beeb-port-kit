@@ -972,6 +972,22 @@ order of importance:
     left shut, the suite detached with its output outside the home folder, no publishing, and a
     branch ledger in the report.
 
+### The micro-optimisation grind
+
+Once a port is correct and its suite compares a build against its control by pass (verification
+procedure 20), the skill `beeb-micro-grind` grinds the whole program: beebgame's analyses annotate
+every instruction, the code is cut into 32-instruction windows weighted by measured cycles
+(`pcprof.mjs`), optimiser agents propose and skeptic agents try to refute, and survivors go in one
+at a time through the gate, kept only if every check passes and the game is no slower
+(`template/tools/grind.py`, `grind_config.py`). Before the first round: a no-op gate within its
+noise, a negative control the gate refuses, and a check for every rarely-taken path. Stryker's Run
+kept 256 of 580 candidates; a pass's work went 43,036 to 39,112 cycles in round 1 and 34,422 to
+31,869 in round 3. The commonest losers: optimising the wrong common case; a byte saved that
+slides a hot branch across a page (20-60 cycles a pass); a `JSR label+1` caller broken on a path
+the gate never ran (its BUGS #11). It costs hundreds of agents a round, and after a gate `build/`
+holds the gate's last build: rebuild before reading it.
+([docs/grind/README.md](https://github.com/kieranhj/strykers-run/blob/main/docs/grind/README.md))
+
 ---
 
 ## 13. Where to look in the ports

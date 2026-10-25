@@ -493,6 +493,18 @@ assignments. `worldcheck` read only labels, so every address was `undefined`, bo
 same byte, and "6,119 records, none differing" proved nothing. A harness takes every address from
 the dump, both kinds, and a missing name is an error. Source: [strykers-run BUGS.md #10](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
 
+**A top-level name and a scope's local label can share a name.** Stryker's Run's zero-page `lives`
+(`&95`, an assignment) and two routines' local `.lives` labels: a symbol loader that also offers
+the leaves of scopes refused `lives` as ambiguous. The exact top-level name wins.
+Source: the kit's `harness.mjs`, 2026-10-25.
+
+**Map one build's program counters to another's by every section that covers them, not by the
+nearest label.** Matching a shifted build to its control by "the nearest label below the PC" gave
+false divergences where main RAM is overlaid (a loader's code under the game) and where generated
+code runs more than 512 bytes past its last label; and a hand-written shift map went stale when
+one bank's padding changed direction (Stryker's Run's own `tracediff.mjs` on its current pair).
+Derive the map from both symbol dumps. Source: the kit's `tracediff.mjs`, 2026-10-25.
+
 **A breakpoint in sideways RAM must check ROMSEL.** Two of Stryker's Run's harnesses hooked a PC
 in bank 7 and fired on bank 6's code at the same address: 30 false failures, and 0 ticks counted.
 Source: strykers-run commits `1fd31bd`, `76bff0b`.
@@ -501,7 +513,10 @@ Source: strykers-run commits `1fd31bd`, `76bff0b`.
 the beam position of every CRTC and ACCCON write, and the writes were right; but with ACCCON's D set
 the video read ANDY below `&3000`, so the HUD flickered garbage on every shadow field (the
 screenshots happened to be main-screen fields). The check now samples what the video reads at
-every instruction while it displays. Source: [strykers-run BUGS.md #15](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
+every instruction while it displays. The same goes for a capture: a picture cropped from the
+CRTC's registers is wrong under a rupture, which reprograms them mid-field, and a silent clip may
+be a silent game - count the chip's writes before blaming the capture.
+Source: [strykers-run BUGS.md #15](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
 
 ---
 
