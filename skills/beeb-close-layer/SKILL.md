@@ -1,6 +1,6 @@
 ---
 name: beeb-close-layer
-description: Close out a layer of a BBC Micro port - the layer doc with what was measured and rejected, a decisions.md row per deviation, PLAN.md and BUGS.md updated, the memory gauge read from the listing into memory-map.md with the date, every debug flag combination assembling, the smoke test passing, and a commit with the measurement in its body. Use when a layer is working in the emulator and the user says it is done, or before starting the next layer.
+description: Close out a layer (or a brief) of a BBC Micro port - the layer doc with what was measured and rejected, a decisions.md row per deviation with its Status, PLAN.md cut and the evidence moved to docs/done.md, BUGS.md updated, the memory gauge read from the listing into memory-map.md with the date, every debug flag combination assembling, the smoke test passing, and a commit with the measurement in its body. Use when a layer is working in the emulator and the user says it is done, or before starting the next layer.
 ---
 
 # Close a layer
@@ -11,7 +11,8 @@ starts; the rejected options in the doc are the valuable half, because they are 
 next session re-litigating them.
 
 **Layer doc:** `docs/layer-N-<name>.md`
-**Decisions:** `docs/decisions.md` - the only copy; one numbered, dated row per deviation
+**Decisions:** `docs/decisions.md` - the only copy; one numbered, dated row per deviation, with a Status
+**Landed:** `docs/done.md` - what landed, with the number that says so; the other half of `PLAN.md`
 **Memory figures:** from `build/<NAME>.lst`, never from an earlier doc
 **Commit body:** the measurement ("0 of 16,384, both banks", "6,155 cycles a sprite", "byte-identical")
 
@@ -23,13 +24,18 @@ next session re-litigating them.
    the winning design will be argued with.
 
 2. **A row in `docs/decisions.md` for every deviation from the original and every choice the
-   hardware forced**, numbered on from the last row, dated, with the reason and a link to the
-   layer doc section. If the layer reversed an earlier decision by measurement, that is a *new*
-   row saying so, not an edit to the old one. Nothing is re-litigated without a new row.
+   hardware forced**, numbered on from the last row, dated, with its **Status** (`AGREED` once
+   the owner has said yes; `TAKEN` if you took it while they were away), the reason in a line and
+   a link to the layer doc section - the evidence lives there, not in the row. If the layer
+   reversed an earlier decision by measurement, that is a *new* row saying so, and the old one's
+   Status becomes `SUPERSEDED by N`. What was costed and refused goes in the "Rejected, do not
+   re-litigate" table. Then `python -m beeb_port_kit.check_decisions docs/decisions.md`.
 
 3. **Update `PLAN.md`**: tick the layer's row, move the detail that no longer drives the next
    decision into the layer doc, and rewrite "where we are" and "what is left". Cut it when it
-   stops driving the next decision - Paradroid's went from 535 lines to 156.
+   stops driving the next decision - Paradroid's went from 535 lines to 156. **The layer's
+   evidence goes to `docs/done.md`** (what landed, the number, the commit), so a line can leave the
+   plan without the evidence leaving with it.
 
 4. **Update `BUGS.md`**: mark what the layer fixed (with the layer name; fixed entries stay for
    what they ruled out), add anything found and not fixed with its evidence. A path the layer
@@ -81,7 +87,10 @@ next session re-litigating them.
 
 8. **Update the rules file** if the layer measured a new hardware fact (into "Confirmed
    hardware facts", with the readback), changed the build, or moved a region. A rules file that
-   is wrong is fixed the same day.
+   is wrong is fixed the same day. **Keep it inside its budget** (about 40K): the rule and the
+   trap go in, the story of how they were found goes to `docs/done.md`, and a figure that moves
+   on every edit is replaced by where to read it. 1942's grew to 167K one honest addition at a
+   time; if it is over, run `beeb-doc-pass` before the next layer.
 
 9. **Commit, one mechanism per commit, with the measurement in the body.** Doc-sync commits
    are separate and frequent. Confirm with the user before committing unless they already asked.
@@ -94,4 +103,6 @@ next session re-litigating them.
    ```
 
 10. **Then, and only then, start the next layer** - reading its worked example in PORTING.md §4
-    first, because it records what was tried and rejected there.
+    first, because it records what was tried and rejected there. **After the layer table**, work
+    comes as briefs (`docs/brief-*.md` from `docs/brief-TEMPLATE.md`, PORTING.md §3.1): closing one
+    is these same steps, plus its "what landed" section and its status line changed to BUILT.
