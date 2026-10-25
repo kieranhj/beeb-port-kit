@@ -27,8 +27,9 @@
 \ *	    100 Hz, this at 50, sampled every second tick).
 \ *	  - No request on most fields: sfx_tick is 19 cycles then (+ the
 \ *	    channels playing; JSR to RTS).
-\ *	The MOS's driver is stateful (38 of 48 effect pairs end differently
-\ *	over another effect than from silence, Stryker's Run layer 3); this
+\ *	The MOS's driver is stateful (27 of 48 effect pairs end differently
+\ *	over another effect than from silence, Stryker's Run's 8; its layer 3
+\ *	said 38, from a capture that miscounted ticks, its BUGS #19); this
 \ *	one is not: a request replaces what its channel was playing.
 \ *	lib/test/sfx50_test.mjs (2026-10-25, jsbeeb 2.10.2) plays a fitted
 \ *	effect through this code and checks the chip writes field by field

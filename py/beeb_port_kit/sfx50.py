@@ -30,9 +30,11 @@ Run's tools/sfx-mos320.json), takes --effects EFFECTS.json for the rest:
 (sound_channel is the SOUND block's channel word's low byte: chip_channel() maps it).
 
 THE LAST FIELD. lib/sfx50.6502 silences a channel in the tick that outputs its last field, so
-each effect sounds one field (20 ms) shorter than its ramps; Stryker's Run shipped so (its
-effects are the default here, byte for byte). --pad-end adds a field to each last ramp, so the
-field cut is one past the MOS's (lib/test/sfx50_test.mjs measures both).
+each effect sounds one field (20 ms) shorter than its ramps; Stryker's Run shipped so until
+2026-10-25 (its BUGS #18; the default here is its old bytes). --pad-end adds a field to each last
+ramp, so the field cut is one past the MOS's (lib/test/sfx50_test.mjs measures both); Stryker's
+Run's own fitter now pads by default, and its effects measure within the MOS's 10 ms tick of the
+MOS's lengths. Pad, unless you are matching bytes shipped without it.
 
 THE OUTPUT: per effect a label and its ramps, 6 bytes each (lib/sfx50.6502's header has the
 layout), then sfx_effect_channel (each effect's chip channel: for the game's request code; the

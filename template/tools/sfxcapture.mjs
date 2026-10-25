@@ -24,8 +24,9 @@
 // --pairs: every effect B fired 3, 9 and 25 ticks into every effect A on the same SOUND
 // channel, and B's channel compared from B's start against B alone: where they differ, the MOS
 // played B differently over A (its driver is stateful); lib/sfx50.6502 is not, a request
-// replaces what the channel was playing. Stryker's Run's 8 effects, MOS 3.20: 38 of 48 pairs differed
-// fired in its game (its own tool), 27 of 48 fired from BASIC here (2026-10-25, 97 s).
+// replaces what the channel was playing. Stryker's Run's 8 effects, MOS 3.20: 27 of 48 pairs differ,
+// fired from BASIC here (2026-10-25, 97 s) and in its game by its own tool once that put its ticks
+// on this grid too (its BUGS #19; before, it counted entries and said 38).
 //
 // OUT.json: { model, tick_cycles: {period, entries, ticks, latency_max}, effects: [ { name, sound, chip_channel, what,
 // writes: [[tick, byte], ...] }, ... ], pairs? } - sfx50.py's capture form (a list: request order).

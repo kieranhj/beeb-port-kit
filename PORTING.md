@@ -862,11 +862,11 @@ the MOS playing the original's own blocks (`template/tools/sfxcapture.mjs`: each
 ENVELOPE block fired from a stopped CPU, the chip's writes by tick), fit them as 50 Hz ramps
 (`py/beeb_port_kit/sfx50.py`) and play them from the vsync with `lib/sfx50.6502`. Stryker's Run:
 the interrupts' share of the CPU 10.9% to 2.2%, its 8 effects in 158 bytes (its decision 25), the
-kit's fitter making those 158 bytes again from its capture. The MOS's driver is stateful - in 38
+kit's fitter making those 158 bytes again from its capture. The MOS's driver is stateful - in 27
 of 48 pairs an effect started over another ends differently from one started in silence - and
 sfx50 is not: decide whether that matters to the game. Fit with `--pad-end` unless you are
-matching an existing build: without it every effect ends a field early (Stryker's Run's shipped
-effects included).
+matching an existing build: without it every effect ends a field early (Stryker's Run's did
+until 2026-10-25, its BUGS #18: 20-31 ms short of the MOS's, then within its 10 ms tick).
 
 ---
 

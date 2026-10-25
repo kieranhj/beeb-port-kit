@@ -84,10 +84,10 @@ class StrykersSample(unittest.TestCase):
 @unittest.skipUnless((paths.STRYKERS / "tools" / "sfx-mos320.json").exists(), "Stryker's Run not on this machine")
 class StrykersWhole(unittest.TestCase):
     """The whole capture: every line of every effect, and the tables, as Stryker's Run's own
-    tools/sfx50.py wrote them into src/sfx_data.6502."""
+    tools/sfx50.py wrote them into src/sfx_data.6502 (padded since 2026-10-25, its BUGS #18)."""
     def test_reproduces_sfx_data(self):
         eff = sfx50.load(paths.STRYKERS / "tools" / "sfx-mos320.json", DATA / "sfx50_strykers_effects.json")
-        text, size = sfx50.render(eff, "sfx-mos320.json", "sfx_data.6502")
+        text, size = sfx50.render(eff, "sfx-mos320.json", "sfx_data.6502", pad_end=True)
         self.assertEqual(size, 158)
         want = (paths.STRYKERS / "src" / "sfx_data.6502").read_text().splitlines()
         got = text.splitlines()
