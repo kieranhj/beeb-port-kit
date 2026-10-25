@@ -911,7 +911,11 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   small stub loaded HIGH (1942: `&5000`) that copies the real image down and jumps in on the
   machines it accepts, and prints a message and returns to BASIC, the DFS intact, on the others.
   Measured: 2026-10-19, jsbeeb `B-DFS1.2` and `B1770` (hung without the stub, message with it),
-  Master (boots). 1942-beeb (private) `tools/make_disc.py` `model_stub()`.
+  Master (boots). 1942-beeb (private) `tools/make_disc.py` `model_stub()`. **Re-measured by the
+  kit 2026-10-25, jsbeeb 2.10.2**: a plain `!BOOT` at `&0E00` hangs both Bs inside the DFS (PC
+  `&DC5D` on B-DFS1.2, `&8E14` on B1770); the stub at `&5000` prints its message on both with
+  BASIC still answering, and the Master runs the game. The stub is `py/beeb_port_kit/dfs.py`
+  `model_stub()`, its test `lib/test/model_stub_test.mjs`.
 
 ### BREAK that clears RAM (MOS 3.20)
 
@@ -926,6 +930,11 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   or title that runs with IER 0 clears anyway.
   Measured: 2026-10-18/19, jsbeeb Master (MOS 3.20) - a soft BREAK in `tools/measure_break.mjs`
   became a hard one - and KC's real Master (rc4). 1942-beeb (private) `src/main.6502` `brk_clear`.
+  **Re-measured by the kit 2026-10-25, jsbeeb 2.10.2 Master, IER `&53`** (`lib/break.6502`,
+  `lib/test/break_test.mjs`): no `*FX 200` keeps RAM; `*FX 200,2` clears it; `*FX 200,2` then
+  `&0258` = 0 keeps it; `brk_arm` then `&0258` = 0 clears it again. The clear also zeroes `&0287`,
+  so the intercept must be re-armed by the next boot. The `&8046` reading itself was not
+  re-disassembled; the rule is confirmed by behaviour.
 
 ### MOS low RAM a game that owns IRQ1V and the NMI may use (Master, MOS 3.20)
 
@@ -937,11 +946,20 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   BREAK and requiring the MOS banner and `*FX 0`'s `OS 3.20` (with `&0287-&0289` taken by the
   intercept above if you use it). **Until IRQ1V is yours the MOS's 100 Hz IRQ writes
   `&02B1-&02BE`** - a measurement taken after the boot cannot see that, so unpack into those pages
-  after the takeover.
+  after the takeover. **While the MOS still owns IRQ1V it writes 27 bytes in `&0240-&02CD`**
+  (`&02B6-&02BE` among them) under a program that only spins (kit, 2026-10-25, jsbeeb 2.10.2).
+  `lib/test/range_free.mjs` is the instrument, with the game-driving as a module the port supplies.
   Measured: 2026-10-07, jsbeeb Master; 1942-beeb (private) `tools/measure_lowram.mjs`,
   `tools/measure_break.mjs`, decision 141 L2. Not measured on hardware or on MOS 3.5.
 
 ### Driving the 1770 yourself (Master)
+
+The driver is `lib/qdisc.6502`, `qdisc_init.6502`, `qdload.6502` and `qdload_init.6502` (after
+scarybeasts' quicdisc; `lib/README.md`). Its test `lib/test/qdisc_test.mjs`, kit 2026-10-25 on
+jsbeeb 2.10.2: 161 reads covering every track of both sides of a patterned double-sided disc, 0
+bytes wrong, 0 sentinels moved with a seek before every read; **35.4 cycles a byte in the NMI, a
+whole-track read 506,810 cycles, a one-track seek 12,151**. jsbeeb's Master CMOS is `FDRIVE 0`
+(byte 11 reads `&25`), so only real hardware exercises the other step rates.
 
 - **A busy 1770 silently ignores a command.** Wait for the status register's busy bit to clear
   before EVERY command, including a FORCE INTERRUPT you think is harmless.

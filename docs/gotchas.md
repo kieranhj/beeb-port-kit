@@ -439,6 +439,12 @@ listing format and every parser threw; a jsbeeb major version changed `keyDown` 
 string and every harness "never reached" its target. Both read exactly like a corrupt build.
 Source: [1942-beeb BUGS.md #26](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md). (jsbeeb: `hardware-facts.md` §11.)
 
+**A counting oracle is defeated by a variable that counts the same thing.** The kit's own
+`verify_dynamic`, rebuilt to assert, still passes when handed the address of `flip_field` in place
+of `field_count`: both advance 100 in 100 fields. Check a second property that only the right
+variable has, or say in the oracle's header which wrong address it cannot catch.
+Source: `template/tools/verify_dynamic.mjs`, 2026-10-25.
+
 **Dump the machine on the way out.** PC, ROMSEL, ACCCON, the stack and the MOS error block at
 `(&FD)` printed on a harness's exit settled in one run what three rounds of reading code had not.
 Source: [1942-beeb BUGS.md #24, #29](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
