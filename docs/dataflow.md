@@ -164,3 +164,56 @@ The rules, the same as beebgame's README "a suggested farm", which is where they
 
 Mechanical edits that are meant to change nothing else still get `beeb-identical-build`'s
 listing-stream diff.
+
+## Using it to take a Master port down to a Model B: `nmosify.py` (2026-10-25)
+
+From Stryker's Run (its decision 73, `docs/briefs/model-b-lite.md` step 1). A Master port's
+65SC12 instructions are rewritten as `lib/nmos.6502`'s macros, one per instruction at a site,
+each named for the NMOS form its state allows; the annotation (`python tools/analyse.py
+annotate`) is the state. `template/tools/nmosify.py`:
+
+```
+python tools/nmosify.py [--v-dead] report        # every site, its form; MANUAL for the rest
+python tools/nmosify.py [--v-dead] apply         # the sources rewritten
+python tools/nmosify.py [--v-dead] check         # on the build WITHOUT NMOS: every form still allowed
+python tools/nmosify.py [--v-dead] check --nmos  # on the build WITH NMOS: what the forms newly read
+```
+
+The rules are `nmos.6502`'s: a register known 0 for an `STZ` (free), else a dead one loaded with
+0; a flag known for a `BRA` (free), else `JMP`; `INC A`/`DEC A` by `ADC`/`SBC #1` where C is
+known and C, V dead, else `CLC`/`SEC` first, else through a dead X or Y; `PHX`..`PLY` through a
+dead A. `TSB`, `TRB`, `BIT #`, `BIT zp,X`, `(zp)` and anything after a `:` are MANUAL: an `IF
+NMOS ... ELSE ... ENDIF` by hand, which the report then counts as `IF NMOS`. A form the analysis
+cannot prove (`STZ_PHA`, `BVC_BIT6`) is checked by reading its callers and its line marked
+`(hand`.
+
+**Both checks, always.** `check` proves each form's register or flag free in the 65SC12 code;
+it cannot see what an NMOS form newly READS, because there the instruction reads nothing.
+`check --nmos` reads the NMOS build's annotation: a `BRA_xx`'s flag, an `STZ_A`'s zero
+register, an `INC_A_ADC`'s C, as the other forms leave them. Stryker's Run found two clashes
+that way, each from two forms safe alone; the kit's demonstration (below) makes one. Each
+refuses an annotation of the wrong build (exit 2): an NMOS form of several instructions is
+annotated one state per instruction only in the NMOS build.
+
+**V.** The analysis keeps V live almost everywhere (few instructions write it), so the `INC A`
+forms that need C and V dead are rarely allowed. `--v-dead` takes V as dead but where a
+`BVC`/`BVS` reads it straight after a `BIT`, `ADC`, `SBC`, `CLV`, `PLP` or `RTI`, and checks
+that claim over the whole annotation first (a V reader after a label, or after anything else,
+refuses it). Stryker's Run assumed it in `check` alone, by hand; here both halves take it.
+
+**Measured, 2026-10-25:**
+
+- The template has no 65SC12 instruction: `report` 0 sites, `check` 0, exit 0.
+- A copy of the template with seven written into `fill_play` (two `STZ`, `PHX`/`PLX`, two `INC
+  A`, a `BRA`), its section `cmos = (NMOS = 0)`: `report --v-dead` chose `STZ_LDA` x2, `PHX_A`,
+  `PLX_A`, `INC_A_CLC` x2, `BRA_CS` (10 bytes at most); `apply`; rebuilt without `NMOS`, the
+  disc byte-identical to before; `check` 7 hold; built with `NMOS` (assembles under `cmos =
+  FALSE`); `check --nmos`: **1 DOES NOT** - the `BRA_CS` after the `INC_A_CLC`, whose `CLC`
+  leaves C unknown at the branch. The clash, by construction, and only the second half sees it.
+- Stryker's Run's own annotation (read-only, a build without `NMOS`, 2026-10-25 01:52):
+  `check --v-dead` 292 hold, 16 by hand, 10 not in that build, 0 no longer hold; `report` 41
+  sites, all in `IF NMOS` blocks. Without `--v-dead`, 2 `INC_A_CLC` fail on V (Stryker's Run
+  dropped V in `check` only). Its own copy of the tool, which zips the annotation against the
+  current sources by line, reported 47 failures on the same annotation: the sources had moved
+  since it was made. The kit's reads the annotation alone (the source text is in it), and
+  `apply` refuses a line that no longer matches.

@@ -58,6 +58,12 @@ to its BeebASM build.
 | `qdload_init.6502` | Boot-only half: `qd_boot` (after the release) installs the driver and reads the catalogue's two sectors once, filling the table; returns how many listed files were not on the disc. **Fixed on the way in**: 1942's copy never matched the LAST catalogue entry - the disc's first file (`Y < 8N` where entry N-1 is at `8N`) | `QD_CAT_STAGE`, a page-aligned 512 bytes it may overwrite |
 | `break.6502` | **BREAK clears RAM.** `brk_arm` (call it first): `*FX 200,2`, and the BREAK intercept at `&0287` (`*FX 247`) pointing at `brk_clear`, which stores 2 at `&0258` and `JMP (&FFFC)`s so the reset's second pass clears. MOS 3.20 clears memory at a reset only if the system VIA's IER is 0 or `(&0258 >> 1) = 1`, so `*FX 200,2` alone is enough until the game writes `&0258`; the intercept covers a game that uses that page. **Nothing of the game's may live at `&0287-&0289`** (1942 BUGS.md #92: two variables at `&0288` made a BREAK in play `JMP &005D`) | nothing; `brk_clear` must be resident |
 
+### From Stryker's Run: one source for a Master and a Model B
+
+| File | What it is | The includer defines |
+|---|---|---|
+| `nmos.6502` | **The 65SC12's own instructions as macros**, one per instruction AT A SITE, named for the NMOS form that replaces it there: `STZ_A addr` is `STZ` where A is known 0 (and `STA` with `NMOS`), `STZ_LDA` is `STZ` where A, N and Z are dead (`LDA #0 : STA`), `BRA_CS` a `BRA` where C is known 1 (`BCS`), `INC_A_ADC`, `PHX_A` and so on: 33 macros, each with its condition and cost. Without `NMOS` every one IS the 65SC12 instruction, so the Master build stays byte-identical; with it Baron's `cmos = FALSE` on every section rejects anything left. **The forms are chosen, and re-proved, by `template/tools/nmosify.py` from the dataflow annotation** - `check` on the build without `NMOS` and `check --nmos` on the build with it, both, because two forms each safe alone can clash (the header has Stryker's Run's two). Stryker's Run (decision 73): 281 sites, 232 by rule and 49 by hand, at most 683 cycles a pass (0.9%); the NMOS build played the whole game state-identical to the Master's | `NMOS` = 0/1, and `cmos = (NMOS = 0)` on every section |
+
 ## Proving ZX02 is the one to use
 
 `test/bench/bench_depack.py` is where the ZX02-against-ZX0 numbers come from: it assembles both
@@ -103,7 +109,7 @@ header**, so the first caller knows it's first.
 
 ## Proving it assembles
 
-`test/test_lib.6502` includes `beeb.h.6502`, a dummy zero page, every routine with dummy hooks (the 1770 driver and `break.6502` too, since 2026-10-25),
+`test/test_lib.6502` includes `beeb.h.6502`, a dummy zero page, every routine with dummy hooks (the 1770 driver and `break.6502` too, since 2026-10-25; `nmos.6502` with three of its macros, NMOS forms, 2026-10-25),
 both depackers, the ZX02 one twice (Paradroid instantiated its depacker twice), the probe, and `INFO` plus a
 `!BOOT` in both shapes. From the kit's root:
 
@@ -111,6 +117,22 @@ both depackers, the ZX02 one twice (Paradroid instantiated its depacker twice), 
 baron --warn 2 -p lib/test/build -D RELEASE=0 lib/test/test_lib.6502
 baron --warn 2 -p lib/test/build -D RELEASE=1 lib/test/test_lib.6502
 ```
+
+`nmos.6502`'s macros are proved both ways by their own test, with py65 (`pip install py65`):
+
+```
+python lib/test/nmos_test.py [TRIALS]
+```
+
+It assembles `test/nmos_test.6502` (every macro once) three times: without `NMOS` the macros'
+section must be byte-identical to a section of the bare 65SC12 instructions; with `NMOS` it
+must assemble under `cmos = FALSE`; and with one raw `STZ` added Baron must refuse it. Then it
+runs each macro's NMOS form on py65's NMOS 6502 against its 65SC12 instruction on the 65C02
+from the same random states, made to meet the macro's condition, and compares everything the
+condition does not call dead (registers, flags, S, the path a branch took, zero page, the live
+stack, the operand's page). Measured 2026-10-25 (Baron 0.6.0, py65 1.2.0): 34 sites, 112 bytes
+identical; NMOS build 151 bytes; the raw `STZ` refused; 34 x 400 trials, 0 differences; with
+four conditions weakened (the control), 156 of 1,700 trials differ. Exit code = verdict.
 
 `--warn 2` is what the template's builds pass; `lib/` is silent at that level, both values of
 `RELEASE` (measured 2026-09-23, Baron 0.4.0, and the three files come out byte-identical to the
