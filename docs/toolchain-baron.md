@@ -299,7 +299,7 @@ Also in the release, unasked for and worth a line each:
 | `P%` | `*` (both spellings work) |
 | `PRINT ~x` prints one value | `~` swallows the whole expression after it, so `~CODE_TOP - end` is `~(CODE_TOP - end)`. Parenthesise |
 | `TRUE` is -1 | `TRUE` is 1 (`--beebasm-true` restores it). Nothing in the kit relied on it |
-| `NOT(x)` on a flag | **`NOT` is bitwise, and with `TRUE` = 1 that matters**: `NOT(1)` is -2, non-zero, so `IF NOT(RELEASE)` is TRUE on a release build. 1942's release disc shipped its debug keys that way ([1942 BUGS.md #40](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md)). Write `IF RELEASE = 0`, never `IF NOT(flag)` on a 0/1 flag. (BeebASM's `TRUE` = -1 made `NOT(TRUE)` = 0 and hid it) |
+| `NOT(x)` on a flag | **`NOT` is bitwise, and with `TRUE` = 1 that matters**: `NOT(1)` is -2, non-zero, so `IF NOT(RELEASE)` is TRUE on a release build. 1942's release disc shipped its debug keys that way ([1942 BUGS.md #40](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md)). Write `IF RELEASE = 0`, never `IF NOT(flag)` on a 0/1 flag. (BeebASM's `TRUE` = -1 made `NOT(TRUE)` = 0 and hid it) |
 | `.asm` | `.6502`, which the [VS Code extension](https://marketplace.visualstudio.com/items?itemName=RichTalbot-Watkins.baron-vsc) keys on |
 
 ## The zero-page allocator

@@ -155,27 +155,27 @@ Source: [BUGS.md #12](https://github.com/kieranhj/edge-beeb/blob/master/BUGS.md)
 
 **An index that fits today wraps tomorrow: put `ASSERT count * stride <= 256` beside every
 indexed table.** Instance: 1942's sprite records outgrew an 8-bit index at the busiest waves only,
-393 clean ticks into a run. Source: [1942-beeb BUGS.md #6](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+393 clean ticks into a run. Source: [1942-beeb BUGS.md #6](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **`&FFFF` is a bad self-modifying placeholder.** Indexed through `,X` or `,Y` it wraps into zero
 page, so a routine whose operand was never patched writes the zero page and the machine hangs far
 from the cause. Use an address that faults visibly, or ASSERT the patch site was written.
-Source: [1942-beeb BUGS.md #5](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+Source: [1942-beeb BUGS.md #5](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **Three shifts left lose the ninth bit.** `asl` x3 on a glyph index is right below 32 and wrong
 from 32 up; `lsr` on the high byte of a signed 16-bit value turns -1 into +32767, so a sprite at
 play X -1..-4 was never drawn (for a month - nothing drove one there). A coordinate's high byte can
-take three values (-1, 0, 1), not two. Source: [1942-beeb BUGS.md #23, #84, #7](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+take three values (-1, 0, 1), not two. Source: [1942-beeb BUGS.md #23, #84, #7](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **A branch after `sta` tests the PREVIOUS instruction's flags.** `sta` sets nothing; a `bpl`
-written as if it tested the stored value tested the load two instructions up. Source: [1942-beeb BUGS.md #54](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+written as if it tested the stored value tested the load two instructions up. Source: [1942-beeb BUGS.md #54](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **Derive a threshold from the width it guards.** A wrap test written as a literal for a 5-column
 blit survived the blit growing to 9 columns, and the escaping writes landed in the paged bank,
-where the strip oracle could not see them. Source: [1942-beeb BUGS.md #31](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+where the strip oracle could not see them. Source: [1942-beeb BUGS.md #31](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **Baron's `NOT` is bitwise.** `IF NOT(RELEASE)` is true for `RELEASE = 1` (NOT 1 = -2, non-zero),
-and a release disc shipped the debug keys. Write `IF RELEASE = 0`. Source: [1942-beeb BUGS.md #40](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+and a release disc shipped the debug keys. Write `IF RELEASE = 0`. Source: [1942-beeb BUGS.md #40](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 ---
 
@@ -249,23 +249,23 @@ Source: [CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
 **A guard belongs at the first address SOMEONE ELSE writes, and the OS counts as someone else.**
 Instance: 1942's code guard sat at its next variable, but `VDU 22` erases `&3000-&7FFF` after
 `*RUN` loads the image and before it runs, so code past `&3000` was gone before it executed - the
-disc stopped booting with no diagnostic, because the diagnostic had been erased too. Source: [1942-beeb BUGS.md #17](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+disc stopped booting with no diagnostic, because the diagnostic had been erased too. Source: [1942-beeb BUGS.md #17](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **A map of what the OS leaves is not a map of what is free: read what the PORT already put
 there.** Instance: ANDY was measured free of the MOS, a 116-byte routine moved into it, and its
 first `jsr` ran into the port's own text tables (a generated lookup table whose first byte is
-`&00`: BRK, BASIC paged in, "Mistake"). Source: [1942-beeb BUGS.md #24, #29](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+`&00`: BRK, BASIC paged in, "Mistake"). Source: [1942-beeb BUGS.md #24, #29](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **Bound a run-time fill at run time, and refuse rather than overrun.** 1942's save-under store and
 object buffer both ran into the next region under loads no test had reached; the fix was a refusal
 in the emitter (a sprite dropped for a tick), not a bigger assert, because the worst case is a
 property of play, not of the build. A buffer sized by a count written out by hand (4 entries, not
-`TEXT_SLOTS`) did the same on stage 28 only. Source: [1942-beeb BUGS.md #30, #52, #90](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+`TEXT_SLOTS`) did the same on stage 28 only. Source: [1942-beeb BUGS.md #30, #52, #90](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **A figure must say what its run covered.** A save-store peak of 798 bytes, measured on one stage
 with no fire held - nothing died, no explosion was ever drawn - sized a reservation, and stage 28
 then wrote 516 bytes into game state; 36 oracle runs failed at once while every boss-facing oracle
-passed. Source: [1942-beeb BUGS.md #48, #52](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+passed. Source: [1942-beeb BUGS.md #48, #52](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 ---
 
@@ -335,23 +335,23 @@ place, with a `BRK` in a table. Measured afterwards in the kit on jsbeeb's Maste
 for `&8100` ended at `&81C9` with bank 9 paged. ANDY at `&8100` was untouched.
 Rule: a lib routine gets a disc that runs it (`lib/test/andy_test.6502`) or a header that says
 it has never run. The first port to call it should treat it as its own new code.
-Source: [1942-beeb BUGS.md #21](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md), `lib/README.md` "Proving it runs".
+Source: [1942-beeb BUGS.md #21](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md), `lib/README.md` "Proving it runs".
 
 **A debug shortcut measures a different game.** 1942's stage-skip key set a refill flag that
 repaired exactly the corruption the real stage seam caused, and the stage oracle drove every seam
 with that key; the boss key made its own swarm; a poke-to-stage route ran the wrong script. Drive
-the REAL path in any oracle that claims it. Source: [1942-beeb BUGS.md #35, #36, #43, #54, #58](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+the REAL path in any oracle that claims it. Source: [1942-beeb BUGS.md #35, #36, #43, #54, #58](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **A harness reads state back; it never echoes what it asked for.** 1942's stage oracle reported
 `stage = STAGE + 1` from its own argument, and a 6-frame key tap that fell inside a masked disc
 load vanished - so every run past the first boss scored an EARLIER stage than it named, for six
-days. Hold the key until the state byte moves, and report the byte. Source: [1942-beeb BUGS.md #39](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+days. Hold the key until the state byte moves, and report the byte. Source: [1942-beeb BUGS.md #39](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **A harness covers only what it drives, for as long as it runs.** 1942's sprite oracle pressed
 SHIFT to boot and never another key: nothing ever died, no explosion or power-up was drawn, and the
 load was half the real one. Holding fire found the bug at 6,000 ticks and not at 2,600. A settle
 period hides the opening seconds; a suite on level 1 does not see level 28. Make the harness
-REPORT its coverage and fail on a path it never took. Source: [1942-beeb BUGS.md #31, #11, #25, #90](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+REPORT its coverage and fail on a path it never took. Source: [1942-beeb BUGS.md #31, #11, #25, #90](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 ---
 
@@ -424,20 +424,20 @@ oracles agreed with the port ten times: every one scored zero against the same w
 697/697 on a broken stage, an exporter checked 8 anchor headings of 64, an oracle copied a palette
 literal, another the port's entry timing, another the wrong award tick. **Prove every new oracle
 FAILS on the unfixed build** - 1942's later fixes each record "verify_X fails the old build" - and
-assert invariants taken from the original, not from the port. Source: [1942-beeb BUGS.md #16, #27, #34, #61, #69, #74, #91](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+assert invariants taken from the original, not from the port. Source: [1942-beeb BUGS.md #16, #27, #34, #61, #69, #74, #91](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **A well-formed answer of zeros is a failure.** An oracle returned a JSON object of zeros with exit
 code 0 for weeks while its target was dead; another, with a hard-coded address, said 51 objects fit
-a tick where 13 do. An instrument refuses to report zero samples. Source: [1942-beeb BUGS.md #9](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+a tick where 13 do. An instrument refuses to report zero samples. Source: [1942-beeb BUGS.md #9](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **A moved label's breakpoint looks like a hang.** Hard-coded addresses in a harness go stale on the
 next edit; the breakpoint never fires and the run times out "in the game". Resolve every address
-from the build's symbol dump, and exit 2 on a missing name. Source: [1942-beeb BUGS.md #44, #81](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+from the build's symbol dump, and exit 2 on a missing name. Source: [1942-beeb BUGS.md #44, #81](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **When every oracle fails at once, suspect the tools.** A new assembler release changed the
 listing format and every parser threw; a jsbeeb major version changed `keyDown` from a number to a
 string and every harness "never reached" its target. Both read exactly like a corrupt build.
-Source: [1942-beeb BUGS.md #26](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md). (jsbeeb: `hardware-facts.md` §11.)
+Source: [1942-beeb BUGS.md #26](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md). (jsbeeb: `hardware-facts.md` §11.)
 
 **A counting oracle is defeated by a variable that counts the same thing.** The kit's own
 `verify_dynamic`, rebuilt to assert, still passes when handed the address of `flip_field` in place
@@ -447,7 +447,7 @@ Source: `template/tools/verify_dynamic.mjs`, 2026-10-25.
 
 **Dump the machine on the way out.** PC, ROMSEL, ACCCON, the stack and the MOS error block at
 `(&FD)` printed on a harness's exit settled in one run what three rounds of reading code had not.
-Source: [1942-beeb BUGS.md #24, #29](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+Source: [1942-beeb BUGS.md #24, #29](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 ---
 
@@ -582,15 +582,15 @@ Source: [BUGS.md #10](https://github.com/kieranhj/paradroid-beeb/blob/main/BUGS.
 **Two paths that keep one invariant will disagree; make warm-up and steady state the same code.**
 1942's level fill and its main loop ran the same three steps in opposite orders; `game_init` drew
 the caption before the boot computed its digits; the arcade's restart silences every looping sound
-and the port's did not. Source: [1942-beeb BUGS.md #4, #33, #44](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+and the port's did not. Source: [1942-beeb BUGS.md #4, #33, #44](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **One name for two clocks is two bugs.** A variable that meant arcade frames in one routine and
-game ticks in another was right in both and wrong between them. Source: [1942-beeb BUGS.md #11](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+game ticks in another was right in both and wrong between them. Source: [1942-beeb BUGS.md #11](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **A register held in an awkward place is an argument.** Passing a bank in A where A was the
 filename's low byte handed the filing system a name beginning with a ROMSEL value; read the
 register allocation before changing a signature, and isolate by disabling the new code and seeing
-whether the fault stays. Source: [1942-beeb BUGS.md #49, #80](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+whether the fault stays. Source: [1942-beeb BUGS.md #49, #80](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 ---
 
@@ -781,18 +781,18 @@ Source: [docs/layer-5-blitter.md](https://github.com/kieranhj/paradroid-beeb/blo
 
 **Regenerate from code, never from a comment.** 1942's sprite set needed twelve build arguments
 that lived in a stale comment; a nearly-right command built a plausible wrong set. One switch now
-reads them out of the code. Source: [1942-beeb BUGS.md #60](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+reads them out of the code. Source: [1942-beeb BUGS.md #60](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **A degenerate generated value is dead code.** `SPR_MAX_TILES = 1` was printed on every build and
-nobody acted: 224 bytes of table and a loop that could never iterate. Source: [1942-beeb BUGS.md #45](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+nobody acted: 224 bytes of table and a loop that could never iterate. Source: [1942-beeb BUGS.md #45](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **Smoke-test a generated page before publishing it.** A page whose script throws half way renders
 every section below the throw EMPTY for the reader, and a known-wrong label stayed published for
-two days because the generator itself threw. Source: [1942-beeb BUGS.md #38](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+two days because the generator itself threw. Source: [1942-beeb BUGS.md #38](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **Decode what reaches the chip; do not count it.** An overnight build counted the sound chip's
 writes, saw the right number, and shipped three corrupted tunes at the wrong pointer stride. Ship
-no sound data until the player's own model has read it back. Source: [1942-beeb BUGS.md #66, #67](https://github.com/kieranhj/1942-beeb/blob/main/BUGS.md).
+no sound data until the player's own model has read it back. Source: [1942-beeb BUGS.md #66, #67](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
 **A rules file loaded every session has a size budget.** 1942's `CLAUDE.md` grew to 167K by
 accretion - every trap, every figure, the story of each fix - and was cut to 31K by moving the

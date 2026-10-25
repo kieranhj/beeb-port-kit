@@ -497,11 +497,11 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
   `INKEY` (use `run_frames` for a timed wait). The routines and the BASIC that drove them are in
   1942's `docs/andy.md`, ready to retype on a real machine.
   Measured: 2026-09-11, jsbeeb Master 128 (MOS 3.20, 1770 DFS), from machine code in main RAM
-  paging ANDY as `unpack_andy` does, a fill and a check around each event. [1942-beeb docs/andy.md](https://github.com/kieranhj/1942-beeb/blob/main/docs/andy.md)
+  paging ANDY as `unpack_andy` does, a fill and a check around each event. [1942-beeb docs/andy.md](https://github.com/kieranhj/1942-beeb/blob/master/docs/andy.md)
 - **Code that reads ANDY lives in main RAM**: with ANDY paged, the first 4K of the paged sideways
   bank is hidden. The kit's IRQ never touches ROMSEL, so it can't unpage ANDY under a running
   routine. An IRQ that pages anything has to save and restore ROMSEL, ANDY bit included.
-  Established: 2026-09-11, 1942 port. [1942-beeb docs/andy.md](https://github.com/kieranhj/1942-beeb/blob/main/docs/andy.md)
+  Established: 2026-09-11, 1942 port. [1942-beeb docs/andy.md](https://github.com/kieranhj/1942-beeb/blob/master/docs/andy.md)
 
 ### HAZEL
 

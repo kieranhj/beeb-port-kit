@@ -5,12 +5,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "beeb-port-kit"
 version = "0.1.0"
-description = "Python tool code shared by two C64 -> BBC Micro ports, packaged to be forked"
+description = "Python tool code shared by three BBC Micro ports (two from the C64, one from an arcade board), packaged to be forked"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [{name = "Kieran Connell"}]
 requires-python = ">=3.8"
 dependencies = ["Pillow"]
+
+[project.optional-dependencies]
+arcade = ["z80", "numpy"]   # mame.z80sub, ay2sn's WAV renders
 
 [tool.setuptools.packages.find]
 include = ["beeb_port_kit*"]
