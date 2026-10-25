@@ -1,0 +1,39 @@
+// debugscript.txt - a SAMPLE for MAME's headless debugger. Fork and edit; keep this header.
+//
+// MEASURED on MAME 0.177 with 1942, 2026-10-25 (the kit's smoke test):
+//   * -debug -debugscript runs headless with -video none. NEVER add -debugger none:
+//     the script then does not run, nothing is written, and the session hangs
+//     (1942-beeb arcade-facts s8). The runner refuses that combination.
+//   * `go` NEVER RETURNS to the script, so a `quit` after it never runs and the
+//     session hangs until the runner's timeout kills it. A script that only reads the
+//     ROM (dasm) ends with `quit` and no `go`. A script that WATCHES the running game
+//     ends with `go` and is stopped by a Lua harness run alongside it:
+//       python -m beeb_port_kit.mame.runner --game GAME --debug tools/mame/debugscript.txt \
+//           --script tools/mame/stop_at.lua --frames 600 --out D:/scratch/dbg \
+//           --expect dasm.txt,trace.txt
+//   * 0.177 has NO `logfile` command (1942-beeb brief-boss.md s5). Log watchpoint hits
+//     with `tracelog` into a `trace` file instead. `trace FILE,CPU` takes no `noloop`
+//     in 0.177, and it logs EVERY instruction too (1 MB in 200 frames of 1942): grep
+//     for your tracelog prefix, and keep the run short.
+//   * `//` comment lines are accepted. Numbers are HEX. EVERY PATH IS ABSOLUTE: the
+//     debugger's working directory is MAME's.
+//
+// The method (1942-beeb brief-wave-disassembly s4): never read cold. Start from an
+// address you already understand - a sprite slot whose spawn frame you know - and
+// walk backwards: the write to the slot names the sprite writer; a watch on the
+// table it reads names the object creator; what the creator reads is the schedule.
+//
+// GAME: every address and path below is an example (1942's).
+
+// 1. a disassembly to a file: dasm <file>,<start>,<length>[,<bytes>,<cpu>]
+dasm D:/scratch/dbg/dasm.txt,0,4000,1,0
+
+// 2. a trace file, then watchpoints whose action writes a line into it and continues
+trace D:/scratch/dbg/trace.txt,0
+wpset e0d2,1,w,1,{tracelog "W E0D2=%02X pc=%04X\n",wpdata,pc; g}
+
+// 3. a breakpoint that logs registers and continues
+bpset 50f9,1,{tracelog "B 50F9 ix=%04X a=%02X\n",ix,a; g}
+
+// 4. run. Nothing after this line executes; stop_at.lua (or any harness) ends it.
+go

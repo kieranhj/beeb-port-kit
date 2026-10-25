@@ -1,11 +1,15 @@
-# Porting a C64 game to the BBC Micro
+# Porting a game to the BBC Micro
 
-*The playbook. What two ports proved, written so the third starts from here.*
+*The playbook. What three ports proved, written so the fourth starts from here.*
 
 This is the method that took **Paradroid** (Model B, 34 days, 406 commits) and **Edge Grinder**
-(Master 128, 5 days, 66 commits) from a C64 original to a playable BBC Micro disc. The second port
-reused the first's process wholesale, and that is why it took a week where the first took a month.
-What the second port still had to rediscover is what this kit packages.
+(Master 128, 5 days, 66 commits) from a C64 original to a playable BBC Micro disc, and then took
+**1942** (Master 128, seven weeks, 483 commits, 161 decisions) from a Capcom arcade board with no
+source at all. The second port reused the first's process wholesale, and that is why it took a
+week where the first took a month. The third reached Edge Grinder's pace for its first 18 days -
+Layers 0-8 for stage 1 in six - and spent the rest on RAM hunts, defects found late by playing,
+taste, the oracle suite and a release that kept taking features; the sections below say what
+would have saved each. What the ports still had to rediscover is what this kit packages.
 
 It is written to be read by a coding agent, with a human directing it, and it assumes the
 agent knows 6502 and BeebASM (the kit assembles with Baron, its successor - see
@@ -14,13 +18,15 @@ measures instead of guessing. A human reader wants the one-page summary in
 [`README.md`](README.md) instead. The hardware numbers are in
 [`docs/hardware-facts.md`](docs/hardware-facts.md), the mistakes in
 [`docs/gotchas.md`](docs/gotchas.md), the measuring methods in
-[`docs/verification.md`](docs/verification.md), and the section at the end says how the two
+[`docs/verification.md`](docs/verification.md), and the section at the end says how the three
 ports actually ran with Claude Code.
 
-The two ports are public and this document links into them for the worked examples:
-[paradroid-beeb](https://github.com/kieranhj/paradroid-beeb) and
-[edge-beeb](https://github.com/kieranhj/edge-beeb). Their `docs/` directories are the long form of
-everything here.
+The three ports are public and this document links into them for the worked examples:
+[paradroid-beeb](https://github.com/kieranhj/paradroid-beeb),
+[edge-beeb](https://github.com/kieranhj/edge-beeb) and
+[1942-beeb](https://github.com/kieranhj/1942-beeb). Their `docs/` directories are the long form of
+everything here. A game with no source - an arcade ROM, or any binary you can only run under
+emulation - also wants [`docs/arcade-porting.md`](docs/arcade-porting.md).
 
 ---
 
@@ -59,7 +65,8 @@ is itself a claim to test: the belief that jsbeeb could not emulate the NuLA pal
 
 ### 2.1 Get the specification and prove which one it is
 
-You need the original's source, or a disassembly you can trust.
+You need the original's source, or a disassembly you can trust - or, when there is neither, the
+original's binary running under an emulator you can instrument (section 2.1b).
 
 - Edge Grinder had 5,000 lines of clean, commented source (Cosine's Format War entry). That is
   the easy case: transcribe.
@@ -75,6 +82,23 @@ You need the original's source, or a disassembly you can trust.
 - A screenshot of the original beats a model of it. Paradroid's play area was believed to be
   multicolour through three successive wrong models until someone looked at the C64 running.
   Keep reference screenshots in the repo (gitignored if they are not yours to redistribute).
+
+### 2.1b When the original is an emulated binary
+
+1942 had no source and no trusted disassembly: the specification was the arcade ROM, running in
+MAME. Every rule above still holds; what changes is that **a ROM read is a hypothesis until it is
+scored against a capture of the running game**. The background map format was guessed wrong from
+the ROM twice before the tilemap RAM was captured out of the running machine and used as ground
+truth. The method that replaced guessing has two halves. **Capture**: per-frame RAM dumps out of
+MAME's Lua, and the game DRIVEN to whatever a recording never reaches (a held pending-state byte,
+the input read patched in ROM, invincibility through the game's own "already hit" path, an
+autopilot over the whole game) - because *a state byte that is constant in the recording has not
+been measured*. **Model**: a Python transliteration of each ROM routine, scored frame by frame
+against the capture to **0 wrong, every excluded frame named**, and then made the exporter's only
+decode and replayed over the port's own trace, so the arcade's oracle and the port's are one
+model. [`docs/arcade-porting.md`](docs/arcade-porting.md) is the guide - rotation and named spaces,
+the hardware-format traps, DIP switches as a measurement, the ROM checksum, the sound CPU - and the
+skills `beeb-arcade-capture` and `beeb-rom-model-probe` are the two procedures as checklists.
 
 ### 2.2 Choose the machine
 
@@ -95,6 +119,18 @@ the condition the work is done under. Three consequences, all learned the hard w
 - The BBC's floppy drive is fast, reliable and effectively universal, so multi-part loading is
   feasible in a way it was not on the source machines. It is still disruptive. Treat it as a last
   resort and confine it to clean seams: loader, titles, main game, and nowhere inside play.
+
+**Price the WHOLE game's data against RAM in week 1, before the first level is built.** Inventory
+every level - its tiles, its map, its sprite pictures, its scripts, its sounds - and put the total,
+raw and packed, beside what the machine has, per region. 1942 had the tool that did this
+(`tools/inventory32.py`) on its third day, and priced stage 1 alone until its seventh: stage 1's
+layout was fixed by then, and the other 31 stages' need arrived as six RAM hunts over the next
+month. From then on every feature opened with a RAM ledger ("main RAM 3 bytes; anything new needs
+a lever first"). The inventory decides the shape the game streams in (1942: a set of four stages
+is one map group plus one breather stage, one file a set, decision 87), what is resident and what
+loads at a seam, and whether a feature is affordable at all - questions far cheaper to answer
+before the layout than after it. Count the DFS catalogue too: its 31 entries bound before the
+sector count did.
 
 Some games will be Master-only, and you should decide that on day one rather than discover it in
 week three. Edge Grinder's decision 1 is the model: its one-pixel scroll needs two full 16K
@@ -118,6 +154,19 @@ workspace and zero page become the game's. A game that keeps loading can never c
 is no way back from the tape filing system): it keeps the filing system live, owns the machine,
 and makes NO OS call at all for as long as it runs. `lib/loader.6502`'s header has the contract
 and `docs/hardware-facts.md` the evidence - a port that got this wrong hung on real hardware.
+
+**On a Master there is a third answer: own the 1770 yourself.** 1942 loads through the DFS at
+boot only, then calls `OSBYTE 140` like a load-once game - and every later load, at every stage
+seam, goes through its own disc driver (`lib/qdisc.6502`, from scarybeasts' quicdisc): the WD1770
+driven direct, NMI-fed at 35 cycles a byte, non-blocking, with the catalogue cached at boot. So
+the filing system's workspace is freed as if the game never loaded again, the game keeps its
+interrupts and its rupture running through a load (a seam holds the picture 0.36 s with the sound
+playing), and a rationed background read during play becomes possible (1942's bomber and its
+break-up stream into a bank while it is on screen, decisions 153 and 154). The costs: Master (or
+any 1770 machine) only; the driver must take the DFS's current drive and step rate, which only a
+real drive showed (1942 `BUGS.md` #85); and a real 1770 settles the head 15-30 ms on every read
+command with E set, which jsbeeb 2.3.x did not model (fixed upstream, PR #1226) - so any disc
+access inside play is gated on real hardware, not on the emulator.
 
 **Then decide which configurations of that machine it will run on**, as decisions too: second
 processors, `*SHADOW`, sideways RAM that isn't at 4-7, a filing system softloaded into
@@ -168,13 +217,16 @@ The rule is not "add nothing"; it is "add nothing quietly".
 
 ## 3. The artefacts
 
-Both ports run on the same seven files. Each earned its place by a failure it caught.
+The first two ports ran on the same seven files, and 1942 added two more - `docs/done.md` and the
+briefs. Each earned its place by a failure it caught.
 
 | File | Job | Rule |
 |---|---|---|
-| **The rules file** (`CLAUDE.md` in both ports; call it `HACKING.md` if you are not using Claude Code) | Standing rules, the measured hardware facts, the memory outline, the build commands | Read at the start of every session. When a fact in it is wrong, fix it the same day: Paradroid's carried "jsbeeb will not boot an unpadded SSD" for a week after it was disproved |
+| **The rules file** (`CLAUDE.md` in all three ports; call it `HACKING.md` if you are not using Claude Code) | Standing rules, the measured hardware facts, the memory outline, the build commands | Read at the start of every session. When a fact in it is wrong, fix it the same day: Paradroid's carried "jsbeeb will not boot an unpadded SSD" for a week after it was disproved. **Give it a size budget, about 40K**: rules, measured facts and traps only. 1942's was touched in 198 of 483 commits and grew 22K -> 167K, every session paying to load it, before it was cut to 31K by moving the story to `done.md` and the oracles' long descriptions to a docs file of their own |
 | `PLAN.md` | What is left, and nothing else | Cut it when it stops driving the next decision. Paradroid's went from 535 lines to 156. Detail moves to `docs/` |
-| `docs/decisions.md` | One table: every deviation from the original and every choice the hardware forced, numbered, dated, with the reason and a link | **This is its only copy.** An earlier era kept one in `PLAN.md` too and the copy fell out of date. Nothing is re-litigated without a new row saying why |
+| `docs/done.md` | What has landed, per layer or brief, with the number that says it landed | The other half of `PLAN.md`: a finished line leaves the plan by moving its evidence here, never by being deleted. Also where the rules file's history goes, so the rules file can stay small |
+| `docs/brief-*.md` | One per job that a layer table does not fit (section 3.1) | Says at its top whether it is a PROPOSAL, a PLAN, BUILT or SUPERSEDED, and keeps that line current |
+| `docs/decisions.md` | One table: every deviation from the original and every choice the hardware forced, numbered, dated, with its **status**, the reason and a link | **This is its only copy.** An earlier era kept one in `PLAN.md` too and the copy fell out of date. Nothing is re-litigated without a new row saying why. Section 3.2 has the lifecycle |
 | `docs/layer-N-*.md` | Working notes per layer: what was measured, what was tried, what was costed and rejected | The rejected options are the valuable half. "Do not re-litigate the blitter unrolls" saved the RAM pass from repeating itself |
 | `BUGS.md` | Defects with evidence, numbered | Fixed entries are never deleted; they record what was ruled out. Paradroid #5 and #6 is the model entry: two correct measurements supporting a wrong conclusion, and why |
 | `docs/memory-map.md` | Every region, what is in it, how much is free, measured from the listing | Kept reasonably current through the whole port, because RAM is contended through the whole port. Every free-space figure says the date it was measured. "Take live figures from the build output, never from this paragraph" |
@@ -184,13 +236,72 @@ Commit slicing follows the same shape: one mechanism per commit, with the measur
 body ("byte-identical over 40 passes", "0 of 10,240", before-and-after cycles). Doc-sync commits
 are separate and frequent.
 
+### 3.1 After the layers, work comes as briefs
+
+The layer table carries a port to one playable level. What comes after - the other levels, a boss,
+the front end, a RAM hunt, a second enemy engine - does not fit it: each job cuts across several
+layers' code. 1942 wrote 36 briefs, one per job, before the job and finished after it, and
+`template/docs/brief-TEMPLATE.md` is their shape:
+
+- a **status line** at the top (PROPOSAL / PLAN / BUILT / SUPERSEDED), kept current;
+- **the original, measured** - what the specification does, and what it was scored against;
+- **a RAM ledger** - free now, read off the build, against what the job wants, per region,
+  cycles and disc entries included;
+- **the options, costed**, every figure labelled MEASURED (a tool run), COUNTED (off the listing)
+  or PROJECTED (arithmetic on a count). Counted figures were wrong by a fifth and once by 2.5x in
+  1942; one costing said -13 cycles a blit where the build measured +7. The brief says where its
+  own figures could be wrong;
+- **the decisions for the owner**, written as table rows;
+- **the steps**, each one a commit with its measurement and its oracle;
+- **what was costed and put down**, with the number that refused it;
+- and, when it is done, **what landed and what it cost**, measured, beside the projection.
+
+The brief is committed before the code, which is what lets a job interrupted half way - a session
+limit, an overnight run - be resumed from its named step rather than reconstructed.
+[1942's boss-as-background brief](https://github.com/kieranhj/1942-beeb/blob/master/docs/brief-boss-as-background.md)
+is a complete one, proposal to "what landed".
+
+### 3.2 Decisions have a lifecycle
+
+About 30 of 1942's 161 decisions were superseded or reversed, and with no Status column the status
+went into the Date cell ("ANSWERED 2026-09-17", "REVISED ...") and the rows grew into essays - one
+ran to 10K. The template's table has a **Status** column: `OPEN` (raised, nothing built on it),
+`PROPOSED` (an answer costed, waiting), `TAKEN` (the agent took it while the owner was away,
+provisionally, and the job's report lists it), `AGREED`, `SUPERSEDED by N`, `REJECTED`. Three
+rules came with it:
+
+- **Merging a branch agrees the decisions it carries** (KC, 1942, 2026-10-06). An owner who merges
+  has read the brief; a decision that should not have gone in is a new row, not a quiet revert.
+- **A "Rejected, do not re-litigate" table** sits under the main one: what was considered, the
+  number that refused it, and when. A rejection reversed by a new measurement becomes a row above.
+- **Taste is settled from test discs, not argument.** Colours, outlines, how many compass
+  directions a plane needs: build the alternatives side by side, each one switch away (an
+  environment variable or a `-D` whose default is the shipped value), and let the owner play them.
+  1942's eight-or-sixteen headings question was answered from three test builds in one sitting
+  (decision 85).
+
+Keep the row short and the evidence in the brief. `python -m beeb_port_kit.check_decisions
+docs/decisions.md` (the kit's `py/`) checks the table still renders - a blank line between two rows
+silently ends a Markdown table, and 1942's had six - and that every status is one of the six.
+
+### 3.3 Generate what is per asset, and read figures off the build
+
+Every hand-kept page in 1942 that described the build went wrong: the memory map (written by hand,
+it described the kit's template for two days), the cell sheet, the 32-stage chart, the decisions
+table's Markdown. The rule that replaced them: **anything per level, per asset or per region is a
+generated page**, rebuilt by a tool from the build and the data (`tools/memmap.py --write` from the
+listing; the cell sheet from the exporter's own packer, so the page and the disc cannot describe
+different layouts), and **any figure that moves on an edit is read off the build**, with the doc
+saying where to read it, not what it was. A generated page that cannot be generated is a page whose
+defects cannot be fixed: smoke-test a generated page's script before publishing it.
+
 ---
 
 ## 4. The layer plan
 
-Both ports went through the same sequence, whatever the game. Each layer is done when it is
+All three ports went through the same sequence, whatever the game. Each layer is done when it is
 visible in the emulator and its doc, decisions rows and plan update are written. The links are to
-the layer docs in the two ports; read the relevant one before starting the layer, because each
+the layer docs in the first two ports; read the relevant one before starting the layer, because each
 records what was tried and rejected.
 
 | # | Layer | Done when | Worked examples |
@@ -212,11 +323,22 @@ records what was tried and rejected.
 The order is not sacred. Paradroid moved doors and lifts ahead of the droid layers when it helped.
 What is sacred is finishing a layer, with its doc, before the next one starts.
 
-**Where the time goes**, from both histories, in order of size: memory (Paradroid from day 12
-onward, Edge Grinder from Layer 6e onward, in both cases after the port believed the problem was
-solved); music (three passes in Edge Grinder); performance re-litigation caused by an earlier
+**Where the time goes**, from all three histories, in order of size: memory (Paradroid from day 12
+onward, Edge Grinder from Layer 6e onward, 1942 in six RAM hunts from its second week, in every
+case after the port believed the problem was solved - section 2.2's inventory is the answer);
+music (three passes in Edge Grinder); performance re-litigation caused by an earlier
 measurement being wrong (a sign bug made Edge Grinder's Layer 3 counts 45 % optimistic); and
 chains of corrections where one inferred fact was built on.
+
+**Before building a new engine for something, cost doing it with hardware the port already
+drives.** 1942's boss is an aircraft wider than the playfield. The first answer was a sprite with
+a blitter of its own - three decisions (105-107), about three days, three save-store defects, and
+a fight tick measured at 180,824 cycles against a 79,872-cycle budget, so every fight frame was
+late. Decision 114 threw it away: the boss became **background**, composited row by row into the
+scrolling ring as its rows enter, and moved by the scroll itself, backwards included. The fight
+tick fell to 28,733 cycles at the median and the blitter left the build. For any large object,
+price background-plus-scroll against a sprite before writing either: the scroll, the CRTC and the
+background fill are engines the port has already paid for.
 
 ---
 
@@ -239,6 +361,25 @@ scroll's sub-row sliver comes out of the vertical total adjust for nothing (see 
 On a Master, Edge Grinder holds two copies of the strip, main and shadow, half a byte out of
 phase, and flips the displayed bank every field. A CRTC step in MODE 2 is two pixels; the odd
 pixel is the other bank.
+
+1942 uses the same two copies as a **double buffer** - the loop draws the back one, the VSync
+shows it (its decision 43) - and the discipline that kept it correct is worth copying whole:
+
+- **ACCCON is never read back.** Its value is always composed from the port's own state (1942:
+  the back-buffer X bit, OR the displayed buffer's D bit, OR the fixed bits), and **every write
+  goes through one routine** that composes and stores with interrupts masked across the two, so
+  an IRQ that writes ACCCON itself cannot land between them.
+- **X names the back buffer only while drawing.** Anything else in `&3000-&7FFF` - game state, a
+  filename, a table - is read with X = 0. 1942 kept game state in that window and read a hold flag
+  with X still on the back buffer, so the stage end ignored the hold on every other tick.
+- **State inside the switched window is per buffer**, deliberately or by accident. Bookkeeping
+  that must follow a buffer (each buffer's restore list, its text) lives there on purpose; state
+  that must be shared lives outside it. A copy of one buffer onto the other must take that
+  bookkeeping with it: 1942's first ring copy took the picture alone, and left text drawn on one
+  buffer that nothing would ever lift.
+- **A panel can live in shadow only**: a timer fire in the horizontal blanking just before the
+  panel's first line flips D for its lines and the VSync puts it back, so the main-RAM copy of the panel becomes
+  plain RAM (1942 decision 141: 896 bytes, measured on jsbeeb and agreed on a real Master).
 
 ### 5.2 A static panel and a scrolling area are a CRTC rupture - and the scrolling area goes FIRST
 
@@ -277,6 +418,16 @@ in their headers.
 A rupture with one shape is easy to hand over between screens. A rupture with **two** shapes (Edge
 Grinder's titles use four cycles and switch the display bank mid-frame) needs the switch made
 atomically inside the VSync handler, and that was the one bug still open when this was written.
+
+**Overscan buys the panel without taking play lines.** 1942's playfield is the arcade's 256 lines
+exactly, so the panel had nowhere to go but outside them: the frame lights **272 lines**, the
+playfield's 256 then two panel rows, out of a 312-line field, leaving 40 lines of blanking against
+PAL's nominal 25. The overscan comes out of blanking, not out of the field, and the playfield-first
+order is what keeps it free - the `8 - line` adjust lands in the top border. It is the one
+load-bearing assumption in such a frame, so it went onto a real display early (1942 decisions 14,
+16, 19; fine on a real Master). Keep one knob that moves the picture up the tube
+(`PANEL_R7`, Paradroid's `FRAME_DROP_ROWS`) and one fallback symbol that takes play rows away if a
+display cannot cope, and light the panel's first and last lines so its extent can be seen.
 
 ### 5.3 Own IRQ1V outright
 
@@ -321,10 +472,29 @@ Load before you take the vector anyway - the reasons that survive are real ones:
 in over `&8000`, its workspace is live until the last call returns, and a load in the middle of a
 running display costs whole frames. Just do not expect a takeover to break the disc **on a B**.
 
+**Or take the drive away from the filing system** (section 2.2's third answer): after the boot's
+last DFS load and `OSBYTE 140`, a Master port can read the disc through its own 1770 driver
+(`lib/qdisc.6502`), with the NMI its own and nothing of the MOS involved - so neither mask nor
+chain applies, the rupture and the sound run through a load, and a rationed read can even run in
+the background of play. 1942 has loaded every stage seam that way since its decision 116.
+
 The frame lock lives in the VSync handler: the main loop parks a finished frame and a ready flag,
 the handler flips the display when `FRAME_LOCK` fields have passed. A slow frame costs whole
-fields, never a tear. Edge Grinder ticks the game logic twice per display frame so the C64's 50 Hz
-constants transcribe unaltered at 25 Hz.
+fields, never a tear - **as long as a late frame waits for the next VSync.** 1942 chose otherwise
+(its decision 65, the owner's call): on a double-buffered Master a frame that misses its VSync is
+shown at once by its D bit, mid-field, and only its scroll registers wait for the VSync, so an
+overrun of a few thousand cycles costs one torn field instead of a whole held one. The tear shears
+the **sprites** at the cut and never the background, because both buffers hold the same level
+bytes at the same addresses - which is also why no screenshot of the background can show it. And
+it is switched off while text is on screen (decision 64), where a shear reads as a fault. Choose
+one, write it down, and make an oracle fail on a late flip where the policy forbids one.
+
+Edge Grinder ticks the game logic twice per display frame so the C64's 50 Hz constants transcribe
+unaltered at 25 Hz. 1942 did the same for an arcade at 59.6 Hz by **treating it as 50** (its
+decision 10): logic at 25 Hz, every per-frame delta doubled, so the arcade's one pixel every two
+frames became exactly one play-pixel a tick and the scroll stayed integral. Where the original's
+per-object routine is transliterated rather than doubled, call it twice a tick - and then **one
+call is one original frame**: a new mover written "per tick" inside it moves double.
 
 ### 5.4 Keyboard direct from the VIA
 
@@ -345,7 +515,15 @@ Eight slots (the C64's arrangement), each owning a save area. The five ideas tha
    a sprite is a second logical black (8 in MODE 2). Fixed roles for the logical colours is what
    makes a sprite byte its own mask. Paradroid did the same with MODE 1's four colours.
 3. **Pre-shifted copies**, one per pixel phase, in sideways banks laid out identically so the
-   engine adds the shift to the bank number and every address is the same.
+   engine adds the shift to the bank number and every address is the same. **The phase count is
+   a memory decision, made per family, and costs no cycles** when the phase only selects which
+   table the blit's base pointer comes from (1942, decision 15). 1942 shipped four phases for its
+   aimed bullets and the small planes' rolls, two for explosions, shots and the big aircraft, one
+   for anything whose X never changes parity. **Rigidity beats exactness**: every picture of one
+   sequence (a take-off, a landing) shares one phase set, so at worst the whole sequence sits a
+   pixel left and nothing in it shifts against anything else (decision 81). Measure whether a
+   family's X changes parity before dropping its phase; every 1942 family that shipped at more
+   than one did.
 4. **`SCANSTEP` with the page carry deferred**: step the pointer down a column without a 16-bit add
    per scanline. Worth 668 bytes in Paradroid's bank when it was adopted.
 5. **Restore all, scroll, draw all**, in that order, and restore in reverse draw order.
@@ -354,6 +532,19 @@ Compile only what is always on screen (the player, the bullet) and interpret the
 boxes, but **measure first**: Edge Grinder deferred compiling until Layers 4 and 5 showed the
 real load, and its interpreted engine was cheap enough. Clip at the edges rather than cull if
 things enter from off-screen; culling makes them pop.
+
+Three more that 1942 measured, once its cast outgrew the descriptor table (decisions 82, 83, 102,
+103, 132):
+
+- **Derive descriptor fields rather than storing them.** A field computable from another, or
+  constant across every entry, costs a few cycles a blit to derive and a byte an entry to store,
+  and the table grows downward into the code. Omit an all-constant array outright, generate every
+  count the code and the oracles share, and `ASSERT` the table's end against the code ceiling.
+- **Fuse a multi-tile object into one wide cell.** 28.6% of 1942's blits were the second tile of
+  a two-tile plane, paying the whole setup again and reading the shared middle byte twice.
+- **Generate a compiled sprite from the shipped bytes**, never from a second copy of the art: the
+  compiled enemy bullet is written by a tool from the same cell the interpreted path draws, so an
+  art change cannot leave the two disagreeing (and the tool must run after every art change).
 
 A wrap that is not row-aligned (16,384 / 640 = 25.6 rows) means a sprite's columns can straddle
 the buffer end. Test once per sprite, not per row, and take the cheap path when it cannot.
@@ -379,6 +570,16 @@ interrupt handler touches no bank unless it saves and restores the selection its
 probe the banks at boot and take the highest four; do not assume 4 to 7 (`lib/swram_probe.6502`).
 On a Master they are 4 to 7 when its LK18 and LK19 links are set. Without them it has two, and
 the probe says which links to move.
+
+**When code space runs out**, in the order 1942 learned them: **move data, not code** - a
+read-only table that any bank can read goes to low RAM and frees its bank for code (decision 57);
+**look in the bank the code already has paged**, not only in main RAM - code that only ever runs
+with a sprite bank in can live in that bank (decision 106); on a Master, **keep HAZEL paged for
+the whole of play** once the filing system is gone, so HAZEL code and data need no paging and no
+mask (decision 96); and **use the MOS's low-RAM pockets that a measurement says are unwritten**
+through a whole driven game, BREAK included (decision 141's measurement: `&0100-&01BF`,
+`&0220-&027F`, `&02B0-&03FF` and more, `docs/hardware-facts.md`). A map of what the MOS leaves is
+not a map of what is free - read what the port already put there.
 
 ### 5.7 The disc: compress everything, one resident depacker, load in order
 
@@ -406,6 +607,19 @@ drifts a page into a region rewritten at runtime assembles cleanly and fails qui
 the ceiling for anything read in play may be lower than the ceiling for the image: Edge Grinder's
 sprite save area sits above its code, and boot-only code is allowed there because it is dead before
 the first sprite draws.
+
+---
+
+### 5.9 Text with no character layer
+
+An arcade draws its captions and tallies on a fixed character layer over the play area; the BBC
+has none. 1942 draws the text **into the back buffer after the sprites, every tick, and saves what
+it covers in the sprite save store**, so the ordinary restore lifts it with the sprites and the
+scroll never has to know (decisions 62-64). Every glyph has a black edge, so it reads over any
+ground in four colours. The cost is shared: **anything that takes save-store room takes the
+text's** - 1942's text skips a line that does not fit, and a later feature that borrowed store
+space made the caption's lines blink under load (`BUGS.md` #82). Price text and sprites against
+the store together, at the game's busiest moment, with text on screen.
 
 ---
 
@@ -464,6 +678,32 @@ The reusable halves of these tools are in this kit's [`py/`](py/) directory. For
 
 ## 8. Working with an artist
 
+### 8.1 Before any artist: reducing a large palette
+
+A C64's 16 colours reduce to a BBC mode with some loss; an arcade's hundreds do not reduce at all
+without a rule. 1942's four pens (black, blue, green, red; MODE 1) came out of these, in this
+order (decisions 20, 80, 117, 128, 142, 151):
+
+- **Reduce by role, not by nearest colour.** Every perceptual metric mapped the muted greens and
+  browns to black. Give each pen a role (sea, land, the player, danger) and map each source colour
+  to its role, with thresholds placed in measured gaps of the source's distribution; a pen
+  reserved for one thing (the player's red) can leave a whole class of source colours with nowhere
+  to go until it is given a second role.
+- **Dither the terrain in 2x2 patterns phased on the SCREEN, not the tile**: tile phasing seams
+  wherever a flipped tile meets an unflipped one. A screen-phased dither has no flip aliases, so it
+  costs tile memory - price it.
+- **Keep the sea to two pens, and make the sprites solid pens**, so a plane stands off dithered
+  ground by texture: green planes vanished over a green jungle until they were solid.
+- **Free extras inside the box**: a black outline baked into each cell inside its existing
+  bounding box costs no byte and no cycle; chequer shading of a big sprite's mid-tones is free to
+  the byte too.
+- **Watch for things told apart by colour alone** (a power-up's colour, a formation that is the
+  one to shoot) - they need a pen or a shape of their own.
+- **Every rule is an environment variable whose default is the shipped value**, with a preview
+  sheet per rule, so the owner chooses from test discs (section 3.2).
+
+### 8.2 The artist pass
+
 Edge Grinder's Layer 8 is the reference. The mechanical conversion from the C64's colours is what
 the game ships with until the artist starts; the artist repaints a *working game*, seeded from
 that conversion, and the pipeline reads PNG sheets at 2:1 (MODE 2's pixels are twice as wide as
@@ -501,6 +741,15 @@ another route:
   with the AY-to-SN layer; a fifth of the data, re-voiced at run time). The second repo's
   README says which to choose and why; start with AKM.
 
+- **1942** had only the arcade's sound ROM: a Z80 sound CPU driving two AY-3-8910s. It **ripped the
+  sound CPU headlessly** - the sound program run on a Python Z80 with the latch and AY ports as
+  callbacks and the IRQ at its measured rate - scored that model RAM for RAM against MAME, 0 wrong,
+  and then **converted the AY register stream to the SN76489 offline, per field**: the game's own
+  channel priorities, periodic-noise bass below the SN's floor, the three loudest voices kept
+  sticky, with WAV renders of both chips for the ear. Everything upstream of the conversion is
+  exact; only the conversion is judged by ear. The converter is `py/beeb_port_kit/ay2sn.py`, useful
+  to any AY source (CPC, Spectrum 128, MSX, arcade), and `docs/arcade-porting.md` has the route.
+
 Whichever you use, verify it the way Edge Grinder does: capture the sound chip writes out of the
 emulator and search for them inside a reference stream rebuilt from the data the build actually
 includes. A wrong address plays happily for thousands of frames before it runs off the end.
@@ -525,31 +774,45 @@ Do not add sound effects the original does not have.
   the instrument for measuring; **b2 or beebjit** is the second opinion (b-em is no longer used).
   Both ports found things one emulator could not show: a rolled field that only b2 rendered, a
   NuLA register mistake that reached hardware, a mid-frame bank switch that only one emulator
-  had been checked on.
-- Publish work-in-progress builds to a stable URL so playtesters' links keep working.
+  had been checked on. **And real hardware long before release for anything that touches the
+  disc, the CRTC's timing or BREAK** - section 12.
+- Publish work-in-progress builds to a stable URL so playtesters' links keep working. A WIP is
+  **two discs from one commit**, the debug build and the release build (1942: `-wip` and `-rc`),
+  because the release differs in kind (no debug keys, the title it ships with), and each disc's
+  `INFO` names the commit. "Give me a build" means the local disc; publish only when asked
+  (skill `beeb-publish-wip`).
+- **Freeze features at the first release candidate.** After rc1 only fixes go in, and a feature
+  restarts the count. 1942's rc1 to v1.0 took nine days and five candidates because three features
+  landed inside it, one of them a whole enemy engine between rc4 and rc5. Skill `beeb-release` is
+  the checklist: the release build and the suite on it, the target matrix, real hardware, every
+  `BUGS.md` row closed or accepted, the catalogue and sector budget, `INFO` naming the commit.
 
 ---
 
 ## 11. What it costs
 
-| | Paradroid | Edge Grinder |
-|---|---|---|
-| Source | Disassembly, version proved on day 2 | Clean source |
-| Machine | Model B + SWRAM | Master 128 |
-| Layers 0 to 6 | ~3 weeks | 2 days |
-| To release candidate | 30 days | 5 days (art and one music decision open) |
-| Commits | 406 | 66 |
-| Docs | ~15,000 lines | ~7,000 lines |
-| Decisions of record | ~60 in layer docs | 74 in one table |
+| | Paradroid | Edge Grinder | 1942 |
+|---|---|---|---|
+| Source | Disassembly, version proved on day 2 | Clean source | None: the arcade ROM under MAME |
+| Machine | Model B + SWRAM | Master 128 | Master 128 |
+| Layers 0 to 6 | ~3 weeks | 2 days | 6 days (Layers 0-8, stage 1) |
+| To release candidate | 30 days | 5 days (art and one music decision open) | 38 days; v1.0 at 47 |
+| Commits | 406 | 66 | 483 |
+| Docs | ~15,000 lines | ~7,000 lines | ~30,000 lines |
+| Decisions of record | ~60 in layer docs | 74 in one table | 161 in one table |
 
-The gap is the process, carried over, and the machine. The first port's month bought the second
-port's week. The purpose of this kit is to make the third port's Layer 0 an afternoon.
+The gap between the first two is the process, carried over, and the machine: the first port's
+month bought the second port's week. The third ran at the second's pace while the layer plan
+applied, and its other five weeks went to what sections 2.2, 3, 4 and 12 now say to do earlier -
+the whole game priced against RAM, the original captured whole and driven, the oracle suite made
+believable, real hardware, and a feature freeze. The purpose of this kit is to make the next
+port's Layer 0 an afternoon, and its last month shorter.
 
 ---
 
 ## 12. How the ports ran with Claude Code
 
-Both ports were built with Claude Code doing the typing and the owner directing, reviewing,
+All three ports were built with Claude Code doing the typing and the owner directing, reviewing,
 playing and deciding, and this kit assumes the next one will be too. What made that work, in
 order of importance:
 
@@ -577,7 +840,28 @@ order of importance:
    register, the buffer oracle, closing a layer. Copy the directory into your project's
    `.claude/skills/`.
 6. **Session memory** keeps the emulator's quirks (it zeroes RAM; memory reads above `&8000`
-   return whichever bank is paged) across conversations, so they are not rediscovered.
+   return whichever bank is paged) across conversations, so they are not rediscovered. End a
+   session with a note of the branch, whether it is merged and pushed, and which disc was
+   published: 1942's owner lost track of which branches held what.
+7. **Real hardware from the first layer that touches the disc, the CRTC's timing or BREAK**, not
+   from the release. Only 1942's owner's Master found the 1770's head settle, the DFS's drive and
+   step rate (`BUGS.md` #85), a 1772's different step rates, garbage on the panel's lines (#87) and
+   BREAK leaving RAM uncleared (#92) - on day 22 and after. Any disc access inside play is gated on
+   real hardware, because emulator disc timing is not trusted.
+8. **Keep the rules file inside its budget** (section 3) and run a documentation pass when it, or
+   `PLAN.md`, starts to narrate: skill `beeb-doc-pass`. 1942 needed nine.
+9. **Branches**: one per brief; merged or deleted within a day of the owner's yes. A git worktree
+   wants `bin/` copied into it; a `tools/output` junction in one is removed with `rmdir`, never
+   `rm -rf`, which follows it.
+10. **Unattended jobs work, and fail in known ways.** 1942 built its front end, a RAM hunt and four
+    enemy-behaviour decisions overnight. What went wrong: decisions taken provisionally were
+    later reversed; a real-hardware gate was bypassed and the branch merged before the owner's
+    Master saw it; the session limit cut a rewrite off half way (survivable only because the brief
+    named the resume point); branches piled up; suites died of memory or a background time limit.
+    The rules are skill `beeb-unattended-job`: own branch, the brief committed first with a resume
+    point, provisional decisions marked `TAKEN` and listed in the morning report, hardware gates
+    left shut, the suite detached with its output outside the home folder, no publishing, and a
+    branch ledger in the report.
 
 ---
 
@@ -600,4 +884,12 @@ the third:
   the artist pipeline and the argument for it.
 - [Edge Grinder `docs/performance.md`](https://github.com/kieranhj/edge-beeb/blob/master/docs/performance.md):
   four optimisations costed, three of them net losses.
-- Both `BUGS.md` files, end to end.
+- [1942 `docs/arcade-facts.md`](https://github.com/kieranhj/1942-beeb/blob/master/docs/arcade-facts.md):
+  an arcade original measured out of MAME, section by section, with the traps in the instrument.
+- [1942 `docs/performance.md`](https://github.com/kieranhj/1942-beeb/blob/master/docs/performance.md):
+  every cycle and byte figure, each labelled MEASURED, COUNTED or PROJECTED, and what was rejected
+  with the number that rejected it.
+- [1942 `docs/brief-boss-as-background.md`](https://github.com/kieranhj/1942-beeb/blob/master/docs/brief-boss-as-background.md)
+  and [`docs/report-ram-2026-10-06.md`](https://github.com/kieranhj/1942-beeb/blob/master/docs/report-ram-2026-10-06.md):
+  a brief from proposal to "what landed", and an overnight RAM hunt's morning report.
+- All three `BUGS.md` files, end to end.

@@ -90,7 +90,25 @@ deterministic, so one sample is exact for that state.
    read_memory    session_id, address: 0x0100, length: 48
    ```
 
-8. **Record the number with its units and its state** in the layer doc: "6,155 cycles a sprite,
+8. **For "how many fit a frame", fit the FLOOR, not the mean** - a different question from one
+   routine's cost, and breakpoint pairs by hand cannot sample enough of it. Hook the top of the
+   tick and the end of its work headlessly (`template/tools/harness.mjs`: `onExec(main_loop)`,
+   `onExec(<end of work>)`, the cycle counter and the load beside each), collect a few thousand
+   ticks, and hand the rows to `tools/floorfit.mjs`: least squares through the MINIMUM work at
+   each load with >= 5 samples. Per-tick work swings by orders of magnitude for reasons that are
+   not the load (1942: a disc-loading seam tick of 663,371 cycles), and a mean fit over all of it
+   went NEGATIVE a blit; the floor fit gave 7,257 + 5,218 a blit, 13 objects in a 79,872-cycle
+   tick. **Read the slope, not the peak** - the peak is whichever tick was busiest, and it moved
+   978 cycles between two of 1942's builds whose slope moved 7. `docs/verification.md` procedure 19.
+
+9. **A COUNTED figure is suspect.** Cycles added up off the listing priced 1942's decision 103 at
+   -13 a blit; the build measured +7, because the count priced the path that got cheaper and
+   forgot the branch on the one that did not. Its counted figures were also wrong by a fifth and
+   once by 2.5x. Label every figure MEASURED, COUNTED or PROJECTED, measure a before and an after
+   as a PAIR (same day, same jsbeeb, same run), and print the jsbeeb version beside it: 2.3.0
+   against 1.25.0 changed three of nine of 1942's reports.
+
+10. **Record the number with its units and its state** in the layer doc: "6,155 cycles a sprite,
    restore + draw, stationary, DEV build, 2026-09-03". A frame meter in microseconds is half the
    cycle count - say which. An in-guest bracket on the User VIA T1 is
    `cycles = 2 * ((before - after) AND &FFFF) - 46` (the 46 is the bracket's own cost).

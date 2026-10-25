@@ -1,0 +1,230 @@
+\ ******************************************************************
+\ *	qdload.6502 - files by name after *FX 140, through qdisc.6502:
+\ *	load_stream's contract without the DFS
+\ ******************************************************************
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, plain 6502.
+\ *	Master only. From the 1942 port's src/qdload.6502 (every seam load
+\ *	of that game since 2026-09-24) - qdisc.6502's header has the
+\ *	provenance (scarybeasts' quicdisc) and the relicence; keep both.
+\ *
+\ *	WHAT IT IS. The boot loads through the DFS as usual (loader.6502);
+\ *	its last act is release_fs, and from then on every load is this.
+\ *	The DFS catalogue is read ONCE, at boot, by qd_boot
+\ *	(qdload_init.6502) - and only the files the game will load after
+\ *	the release are kept, in a table the includer writes with QD_FILE.
+\ *	A file is named exactly as for the DFS, so code that called
+\ *	load_stream calls qd_load_stream with the same arguments.
+\ *	  qd_load_stream  A/Y = the CR-terminated name, X = the page to
+\ *	                  load to. Leaves zxsrc on it, as load_stream does,
+\ *	                  so unpack_to follows unchanged.
+\ *	  qd_load_part    the same, but qd_plen sectors from sector qd_poff
+\ *	                  of the file (1942's STAGES: one file, a chunk a
+\ *	                  stage). Leaves zxsrc alone.
+\ *	Both BLOCK until the data is in (qd_wait). Interrupts may stay on -
+\ *	the bytes come by NMI - or be masked; the IRQ is not needed. qd_err
+\ *	is 0 after a good load and the 1770's error bits (&1C: record not
+\ *	found, CRC, lost data) if a run failed QD_TRIES times. A name not in
+\ *	the table is a BRK ("no file"): there is nothing sane to do.
+\ *
+\ *	THE RULES OF THE TABLE:
+\ *	  - A NAME IS MATCHED ON ITS FIRST QD_NCH CHARACTERS, space-padded:
+\ *	    with QD_NCH = 5, "BOSS" is not "BOSSG", and "STAGES" is "STAGE".
+\ *	    1942 took 5 to save 2 bytes an entry. Two disc files that agree
+\ *	    in their first QD_NCH characters cannot both be cached.
+\ *	  - THE DIRECTORY IS IGNORED: $.SET1 and A.SET1 are one name.
+\ *	  - A FILE IS AT MOST 255 SECTORS (65,280 bytes): the length's top
+\ *	    bits are not read.
+\ *	  - A FILE NOT ON THE DISC keeps zero sectors and loads nothing,
+\ *	    silently - qd_boot returns how many there were: check it.
+\ *	  - THE DISC MUST NOT CHANGE after qd_boot: the table is the
+\ *	    catalogue as it was then.
+\ *
+\ *	THE INCLUDER DEFINES, before this file is included:
+\ *	  zxsrc       (ZP) the depacker's source pointer, as for loader.6502
+\ *	  QD_NCH      1-7: name characters compared (above)
+\ *	and AFTER it, the table, between two labels:
+\ *	      .qd_cat
+\ *	          QD_FILE "SET1"
+\ *	          QD_FILE "STAGES"
+\ *	      .qd_cat_end
+\ *	(up to 255 / (QD_NCH + 3) files). It lives with the resident code;
+\ *	1942 kept it in HAZEL with the loader, in the DFS's own &C000-&C2FF,
+\ *	which are the game's once the DFS has gone.
+\ *
+\ *	Fork this into your project; keep this header.
+\ ******************************************************************
+
+ASSERT QD_NCH >= 1 AND QD_NCH <= 7
+QD_STRIDE = QD_NCH + 3          ; an entry: QD_NCH characters, then start lo,
+                                ; start hi and the length in sectors
+QD_TRIES  = 4                   ; reads of a run before qd_err is kept
+
+\ ---- QD_FILE "NAME": one table entry, filled in by qd_boot ---------
+MACRO QD_FILE name
+    ASSERT LEN(name) >= 1 AND LEN(name) <= QD_NCH
+    EQUS name
+    IF LEN(name) < QD_NCH
+        FOR i = LEN(name)..QD_NCH-1
+            EQUB ' '
+        NEXT
+    ENDIF
+    EQUB 0, 0, 0
+ENDMACRO
+
+\ ---- qd_load_stream: A/Y = the name (CR-terminated), X = the page to
+\ load to. Leaves zxsrc on it. Clobbers A, X, Y.
+.qd_load_stream
+{
+    stx qd_stage
+    jsr qd_find
+    jsr qd_load_at
+    lda #0                      ; load_stream's contract: zxsrc on the stream
+    sta zxsrc
+    lda qd_stage
+    sta zxsrc+1
+    rts
+}
+
+\ ---- qd_load_part: A/Y = the name, X = the page; qd_plen sectors from
+\ the file's sector qd_poff. Nothing checks the part is inside the file.
+\ Clobbers A, X, Y; leaves zxsrc alone.
+.qd_load_part
+{
+    stx qd_stage
+    jsr qd_find                 ; qd_sec = the file's first sector
+    lda qd_plen
+    sta qd_left
+    clc
+    lda qd_sec
+    adc qd_poff
+    sta qd_sec
+    bcc qd_load_at
+    inc qd_sec+1
+}
+\ falls into qd_load_at
+.qd_load_at
+    lda #0
+    sta qd_dst
+    lda qd_stage
+    sta qd_dst+1
+\ falls into qd_sectors
+
+\ ---- qd_sectors: qd_left sectors from absolute sector qd_sec, to qd_dst.
+.qd_sectors
+{
+    lda #0
+    sta qd_err
+    jsr qd_wait                 \ A BUSY 1770 IGNORES A COMMAND - silently -
+                                \ and a qd_warm's seek may still be running
+    \ track = sector / 10, sector = sector MOD 10: at most 80 subtractions
+    lda #0
+    sta qd_trk
+    .div
+    lda qd_sec+1
+    bne sub
+    lda qd_sec
+    cmp #10
+    bcc track
+    .sub
+    sec
+    lda qd_sec : sbc #10 : sta qd_sec
+    lda qd_sec+1 : sbc #0 : sta qd_sec+1
+    inc qd_trk
+    jmp div
+    .track                      ; one run of sectors a track
+    lda qd_left
+    beq loaded
+    lda #10
+    sec
+    sbc qd_sec                  ; what is left on this track
+    cmp qd_left
+    bcc fits
+    lda qd_left
+    .fits
+    sta qd_run
+    lda #QD_TRIES
+    sta qd_try
+    .again
+    lda qd_trk
+    jsr qd_seek
+    jsr qd_wait
+    lda qd_sec                  ; (the NMI walks its own copy of qd_dst)
+    ldx qd_run
+    ldy #0
+    jsr qd_read
+    jsr qd_wait                 ; A = the status
+    and #&1C                    ; record not found, CRC error, lost data
+    beq good
+    dec qd_try
+    bne again
+    sta qd_err                  ; given up on this run: say so, and go on
+    .good
+    clc                         ; the next run starts on the next track's sector 0
+    lda qd_dst+1 : adc qd_run : sta qd_dst+1
+    sec
+    lda qd_left : sbc qd_run : sta qd_left
+    lda #0
+    sta qd_sec
+    inc qd_trk
+    jmp track
+    .loaded
+    rts
+}
+
+\ ---- qd_find: A/Y = a CR-terminated name; qd_sec = its first sector and
+\ qd_left its length in sectors, out of qd_cat.
+.qd_find
+{
+    sta np + 1                  ; the name, as a self-modified operand:
+    sty np + 2                  ; no zero page wanted
+    lda #0
+    sta qd_fbase
+    .entry
+    ldx qd_fbase                ; X = this entry's characters
+    ldy #0
+    .char
+    .np
+    lda &FFFF, y
+    cmp #13
+    beq tail
+    cmp qd_cat, x
+    bne nxt
+    inx
+    iny
+    cpy #QD_NCH
+    bne char
+    beq found                   ; (always)
+    .tail                       ; the name ended: the rest must be spaces
+    lda qd_cat, x
+    cmp #' '
+    bne nxt
+    inx
+    iny
+    cpy #QD_NCH
+    bne tail
+    .found                      ; X = base + QD_NCH: the entry's file bytes
+    lda qd_cat, x : sta qd_sec
+    lda qd_cat + 1, x : sta qd_sec+1
+    lda qd_cat + 2, x : sta qd_left
+    rts
+    .nxt                        ; on to the next entry
+    lda qd_fbase
+    clc
+    adc #QD_STRIDE
+    sta qd_fbase
+    cmp #qd_cat_end - qd_cat
+    bne entry
+    brk                         ; not in the table: nothing sane to do
+    EQUB 0 : EQUS "no file", 0
+}
+
+.qd_poff  EQUB 0                ; qd_load_part's arguments
+.qd_plen  EQUB 0
+.qd_err   EQUB 0                ; 0, or the error bits of a run that failed
+.qd_stage EQUB 0
+.qd_sec   EQUW 0
+.qd_trk   EQUB 0
+.qd_left  EQUB 0
+.qd_run   EQUB 0
+.qd_try   EQUB 0
+.qd_fbase EQUB 0

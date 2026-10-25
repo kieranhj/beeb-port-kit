@@ -91,5 +91,19 @@ Look these up before starting; record them in the project's `CLAUDE.md` once kno
    displaying where it should not, the run is short, and in a scanline scroll the shortfall moves
    with the scroll (1942: `224x272, one run`, 2026-09-08).
 
-7. **Record the figure in the commit body and the layer doc** with the positions tested. "0 of
+7. **Make it headless once it works by hand, and break on the loop.** The MCP walk above is for
+   finding out; the check that runs on every build is a script on `template/tools/harness.mjs`
+   (`beeb-oracle-harness`). It hooks the instruction AFTER the draw call (`h.onExec(<jsr draw +
+   3>, ...)`) and diffs the buffer there, every tick, rather than sampling every two fields: at
+   the busy moments a tick does not fit its fields, and a timed read catches a half-drawn strip.
+   It reads the buffer with the bank named (`h.rd(base, size, "shadow")` - the back buffer the
+   tick DREW, which is not the one the take SHOWS), feeds a view check the scroll pair the
+   hardware was given and a buffer check the loop's own pair (step 4's trap: the two want
+   different state), and gates on coverage - 1942's `verify_sprite.mjs` fails a run that never
+   drew a sprite at a clipped edge, at each pre-shift phase, or across the ring's wrap. Read back
+   every bank a stray write could reach as well: a blit that escaped the top of 1942's ring
+   landed in the paged sideways bank, never in the buffer being diffed (`BUGS.md` #31).
+   `examples/vscroll/tools/verify_vscroll.mjs` is the template's view oracle.
+
+8. **Record the figure in the commit body and the layer doc** with the positions tested. "0 of
    16,384, both banks, scroll phase odd and even" is the shape.

@@ -24,6 +24,9 @@ DEBUG_ANY     = 0               ; boot_stamp.6502
 VERSION_LINE  = "beeb-port-kit lib test"
 BUILD_TIME    = "07 Sep 2026 00:00:00"   ; boot_stamp.6502: no TIME$ in Baron
 DEBUG_DUMMY   = 1               ; a flag to see one BOOT_FLAG line emitted
+QD_NMI_A      = &A0             ; qdisc.6502: the NMI's saved A
+QD_NCH        = 5               ; qdload.6502: name characters compared
+QD_CAT_STAGE  = &2E00           ; qdload_init.6502: the catalogue's 512 bytes
 
 \ The depackers' zero-page slots. ZX02 needs all but zxlen; ZX0 needs
 \ zxlen too and zxofs as two bytes. A real port instantiates ONE depacker
@@ -70,6 +73,15 @@ INCLUDE "../loader.6502"
     ZX0_DEPACKER
 
 INCLUDE "../swram_probe.6502"
+INCLUDE "../break.6502"
+INCLUDE "../qdisc.6502"
+INCLUDE "../qdisc_init.6502"
+INCLUDE "../qdload.6502"
+INCLUDE "../qdload_init.6502"
+.qd_cat
+    QD_FILE "Bank0"
+    QD_FILE "SET1"
+.qd_cat_end
 
 \ a caller, so every entry point is referenced at least once
 .test_main
@@ -81,6 +93,12 @@ INCLUDE "../swram_probe.6502"
     jsr install_irq
     jsr uninstall_irq
     jsr SwrMain
+    jsr brk_arm
+    jsr qd_cfg
+    jsr qd_boot
+    lda #LO(name) : ldy #HI(name) : ldx #&30 : jsr qd_load_stream
+    lda #LO(name) : ldy #HI(name) : ldx #&30 : jsr qd_load_part
+    jsr qd_warm
     rts
 .name EQUS "Bank0", 13
 

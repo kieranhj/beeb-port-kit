@@ -64,5 +64,19 @@ given, and the channels desynchronise into noise. Nothing but this catches a mis
    read_sound_state   session_id
    ```
 
-7. **Record** the frame the capture matched at, the build and flags, and the date, in the layer
+7. **For a player you wrote, replay its MODEL per field, headlessly.** When the player is the
+   port's own (a priority-slot SN player, a converted stream), a unique match proves placement
+   but not that every field is right. 1942's `verify_sound.mjs` breaks on the player's IRQ entry
+   once a field (`h.onExec(snd_irq, ...)` on `template/tools/harness.mjs`), notes the command the
+   player takes off its ring that field, collects every SN76489 byte written until the next break
+   (jsbeeb's sound chip object, `s._soundChip.startCapture()` / `getCapturedWrites()`), and hands
+   the log to the exporter's Python model of the player, which must produce the SAME BYTES in the
+   same order, field for field - with the game driving it, fire held, and a failure if the gun
+   was never heard. That model is the one the exporter already checks against the conversion
+   before it writes a byte, so the chain is conversion -> model -> 6502. **Decode the bytes; do
+   not count them**: 1942's overnight build counted chip writes and shipped three corrupted tunes
+   with the right NUMBER of bytes (`BUGS.md` #66). `docs/verification.md` procedure 17 is the
+   record/replay shape.
+
+8. **Record** the frame the capture matched at, the build and flags, and the date, in the layer
    doc and the commit body ("capture matches at frame 427 and nowhere else").

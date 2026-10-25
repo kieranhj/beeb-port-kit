@@ -1,12 +1,12 @@
 ---
 name: beeb-start-port
-description: Set up Layer 0 of a new C64-to-BBC Micro port from the beeb-port-kit - the docs skeleton with the four rules, the starter template, the jsbeeb MCP configuration, the proposal with its transfers table, and, where code already exists, the proof that splitting it changed nothing. Use when starting a new port, when a repo has code but no rules file or plan, or when the user asks to set up a project for Claude Code.
+description: Set up Layer 0 of a new port to the BBC Micro (from a C64, an arcade board or anything else) from the beeb-port-kit - the specification proved, the whole game inventoried and priced against RAM, the docs skeleton with the four rules and a size budget, the starter template, the jsbeeb MCP configuration, the proposal with its transfers table, and, where code already exists, the proof that splitting it changed nothing. Use when starting a new port, when a repo has code but no rules file or plan, or when the user asks to set up a project for Claude Code.
 ---
 
 # Start a port: Layer 0
 
 Layer 0 is the toolchain and the paperwork, and it is done when the same binary builds from
-`src/`, the emulator is connected, and the seven artefacts exist. The purpose of the kit is to
+`src/`, the emulator is connected, the whole game is priced against RAM, and the artefacts exist. The purpose of the kit is to
 make this an afternoon; the two ports it came from took an evening and two days respectively.
 
 **Kit:** `C:\Users\khcon\OneDrive\BEEB\Repos\beeb-port-kit` (`PORTING.md` §2-4 is the source of this skill)
@@ -21,6 +21,10 @@ the original is the specification; deviations are agreed before they are built a
    build. Any tool that rewrites the specification (an annotator, a table extractor) needs a
    round-trip check beside it: Paradroid's dropped 43 % of the data tables for three weeks.
    Keep reference screenshots of the original in the repo (gitignored if not yours).
+   **No source at all** - an arcade ROM, a binary you can only run under emulation - is the
+   other path (§2.1b, `docs/arcade-porting.md`): the specification is a capture of the running
+   original and a model scored against it, so start `beeb-arcade-capture` here, and treat every
+   ROM read as a hypothesis until it is scored.
 
 2. **Choose the machine on day one** (§2.2). Model B with at least 16K of sideways RAM is the
    baseline, and the fewer banks the game needs the more people can run it on hardware; a
@@ -31,6 +35,14 @@ the original is the specification; deviations are agreed before they are built a
    and record a row for each configuration the port will or won't run on: second processors,
    `*SHADOW`, sideways RAM not at 4-7, softloaded filing systems, no BASIC. "Not supported" is a
    fine answer; "not considered" is not.
+
+   **Then price the WHOLE game against that machine** (§2.2) - every level's tiles, map, sprite
+   pictures, scripts and sounds, raw and packed, per region, and the disc's sectors and its 31
+   catalogue entries - as a tool (`tools/inventory_*.py`), not a note, because it will be re-run.
+   This decides what is resident, what loads at a seam and in what grouping, before stage 1's
+   layout fixes it. 1942 priced stage 1 alone for a week and paid for the other 31 stages in six
+   RAM hunts. Also decide now whether the game reads the disc after it starts (§2.2's three
+   answers) and whether a real machine is available from the first disc or CRTC layer (§12).
 
 3. **Copy the template and build it.** `template/` boots to a panel above a play area with a
    rupture, its own IRQ handler, direct keyboard and a compressed disc.
@@ -46,13 +58,18 @@ the original is the specification; deviations are agreed before they are built a
    (`docs/build-portability.md`): rename `GAME`/`game` to the port's name in lowercase for
    host files, and before asking anyone else to build it, run `beeb-portable-build`.
 
-4. **Write the docs skeleton** - the seven artefacts of PORTING.md §3, each with its rule in
-   its header:
-   - `CLAUDE.md`: the four rules at the top, then Target, Build, Source organisation, Confirmed
-     hardware facts (empty; every entry must say what it was measured on and when), Memory.
-     When a fact in it is wrong, fix it the same day.
+4. **Write the docs skeleton** - the artefacts of PORTING.md §3, each with its rule in its
+   header (the template's `docs/` has them all):
+   - `CLAUDE.md`: **its size budget (~40K) on the first lines**, then the four rules, Target,
+     Build, Source organisation, Confirmed hardware facts (empty; every entry must say what it was
+     measured on and when), Memory. When a fact in it is wrong, fix it the same day.
    - `PLAN.md`: what is left and nothing else; the layer table from §4 with "done when" per row.
-   - `docs/decisions.md`: one table, `# | Date | Decision | Where`; **the only copy**.
+   - `docs/done.md`: what has landed, with the number that says so - where `PLAN.md`'s finished
+     lines and the rules file's history go.
+   - `docs/decisions.md`: one table, `# | Date | Status | Decision | Where`, the Status from the
+     lifecycle (OPEN / PROPOSED / TAKEN / AGREED / SUPERSEDED by N / REJECTED), and a "Rejected,
+     do not re-litigate" table under it; **the only copy**.
+   - `docs/brief-TEMPLATE.md`: kept for the jobs after the layers (§3.1).
    - `BUGS.md`: numbered, with evidence; fixed entries are never deleted.
    - `docs/memory-map.md`: every region, what is in it, how much is free, with the date measured
      and "take live figures from the listing, never from this page" -
