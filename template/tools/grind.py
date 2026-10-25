@@ -26,6 +26,8 @@ names no game.
     python tools/grind.py gate [--quick] [--control REV]
         build the control (REV, default HEAD, in a git worktree; cached by commit) and the test
         (the working tree), run CFG.CHECKS, measure both (CFG.MEASURE): a JSON verdict on stdout
+        It builds in the tree's own build/, so afterwards build/ holds the test's build (and after
+        `run`, possibly a reverted candidate's): rebuild before anything else reads it
     python tools/grind.py run [--batch 4] [--max N] [--retry STATUS ...]
         the queue, serially: apply a batch, gate it, commit it if it passes, is no slower and gains
         something; else bisect it down to the candidates that fail; every outcome in the ledger.

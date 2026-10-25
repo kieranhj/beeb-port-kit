@@ -102,6 +102,9 @@ All in the project (the template carries them; `CLAUDE.md` says where if they mo
    change took its label or callee: Baron's `Duplicate symbol` / `Undefined symbol`), `no room`
    (its region's ASSERT, by the config's NO_ROOM pattern; `run --retry 'no room'` once the region
    has grown), `failed` (a check), `no gain` (within NOISE), `slower`.
+   **After a gate or a run, `build/` holds the last build the gate made**, which may be of a
+   candidate since reverted: rebuild before anything else reads it (the kit's
+   `test_baron_dbg` found 2 lines unplaced against the template's reverted source).
 7. **Report** (`grind.py report`, then commit): candidates by status, what was kept and what it
    saved, batch by batch.
 8. **Iterate:** re-profile and re-annotate the new build, cut the windows again (changed code has
