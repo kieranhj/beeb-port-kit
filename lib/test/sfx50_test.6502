@@ -1,0 +1,52 @@
+\ ******************************************************************
+\ *	sfx50_test.6502 - lib/sfx50.6502 playing fitted effects, under irq.6502
+\ ******************************************************************
+\ *	Not a game. irq.6502 owns IRQ1V (the MOS's tick and sound stop);
+\ *	its vsync hook calls sfx_tick and counts fields. st_main installs it,
+\ *	posts the requests in st_post (4 bytes, one per
+\ *	chip channel, E + 1 or 0) and loops at st_idle. Built and run by
+\ *	lib/test/sfx50_test.mjs, which writes build/sfx50_data.6502 first
+\ *	(py/beeb_port_kit/sfx50.py over py/tests/data/sfx50_capture_sample.json)
+\ *	and checks every chip write field by field. From the kit's root:
+\ *
+\ *	  node lib/test/sfx50_test.mjs [MODEL]
+\ ******************************************************************
+INCLUDE "../beeb.h.6502"
+
+IRQ_UNINSTALL = 0
+
+SECTION SfxT, org = &1900, guard = &3000, filename = "SFXT", exec = st_main
+.st_main
+{
+    jsr install_irq             ; the chip silenced, our handler on IRQ1V
+    jsr sfx_silence
+    ldx #3
+.post
+    lda st_post,X
+    sta sfx_request,X
+    dex
+    bpl post
+}
+.st_idle
+    jmp st_idle
+
+.irq_timer_hook                 ; T1 still runs at the MOS's 100 Hz: nothing to do
+    rts
+.irq_vsync_hook
+    jsr sfx_tick
+    inc st_fields
+    rts
+
+.st_post        EQUB 0, 2, 0, 1 ; the requests, by chip channel: the sample's effect 1 (bullet,
+                                ; chip 1) and effect 0 (noise, chip 3), E + 1
+.st_fields      EQUB 0
+.sfx_request    EQUB 0, 0, 0, 0
+
+INCLUDE "../irq.6502"
+INCLUDE "../sfx50.6502"
+INCLUDE "build/sfx50_data.6502"
+ENDSECTION
+
+SECTION Boot, org = &7E00, guard = &7F00, filename = "!BOOT"
+    EQUS "*RUN SFXT", 13         ; *EXEC'd (--opt 3)
+ENDSECTION

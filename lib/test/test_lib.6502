@@ -85,6 +85,11 @@ INCLUDE "../qdload_init.6502"
 .qd_cat_end
 
 INCLUDE "../nmos.6502"            \ macros only: a few instantiated in test_main
+INCLUDE "../sfx50.6502"           \ with a one-ramp effect in sfx50.py's file's shape
+.sfx_request    EQUB 0, 0, 0, 0
+.sfx_effect_t   EQUB 3, &07, &00, 0, &F8, 0, 0
+.sfx_effect_lo  EQUB LO(sfx_effect_t)
+.sfx_effect_hi  EQUB HI(sfx_effect_t)
 
 \ a caller, so every entry point is referenced at least once
 .test_main
@@ -102,6 +107,8 @@ INCLUDE "../nmos.6502"            \ macros only: a few instantiated in test_main
     lda #LO(name) : ldy #HI(name) : ldx #&30 : jsr qd_load_stream
     lda #LO(name) : ldy #HI(name) : ldx #&30 : jsr qd_load_part
     jsr qd_warm
+    jsr sfx_tick
+    jsr sfx_silence
     STZ_LDA name                \ nmos.6502: three of its macros, NMOS forms here
     INC_A_CLC                   \ (lib/test/nmos_test.py runs every one both ways)
     BRA_JMP test_main_done

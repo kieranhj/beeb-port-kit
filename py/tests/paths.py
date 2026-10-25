@@ -14,3 +14,5 @@ ZX0_EXE = Path(os.environ.get("ZX0_EXE", r"C:\Users\khcon\OneDrive\BEEB\Bin\zx0.
 ZX02_EXE = Path(os.environ.get("ZX02_EXE", r"C:\Users\khcon\OneDrive\BEEB\Bin\zx02.exe"))
 T1942_TOOLS = Path(os.environ.get(
     "T1942_BEEB", r"C:\Users\khcon\OneDrive\BEEB\Repos\1942-beeb")) / "tools"
+STRYKERS = Path(os.environ.get(
+    "STRYKERS_BEEB", r"C:\Users\khcon\OneDrive\BEEB\Projects\strykers"))
