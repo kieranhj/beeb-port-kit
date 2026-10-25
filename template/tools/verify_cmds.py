@@ -85,6 +85,32 @@ def lines():
             ["node", "tools/verify_dynamic.mjs", disc, b.zp("scroll"), b.zp("field_count"),
              b.zp("frame_count"), model])
 
+        add("harness.mjs's helpers on a known answer: names from the dump, a key by its "
+            "internal number, callFrom, the refusal of an unbanked hook, bank-aware names (%s)" % model,
+            ["node", "tools/harness_selftest.mjs", disc])
+        add("the A/B pair harness on the build against ITSELF: the same keys per pass, the "
+            "state and the shown strip identical for 600 passes (%s)" % model,
+            ["node", "tools/pairlock.mjs", "examples/pairlock/template.mjs", disc, disc,
+             "--passes", "600", "--screen"])
+        add("NEGATIVE CONTROL: the pair with step_left poked to 4 at pass 50 in the test "
+            "machine must FAIL, at the first pass after it with LEFT held (%s)" % model,
+            ["node", "tools/pairlock.mjs", "examples/pairlock/template.mjs", disc, disc,
+             "--passes", "600", "--poke", "50:step_left=04"], expect=1)
+
+    sh, ctl = Build("build/game-shift256.ssd"), Build("build/game-shift256end.ssd")
+    if sh.ok and ctl.ok:
+        add("the relocation proof: Game 256 bytes higher runs frame for frame like its padded "
+            "control (build.ps1 -Shift 256 and -Shift 256 -ShiftEnd)",
+            ["node", "tools/lockstep.mjs", "examples/pairlock/template.mjs", ctl.disc, sh.disc,
+             "--frames", "1500"])
+        add("the relocation proof by instruction: every PC mapped back through the labels, "
+            "every strip write, for 1,000 fields",
+            ["node", "tools/tracediff.mjs", "examples/pairlock/template.mjs", ctl.disc, sh.disc,
+             "--max", "40000000"])
+    else:
+        print("verify_cmds: no build/game-shift256*.ssd -- build.ps1 -Shift 256 (and -ShiftEnd) "
+              "for the relocation proof's lines", file=sys.stderr)
+
     vs = Build("examples/vscroll/build/vscroll.ssd")
     if vs.ok:
         add("the vertical scroll's PICTURE: the strip formula and the CRTC's view, 0 wrong at "
