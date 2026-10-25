@@ -1,0 +1,113 @@
+\ ******************************************************************
+\ *	qdload_init.6502 - qdload.6502's run-once half: qd_boot installs
+\ *	the driver and fills the file table from the disc's catalogue
+\ ******************************************************************
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, plain 6502.
+\ *	Master only. From the 1942 port's src/qdboot.6502 - qdisc.6502's
+\ *	header has the provenance and the relicence; keep both.
+\ *
+\ *	BOOT-ONLY, like qdisc_init.6502, which it needs (qd_init). Call
+\ *	qd_boot ONCE, AFTER release_fs (*FX 140,0) and after qd_cfg was
+\ *	called before it. It blocks (two sectors, a restore and a seek),
+\ *	then every qd_load_stream / qd_load_part works.
+\ *	  A on return: how many table entries were NOT found on the disc
+\ *	  (0 = all of them). They load nothing - check it at boot.
+\ *
+\ *	THE CATALOGUE, as qd_boot reads it (Acorn DFS, both sectors on track
+\ *	0 of the side the game was run from): sector 0 holds entry k's
+\ *	seven name characters at 8 + 8k (top bits are flags) and its
+\ *	directory after; sector 1's byte 5 is 8 x the file count, and its
+\ *	entry k at 8 + 8k is load(2) exec(2) length(2) mixed(1) start(1),
+\ *	the mixed byte's bits 0-1 the start's bits 8-9. A part sector rounds
+\ *	the length up.
+\ *
+\ *	THE INCLUDER DEFINES:
+\ *	  QD_CAT_STAGE  a page-aligned 512 bytes qd_boot may overwrite - the
+\ *	                catalogue's two sectors land there. Main RAM below
+\ *	                &3000, or anywhere that stays paged (qdisc.6502: the
+\ *	                target must stay put for the whole read).
+\ *
+\ *	Fork this into your project; keep this header.
+\ ******************************************************************
+
+ASSERT LO(QD_CAT_STAGE) = 0
+ASSERT qd_cat_end - qd_cat < 256 AND (qd_cat_end - qd_cat) MOD QD_STRIDE = 0
+ASSERT qd_cat_end > qd_cat
+
+.qd_boot
+{
+    jsr qd_init                 ; patch, install, restore to track 0
+    jsr qd_wait
+    lda #0                      ; the catalogue: track 0, sectors 0-1
+    jsr qd_seek
+    jsr qd_wait
+    lda #LO(QD_CAT_STAGE) : sta qd_dst
+    lda #HI(QD_CAT_STAGE) : sta qd_dst+1
+    lda #0
+    ldx #2
+    ldy #0
+    jsr qd_read
+    jsr qd_wait
+    lda #0
+    sta qd_missing
+    ldx #0                      ; X = this table entry
+    .want
+    ldy #8                      ; Y = 8 + 8k into the catalogue
+    .cand                       ; entry k is at 8 + 8k, k < N: so Y <= 8N, where
+    tya                         ; byte 5 of sector 1 is 8N. (1942's qdboot took
+    cmp QD_CAT_STAGE + &105     ; Y < 8N and never saw the last entry, the
+    beq inside                  ; disc's FIRST file, which no 1942 seam
+    bcs absent                  ; loads; lib/test/qdisc_test.mjs checks it)
+    .inside
+    stx qd_bj
+    sty qd_bk
+    lda #QD_NCH
+    sta qd_bn
+    .same
+    lda QD_CAT_STAGE, y
+    and #&7F
+    cmp qd_cat, x
+    bne nextk
+    inx
+    iny
+    dec qd_bn
+    bne same
+    ldx qd_bj                   ; found: copy its start and length
+    ldy qd_bk
+    lda QD_CAT_STAGE + &100 + 7, y
+    sta qd_cat + QD_NCH, x      ; start sector, low
+    lda QD_CAT_STAGE + &100 + 6, y
+    and #3
+    sta qd_cat + QD_NCH + 1, x  ; start sector, high
+    lda QD_CAT_STAGE + &100 + 4, y   ; length low: a part sector rounds up
+    cmp #1
+    lda QD_CAT_STAGE + &100 + 5, y   ; length middle = whole sectors
+    adc #0
+    sta qd_cat + QD_NCH + 2, x  ; sectors (files under 64K)
+    .nextj
+    txa
+    clc
+    adc #QD_STRIDE
+    tax
+    cpx #qd_cat_end - qd_cat
+    bne want
+    lda qd_missing
+    rts
+    .absent                     ; not on this disc: zero sectors, counted
+    lda #0
+    sta qd_cat + QD_NCH + 2, x
+    inc qd_missing
+    jmp nextj
+    .nextk
+    ldx qd_bj
+    lda qd_bk
+    clc
+    adc #8
+    bcs absent                  ; past entry 30, the 31st: Y would wrap
+    tay
+    jmp cand
+}
+.qd_missing EQUB 0
+.qd_bj      EQUB 0
+.qd_bk      EQUB 0
+.qd_bn      EQUB 0

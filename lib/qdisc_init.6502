@@ -1,0 +1,149 @@
+\ ******************************************************************
+\ *	qdisc_init.6502 - qdisc.6502's run-once half: the drive and step
+\ *	rate (qd_cfg), the NMI routine's source and qd_init
+\ ******************************************************************
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, plain 6502.
+\ *	Master only. Derived from scarybeasts' quicdisc via the 1942 port
+\ *	(src/lib/qdisc_init.6502, src/qdcfg.6502) - qdisc.6502's header has
+\ *	the provenance and the relicence; keep both.
+\ *
+\ *	BOOT-ONLY: nothing here is called after qd_init returns, so it can
+\ *	be assembled where the game later unpacks over it (1942 put it under
+\ *	its sprite table). Include qdisc.6502 first (or anywhere: Baron
+\ *	resolves forward references; the patch targets are its labels).
+\ *
+\ *	THE ORDER AT BOOT:
+\ *	  jsr qd_cfg        WHILE THE DFS IS STILL THE FILING SYSTEM: it
+\ *	                    asks it (OSGBPB 5) and the CMOS (OSBYTE &A1).
+\ *	  ... the last DFS load ...
+\ *	  jsr release_fs    (loader.6502: *FX 140,0, the DFS lets go of
+\ *	                    the NMI and stands its hardware down)
+\ *	  jsr qd_init       patch, install the NMI routine, restore. Returns
+\ *	                    at once: qd_wait before the first command.
+\ *	A port that skips qd_cfg gets drive 0 at 6 ms - the defaults - which
+\ *	is wrong on any real drive the user has configured slower, and on a
+\ *	game run from drive 1 (1942 BUGS.md #85).
+\ *
+\ *	THE STEP RATE (qd_cfg). *CONFIGURE FDRIVE is CMOS byte 11, bits
+\ *	1-0, and the DFS issues them as the 1770's r1 r0 - MEASURED in jsbeeb
+\ *	(1942 tools/_probe_fdcwrites.mjs): FDRIVE 0 gives the DFS's restore,
+\ *	seek and step &00 / &10 / &50, FDRIVE 3 &03 / &13 / &53. On a 1770
+\ *	r = 0-3 is 6 / 12 / 20 / 30 ms; ON A 1772 IT IS 6 / 12 / 2 / 3 ms.
+\ *	So r = 2 and 3 ARE CLAMPED TO 1, 12 ms on both chips (scarybeasts,
+\ *	2026-10-16): FDRIVE 3 - KC's Master - would step a 1772 board's drive
+\ *	at 3 ms, far too fast for an old 5.25" drive. r = 0 keeps 6 ms.
+\ *	PLAYED from a real drive 1 at FDRIVE 3 (1942, KC, 2026-10-12).
+\ *
+\ *	THE DRIVE (qd_cfg). OSGBPB 5 returns the title's length, the title,
+\ *	the boot option and the CURRENT DRIVE, 0-3. DFS drives 2 and 3 are
+\ *	the second sides of physical drives 0 and 1, so 2 selects drive 0
+\ *	side 1: qd_read's side 0 is THAT side and its side 1 the other.
+\ *
+\ *	THE INCLUDER DEFINES nothing beyond qdisc.6502's QD_NMI_A.
+\ *	Clobbers: qd_cfg and qd_init clobber A, X, Y.
+\ *
+\ *	Fork this into your project; keep this header.
+\ ******************************************************************
+
+\ ---- the routine, as it runs at &0D00. POSITION-DEPENDENT: every
+\ absolute reference to itself is QD_NMI + an offset, so a byte added
+\ above moves them - the ASSERTs say so.
+.qd_nmi_src
+    sta QD_NMI_A                ; +0  the first byte is the arm/disarm switch
+    lda QD_DATA                 ; +2
+    sta &FFFF                   ; +5  its operand, +6/+7, walks the buffer
+    inc QD_NMI_ST               ; +8
+    beq qd_nmi_page             ; +11
+    lda QD_NMI_A                ; +13
+    rti                         ; +15
+.qd_nmi_page
+    inc QD_NMI_ST + 1           ; +16
+    dec QD_NMI_PAGES            ; +19
+    beq qd_nmi_end              ; +22
+    lda QD_NMI_A                ; +24
+    rti                         ; +26
+.qd_nmi_end
+    lda #QD_ABORT               ; +27 the count is in: stop the multi-sector read
+    sta QD_CMD
+    lda #QD_IDLE                ; ...and disarm, so nothing else lands
+    sta QD_NMI
+    lda QD_NMI_A
+    rti
+.qd_nmi_src_end
+ASSERT qd_nmi_src_end - qd_nmi_src <= &31   ; below QD_NMI_PAGES
+ASSERT qd_nmi_page - qd_nmi_src = 16
+ASSERT QD_NMI_ST = QD_NMI + 6 AND QD_ARMED = &85   ; the store's operand (+6/+7) and STA zp
+
+\ ---- qd_cfg: the drive the game was run from and FDRIVE's step rate,
+\ into qd_cfg_ctl / qd_cfg_rate for qd_init. CALL IT BEFORE *FX 140.
+.qd_cfg
+{
+    lda #LO(qd_cfg_ans)         ; OSGBPB 5's answer, in the host
+    sta qd_cfg_blk + 1
+    lda #HI(qd_cfg_ans)
+    sta qd_cfg_blk + 2
+    lda #&FF
+    sta qd_cfg_blk + 3
+    sta qd_cfg_blk + 4
+    lda #5
+    ldx #LO(qd_cfg_blk)
+    ldy #HI(qd_cfg_blk)
+    jsr osgbpb
+    ldx qd_cfg_ans              ; the title's length
+    lda qd_cfg_ans + 2, x       ; after the title and the boot option: the drive
+    and #3
+    tax
+    lda qd_cfg_drives, x
+    sta qd_cfg_ctl
+    lda #&A1                    ; OSBYTE &A1: CMOS storage byte X into Y
+    ldx #11
+    jsr osbyte
+    tya
+    and #3                      ; FDRIVE's step rate, as the 1770's r1 r0
+    cmp #2                      ; r1 set is 20 / 30 ms on a 1770 and 2 / 3 ms
+    bcc rate_ok                 ; on a 1772: take r = 1, 12 ms on both
+    lda #1
+    .rate_ok
+    sta qd_cfg_rate
+    rts
+}
+.qd_cfg_drives                  ; &FE24: bit 0 drive 0, bit 1 drive 1, bit 2 out
+    EQUB &25, &26, &35, &36     ; of reset, bit 4 side 1, bit 5 single density
+.qd_cfg_ctl  EQUB QD_SIDE0      ; qd_cfg's answers; these defaults (drive 0,
+.qd_cfg_rate EQUB 0             ; 6 ms) are what qd_init uses without it
+.qd_cfg_blk  SKIP 13            ; OSGBPB's block: handle, address, count, pointer
+.qd_cfg_ans  SKIP 16            ; title length, title (up to 12), option, drive
+
+\ ---- qd_init: patch, install the routine and restore to track 0. Call it
+\ with the DFS already off the NMI (*FX 140,0). Returns at once; qd_wait.
+.qd_init
+{
+    lda qd_cfg_ctl              ; every drive select...
+    sta qd_ctl0 + 1
+    sta qd_init_ctl + 1
+    eor #QD_SIDE
+    sta qd_ctl1 + 1
+    lda qd_cfg_rate             ; ...and every restore and seek
+    ora #QD_RESTORE
+    sta qd_rest_op + 1
+    ora #QD_SEEK
+    sta qd_seek_op + 1
+    sta qd_warm_op + 1
+
+    ldx #qd_nmi_src_end - qd_nmi_src - 1
+    .copy
+    lda qd_nmi_src, x
+    sta QD_NMI, x
+    dex
+    bpl copy
+    lda #QD_IDLE                ; disarmed until the first qd_read
+    sta QD_NMI
+}
+.qd_init_ctl
+    lda #QD_SIDE0               ; (patched above: the drive)
+    sta QD_CTRL
+    lda QD_CMD                  ; clear any INTRQ, so the next one is an edge
+.qd_rest_op
+    lda #QD_RESTORE             ; (patched above: the step rate)
+    sta QD_CMD
+    jmp qd_settle

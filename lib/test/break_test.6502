@@ -1,0 +1,62 @@
+\ ******************************************************************
+\ *	break_test.6502 - break.6502 on a real boot, driven by
+\ *	break_test.mjs: does BREAK clear RAM?
+\ ******************************************************************
+\ *	Master. From the kit's root:
+\ *	  node lib/test/break_test.mjs        (assembles this itself)
+\ *
+\ *	The oracle stops at bt_main, pokes bt_mode, and lets it run to
+\ *	bt_ready, where the machine spins with &3000-&5FFF full of &A5 and
+\ *	the MOS's interrupts on (the system VIA's IER non-zero, as in any
+\ *	game). It then presses BREAK and reads RAM back. bt_mode:
+\ *	  bit 0  call brk_arm (*FX 200,2 and the &0287 intercept); else
+\ *	  bit 1  *FX 200,2 alone
+\ *	  bit 2  then write 0 to &0258, as a game using that page would
+\ ******************************************************************
+INCLUDE "../beeb.h.6502"
+
+SECTION Test, org = &2000, guard = &3000, filename = "BRKT", exec = bt_main
+.bt_main
+    lda bt_mode                 ; THE ORACLE POKES bt_mode HERE
+    lsr a
+    bcc no_arm
+    jsr brk_arm
+    jmp armed
+.no_arm
+    lsr a
+    bcc armed
+    lda #200
+    ldx #2
+    ldy #0
+    jsr osbyte
+.armed
+    lda bt_mode
+    and #4
+    beq fill
+    lda #0
+    sta MOS_BRK_FLAG
+.fill
+    lda #&30
+    sta fp+2
+    ldy #0
+.page
+    lda #&A5
+.fp
+    sta &3000, y
+    iny
+    bne fp
+    inc fp+2
+    lda fp+2
+    cmp #&60
+    bne page
+.bt_ready                       ; THE ORACLE PRESSES BREAK HERE
+    jmp bt_ready
+
+.bt_mode EQUB 0
+
+INCLUDE "../break.6502"
+ENDSECTION
+
+SECTION Boot, org = &7E00, guard = &7F00, filename = "!BOOT"
+    EQUS "*RUN BRKT", 13
+ENDSECTION

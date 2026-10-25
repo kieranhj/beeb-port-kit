@@ -1,0 +1,209 @@
+\ ******************************************************************
+\ *	qdisc.6502 - a DFS-free, non-blocking sector reader for the
+\ *	Master's WD1770: the RESIDENT half
+\ ******************************************************************
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, plain 6502.
+\ *	MASTER ONLY (the registers are the Master's &FE24-&FE2B).
+\ *
+\ *	WHAT IT IS. The kit's THIRD answer to "does the game read the disc
+\ *	after it starts" (loader.6502's contract has the other two: keep
+\ *	the filing system and own the machine, or release it and never load
+\ *	again). Here the game releases the filing system (*FX 140,0,
+\ *	loader.6502's release_fs) after its boot loads AND KEEPS READING
+\ *	THE DISC, by driving the 1770 itself: a short self-modifying routine
+\ *	at &0D00 stores each byte the controller hands over by NMI, and
+\ *	every call returns AT ONCE - the caller polls qd_busy, or calls
+\ *	qd_wait. So no OS call is made after the release, the DFS's
+\ *	workspace is the game's (&0E00 up, HAZEL &C000-&C2FF), and a read
+\ *	can run in the background while the game plays.
+\ *	  qdisc.6502       this file: seek, read, busy, wait, warm.
+\ *	  qdisc_init.6502  BOOT-ONLY: the NMI routine's source, qd_cfg (the
+\ *	                   drive and step rate, asked of the DFS and CMOS
+\ *	                   BEFORE *FX 140) and qd_init (patch, install,
+\ *	                   restore to track 0).
+\ *	  qdload.6502      files by NAME: load_stream's contract without
+\ *	                   the DFS, out of a catalogue cached at boot.
+\ *	  qdload_init.6502 BOOT-ONLY: qd_boot, which reads the catalogue.
+\ *	A port that only wants raw sectors takes the first two.
+\ *
+\ *	WHERE IT CAME FROM.
+\ *	  The 1942 port (github.com/kieranhj/1942-beeb), src/lib/qdisc.6502,
+\ *	  src/lib/qdisc_init.6502, src/qdcfg.6502 - every seam load of that
+\ *	  game from 2026-09-24 to v1.0, and its rationed background reads
+\ *	  (bgread.6502) during play.
+\ *	  And before that scarybeasts' quicdisc (misc/quicdisc/quicdisc.asm
+\ *	  in his beebjit tree), whose approach this is: *FX 140,0 takes the
+\ *	  DFS off the NMI, a routine at &0D00 stores the bytes, the call
+\ *	  returns at once. RELICENSED FOR THIS USE with his blessing,
+\ *	  2026-10-12: "relicense / rewrite etc. the quicdisc stuff however
+\ *	  is useful". Keep this attribution when you fork the file.
+\ *	What is different from quicdisc, and why:
+\ *	  - MASTER ONLY: the 8271 and the Model B's &FE84 1770 are gone, so
+\ *	    the registers are constants;
+\ *	  - A RUN OF SECTORS, not a whole track: qd_read takes the first
+\ *	    sector and a page count, and FORCE INTERRUPT (&D0, which raises
+\ *	    no completion interrupt) ends the multi-sector read at the count;
+\ *	  - THE ROUTINE IS DISARMED BETWEEN READS. On an Acorn 1770 board
+\ *	    the NMI line is DRQ OR INTRQ (jsbeeb's wd-fdc.js, from beebjit),
+\ *	    so a SEEK's completion interrupt runs it too - and quicdisc's
+\ *	    version then stores one junk byte after the buffer. Here its
+\ *	    first byte is RTI (&40) while no read runs and STA zp (&85)
+\ *	    while one does;
+\ *	  - THE DRIVE AND THE STEP RATE ARE THE MACHINE'S (1942 BUGS.md #85,
+\ *	    a real drive, 2026-10-11): qd_cfg asks the DFS which drive the
+\ *	    game was run from and the CMOS for *CONFIGURE FDRIVE, and qd_init
+\ *	    patches every drive select, restore and seek below. Drive 0 at
+\ *	    6 ms always hung on drive 0 and read garbage on drive 1; a Gotek
+\ *	    takes any rate, so only a real drive showed it.
+\ *
+\ *	WHAT WAS MEASURED, and when:
+\ *	  - lib/test/qdisc_test.mjs (jsbeeb Master, headless): every track of
+\ *	    both sides of a patterned double-sided disc byte-exact, a run
+\ *	    inside a track, the sentinel after every buffer untouched with a
+\ *	    SEEK between reads. The header of that file has the figures.
+\ *	  - 35 CYCLES A BYTE on the common path, COUNTED (NMI entry 7, sta zp
+\ *	    3, lda 4, sta 4, inc 6, beq 2, lda zp 3, rti 6), +18 on a page's
+\ *	    last byte. A single-density byte arrives every 64 us = 128 cycles,
+\ *	    so a read leaves ~73% of the CPU to the caller.
+\ *	  - A READ COMMAND WITH E SET (&94) SETTLES THE HEAD 15-30 ms ON A
+\ *	    REAL 1770, EVERY TIME, motor running or not (1942, KC's Master,
+\ *	    2026-10-10). jsbeeb up to 2.3.x settles only after a spin-up
+\ *	    (fixed upstream, jsbeeb PR #1226), so no emulator run shows it.
+\ *	    qd_read issues QD_READM = &94 because qdload.6502 seeks before
+\ *	    every run; a reader that reads track after track on one track
+\ *	    without seeking can patch qd_read_op + 1 to &90 and save it.
+\ *	  - A BUSY 1770 SILENTLY IGNORES A COMMAND ("command while busy -
+\ *	    ignoring", jsbeeb). Wait for idle (qd_wait) before every one.
+\ *	  - THE TARGET MUST STAY PUT FOR THE WHOLE READ: the NMI stores
+\ *	    through an absolute address with whatever ROMSEL, ANDY and ACCCON
+\ *	    the interrupted code has. Read into main RAM below &3000, or hold
+\ *	    the paging still until qd_busy says done.
+\ *	  - SEI DOES NOT MASK IT. The NMI is the NMI: a read runs on through
+\ *	    a masked section, which is how a load under SEI works at all.
+\ *
+\ *	THE REGISTERS (Master): &FE24 drive control, &FE28 command/status,
+\ *	&FE29 track, &FE2A sector, &FE2B data. Drive control &25 = drive 0,
+\ *	not in reset, single density (DFS discs are FM); +&10 is side 1.
+\ *	Not measured: MOS 3.5 / the Compact, a 1772 board (the step rate
+\ *	clamp is for one: qdisc_init.6502), MMFS, ADFS-formatted discs.
+\ *
+\ *	THE INCLUDER DEFINES, before this file is included:
+\ *	  QD_NMI_A   one zero-page byte, the NMI routine's saved A. 1942 used
+\ *	             &A0: &A0-&A7 are the MOS's NMI-owner workspace, and after
+\ *	             *FX 140,0 the NMI owner is this (measured unwritten by
+\ *	             anything else through a whole game, 1942 2026-10-11).
+\ *	             Never a Baron ZA_AUTO: the NMI can fire inside any code.
+\ *	And it OWNS &0D00-&0D31 (QD_NMI): the NMI routine and its page count.
+\ *	Call nothing here before qd_init (qdisc_init.6502).
+\ *
+\ *	Fork this into your project; keep this header.
+\ ******************************************************************
+
+ASSERT QD_NMI_A >= 0 AND QD_NMI_A < &100   ; a zero-page byte: STA zp is the switch
+
+QD_CTRL  = &FE24
+QD_CMD   = &FE28                ; write: command; read: status (clears INTRQ)
+QD_TRK   = &FE29
+QD_SEC   = &FE2A
+QD_DATA  = &FE2B
+QD_SIDE0 = &25                  ; drive 0, not reset, single density
+QD_SIDE  = &10                  ; drive control's side bit
+QD_RESTORE = &00                ; restore to track 0, spin-up, 6 ms steps
+QD_SEEK    = &10                ; seek to the data register's track
+QD_READM   = &94                ; read sectors, MULTIPLE, spin-up, E: settle
+QD_ABORT   = &D0                ; force interrupt: no completion NMI
+
+QD_NMI       = &0D00            ; the routine, copied here by qd_init
+QD_NMI_PAGES = QD_NMI + &31     ; pages still to come
+QD_NMI_ST    = QD_NMI + 6       ; the store's operand, the running pointer
+QD_ARMED     = &85              ; STA zp - the routine's first byte while reading
+QD_IDLE      = &40              ; RTI
+
+\ ---- qd_seek: A = track. Returns at once; poll qd_busy. ------------
+\ THE LABELLED OPERANDS (qd_seek_op, qd_ctl0, qd_ctl1, qd_warm_op, and
+\ qd_init_ctl / qd_rest_op in qdisc_init.6502) ARE PATCHED by qd_init from
+\ what qd_cfg found. The constants are drive 0 at 6 ms.
+.qd_seek
+    sta QD_DATA
+    lda QD_CMD                  ; clear any INTRQ, so the next one is an edge
+.qd_seek_op
+    lda #QD_SEEK
+    sta QD_CMD
+    jmp qd_settle
+
+\ ---- qd_read: X pages from sector A of the current track into (qd_dst),
+\ on side Y (0 = the side the game was run from, 1 = the other). Returns at
+\ once; poll qd_busy. X is 1..10, and a run may not cross the end of the
+\ track: the caller splits it (qdload.6502's qd_sectors does).
+.qd_read
+    sta QD_SEC
+    stx QD_NMI_PAGES
+    lda qd_dst
+    sta QD_NMI_ST
+    lda qd_dst + 1
+    sta QD_NMI_ST + 1
+.qd_ctl0
+    lda #QD_SIDE0               ; (patched: the boot's drive and side)
+    cpy #0
+    beq qd_read_s0
+.qd_ctl1
+    lda #QD_SIDE0 EOR QD_SIDE   ; (patched: the same drive's other side)
+.qd_read_s0
+    sta QD_CTRL
+    lda #QD_ARMED
+    sta QD_NMI
+    lda QD_CMD                  ; clear any INTRQ
+.qd_read_op
+    lda #QD_READM
+    sta QD_CMD
+\ falls into qd_settle
+\ ---- the 1770 wants ~48 us before BUSY reads true after a command ---
+.qd_settle
+{
+    ldx #20
+    .loop
+    dex
+    bne loop
+    rts
+}
+
+\ ---- qd_busy: A = the status's BUSY bit (1 while a command runs), Z
+\ clear while busy. Reading the status clears INTRQ.
+.qd_busy
+    lda QD_CMD
+    and #1
+    rts
+
+\ ---- qd_wait: until the 1770 is idle; returns its status in A -------
+\ (bits 2-4: lost data, CRC error, record not found).
+.qd_wait
+{
+    .loop
+    lda QD_CMD
+    lsr a
+    bcs loop
+    lda QD_CMD
+    rts
+}
+
+\ ---- qd_warm: keep the drive's motor on --------------------------
+\ A seek to the track the head is already on: it returns at once, spins
+\ the motor up if it had stopped, and restarts the 1770's own idle count -
+\ it turns the motor off after ~10 idle revolutions, 2 s. Call it a little
+\ before a load you can see coming, so the load does not pay the spin-up
+\ (1942's drive_warm: a set seam held 2.87 M cycles against the DFS's
+\ 6.75 M). Its completion interrupt meets the DISARMED NMI routine.
+\ Does nothing if a command is running. Clobbers A.
+.qd_warm
+    lda QD_CMD                  ; the status: clears any INTRQ
+    lsr a
+    bcs qd_warm_out             ; busy: spinning anyway
+    lda QD_TRK
+    sta QD_DATA
+.qd_warm_op
+    lda #QD_SEEK                ; (patched: the step rate)
+    sta QD_CMD
+.qd_warm_out
+    rts
+
+.qd_dst  EQUW 0                 ; qd_read's destination
