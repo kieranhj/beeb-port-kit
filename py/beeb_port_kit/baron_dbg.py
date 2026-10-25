@@ -42,6 +42,17 @@ expansion. So a line of four `:`-separated instructions is four instructions,
 and the reports and annotations point at the project's own sources.
 
 Fork this into your project's tools/ with tools/analyse.py; keep this header.
+
+2026-10-25, from Stryker's Run (its fork of 2026-10-16): nested (rephased)
+SECTIONs. This used to end the current section at any ENDSECTION, so
+everything a section emits after its first nested section was lost ("emits
+outside any SECTION") - any copy-down block written as a SECTION inside the
+file's. Now the sections are a stack; a nested section's bytes are taken from
+the disc file of the section that carries it (at the enclosing PC where it
+opens), and an elided EQUB/EQUW/EQUD line's size is counted from its
+arguments. `read_disc` reads the disc's files (default dfs.read_image): a
+project whose disc holds packed files passes one that unpacks them
+(dfs.game_files).
 """
 
 import json
@@ -76,6 +87,38 @@ _DATA = {"equb": ".byte", "equs": ".byte", "equw": ".word", "equd": ".dword",
 def _key(text):
     """What two spellings of one statement have in common."""
     return re.sub(r"\s+", "", text).lower()
+
+
+_EQU_ARGS = re.compile(r"^(EQUB|EQUW|EQUD)\s+(.*)$", re.I)
+
+
+def _size(L):
+    """A listed line's size: its bytes, or, where Baron elided them, an EQUB /
+    EQUW / EQUD's arguments counted (strings and expressions with commas are
+    not, so this errs short)."""
+    n = len(L.data) if L.data else 0
+    if L.elided:
+        m = _EQU_ARGS.match(L.text.strip())
+        if m and '"' not in m.group(2):
+            k = len(split_args(m.group(2)))
+            n = max(n, k * {"equb": 1, "equw": 2, "equd": 4}[m.group(1).lower()])
+    return n
+
+
+def split_args(text):
+    out, depth, cur = [], 0, []
+    for ch in text.split("\\")[0]:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            out.append("".join(cur)); cur = []
+        else:
+            cur.append(ch)
+    if "".join(cur).strip():
+        out.append("".join(cur))
+    return out
 
 
 def split_statements(line):
@@ -193,12 +236,14 @@ class Frame:
 
 
 class Converter:
-    def __init__(self, root, listing_path, symbols_path, disc_path=None, main=None):
+    def __init__(self, root, listing_path, symbols_path, disc_path=None, main=None,
+                 read_disc=None):
         self.root = Path(root).resolve()
         self.lines = _listing.parse(listing_path)
         self.dump = _listing.dump_files(
             json.loads(Path(symbols_path).read_text(encoding="utf-8")))
-        self.disc = _dfs.read_image(disc_path).files if disc_path and \
+        read_disc = read_disc or (lambda p: _dfs.read_image(p).files)
+        self.disc = read_disc(disc_path) if disc_path and \
             Path(disc_path).exists() else {}
         self.main = main or next(iter(self.dump))
         self.files = {}             # resolved path -> SourceFile
@@ -232,8 +277,10 @@ class Converter:
     def walk(self):
         main = self.source(self.root / self.main)
         stack = [Frame(main.top, main.has_for, main)]
-        self.segs = []              # dict(name, filename, lo, hi, image)
+        self.segs = []              # dict(name, filename, lo, hi, image, parent, phys)
         seg = None
+        seg_stack = []              # nested SECTIONs (rephased): the enclosing ones
+        pc = None                   # the current section's next address, as listed
         scope_ids, scope_next = [], [0]
         self.emits = []             # dict(seg, addr, size, text, kind, outer, depth, scope)
         self.calls = []             # dict(file, line, seg, lo, hi)
@@ -259,11 +306,21 @@ class Converter:
                 m = _SECTION.match(t)
                 if m:
                     fn = _FILENAME.search(m.group(2))
-                    seg = dict(name=m.group(1), filename=fn.group(1) if fn else None,
-                               lo=None, hi=None, image={})
+                    # a SECTION inside another is rephased: its bytes are carried
+                    # in the enclosing one's at `phys`, the enclosing PC here
+                    new = dict(name=m.group(1), filename=fn.group(1) if fn else None,
+                               lo=None, hi=None, image={},
+                               parent=self.segs.index(seg) if seg is not None else None,
+                               phys=pc if seg is not None else None)
+                    seg_stack.append((seg, pc))
+                    seg, pc = new, None
                     self.segs.append(seg)
                 elif t.upper() == "ENDSECTION":
-                    seg = None
+                    inner = seg
+                    seg, pc = seg_stack.pop() if seg_stack else (None, None)
+                    if seg is not None and pc is not None and inner["lo"] is not None:
+                        # the enclosing section goes on after the rephased bytes
+                        pc += inner.get("end", inner["lo"]) - inner["lo"]
                 elif t == "{":
                     scope_next[0] += 1
                     scope_ids.append(scope_next[0])
@@ -306,11 +363,14 @@ class Converter:
             if seg is not None:
                 seg["lo"] = L.addr if seg["lo"] is None else min(seg["lo"], L.addr)
                 seg["hi"] = L.addr if seg["hi"] is None else max(seg["hi"], L.addr)
+                pc = L.addr + _size(L)
+                seg["end"] = max(seg.get("end", pc), pc)
+            seg_i = self.segs.index(seg) if seg is not None else None
             # what it is
             lab = _listing._LABEL.match(t)
             if lab:
                 self.labels.append(dict(name=lab.group(1), addr=L.addr,
-                                        seg=len(self.segs) - 1 if seg is not None else None,
+                                        seg=seg_i,
                                         scope=list(scope_ids),
                                         nested=bool(scope_ids) or fr.macro is not None))
                 continue
@@ -321,7 +381,7 @@ class Converter:
                 for k, b in enumerate(L.data):
                     seg["image"][L.addr + k] = b
                 kind = "insn" if L.is_instruction and len(L.data) <= 3 else "data"
-                e = dict(seg=len(self.segs) - 1, addr=L.addr, size=len(L.data),
+                e = dict(seg=seg_i, addr=L.addr, size=len(L.data),
                          elided=L.elided, text=t, kind=kind, outer=outer,
                          depth=fr.depth, n=L.n)
                 self.emits.append(e)
@@ -343,7 +403,7 @@ class Converter:
             body = self.macro_body(t)
             if body is not None and place is not None:
                 if fr.macro is None:
-                    call = (fr.file, where[1], L.addr, len(self.segs) - 1 if seg else None)
+                    call = (fr.file, where[1], L.addr, seg_i)
                     self.refs.append((t, list(scope_ids), ("call", call)))
                 stack.append(Frame(body["stmts"], body["has_for"], body["file"],
                                    macro=body, call=call, depth=fr.depth + 1))
@@ -358,11 +418,14 @@ class Converter:
                 continue
             f = self.disc.get(s["filename"]) if s["filename"] else None
             lo = s["lo"]
+            carried = self._carried(s)
             if f is not None and (f.load & 0xFFFF) != lo:
                 self.notes.append("SECTION %s: disc file %s loads at &%04X, listing starts &%04X"
                                   % (s["name"], s["filename"], f.load & 0xFFFF, lo))
             if f is not None:
                 data = bytearray(f.data)
+            elif carried is not None:
+                data = bytearray(carried)
             else:
                 hi = max(s["image"]) + 1 if s["image"] else lo
                 data = bytearray(hi - lo)
@@ -371,7 +434,7 @@ class Converter:
                                       "some of its data (zeros there)" % s["name"])
             for a, b in s["image"].items():
                 o = a - lo
-                if f is None:
+                if f is None and carried is None:
                     data[o] = b
                 elif 0 <= o < len(data) and data[o] != b:
                     self.notes.append("SECTION %s: listing and disc differ at &%04X"
@@ -392,6 +455,27 @@ class Converter:
                 nxt = [a for a in addrs if a > e["addr"]]
                 stop = min([a for a in nxt if a <= end] or [end])
                 e["size"] = max(e["size"], stop - e["addr"])
+
+    def _carried(self, s):
+        """A rephased (nested) SECTION's bytes, from the disc file of the
+        section that carries it, or None. Added for Stryker's Run (2026-10-16):
+        its copied-down blocks and ANDY's sprites are nested SECTIONs."""
+        if s.get("parent") is None or s.get("phys") is None or not s["image"]:
+            return None
+        off, p = s["phys"], self.segs[s["parent"]]
+        while p.get("filename") is None:
+            if p.get("parent") is None or p.get("phys") is None or p["lo"] is None:
+                return None
+            off = p["phys"] + (off - p["lo"])
+            p = self.segs[p["parent"]]
+        f = self.disc.get(p["filename"])
+        if f is None or p["lo"] is None:
+            return None
+        o = off - p["lo"]
+        n = max(s["image"]) + 1 - s["lo"]
+        if o < 0 or o + n > len(f.data):
+            return None
+        return f.data[o:o + n]
 
     # ---- symbols and their references
     def symbols(self):
@@ -555,9 +639,9 @@ class Converter:
                     files=len(files), segs=len(seg_ids), notes=self.notes)
 
 
-def convert(root, listing, symbols, disc, out, main=None):
+def convert(root, listing, symbols, disc, out, main=None, read_disc=None):
     """Write `out`/game.dbg, the section images and stmts.s; return a summary."""
-    return Converter(root, listing, symbols, disc, main).write(out)
+    return Converter(root, listing, symbols, disc, main, read_disc).write(out)
 
 
 def _main(argv):

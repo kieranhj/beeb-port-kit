@@ -140,6 +140,64 @@ class SmallProgramTest(unittest.TestCase):
         self.assertEqual(img, bytes.fromhex("A90185 70A90285 71C670D0FC60 0019".replace(" ", "")))
 
 
+class NestedSectionTest(unittest.TestCase):
+    """A SECTION inside another (rephased: a block the game copies down at
+    start-up, carried in the file's bytes). Before 2026-10-25 the inner
+    ENDSECTION ended the outer section too, and everything after it was lost
+    ("emits outside any SECTION"); from Stryker's Run."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = self.root = Path(self.tmp.name)
+        (root / "src").mkdir()
+        (root / "src" / "main.6502").write_text(
+            'SECTION Code, org = &1900, filename = "Code"\n'   # 1
+            '.start\n'                                        # 2
+            '    jsr low\n'                                   # 3
+            'SECTION Low, org = &0400\n'                      # 4
+            '.low\n'                                          # 5
+            '    rts\n'                                       # 6
+            'ENDSECTION\n'                                    # 7
+            '.after\n'                                        # 8
+            '    lda #7\n'                                    # 9
+            '    rts\n'                                       # 10
+            'ENDSECTION\n')                                   # 11
+        lst = "\n".join([
+            'SECTION Code, org = &1900, filename = "Code"',
+            row(0x1900, b"", ".start"),
+            row(0x1900, b"\x20\x00\x04", "jsr low"),
+            "SECTION Low, org = &0400",
+            row(0x0400, b"", ".low"),
+            row(0x0400, b"\x60", "rts"),
+            "ENDSECTION",
+            row(0x1904, b"", ".after"),
+            row(0x1904, b"\xA9\x07", "lda #7"),
+            row(0x1906, b"\x60", "rts"),
+            "ENDSECTION", ""])
+        (root / "build").mkdir()
+        (root / "build" / "game.lst").write_text(lst)
+        (root / "build" / "game.symbols.json").write_text(json.dumps(
+            {"src/main.6502": {"start": 0x1900, "low": 0x0400, "after": 0x1904}}))
+        self.summary = baron_dbg.convert(root, root / "build/game.lst",
+                                         root / "build/game.symbols.json", None,
+                                         root / "build/out")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_nothing_lost_after_the_inner_section(self):
+        self.assertEqual(self.summary["segs"], 2)
+        self.assertEqual(self.summary["emits"], 4)
+        self.assertEqual(self.summary["unplaced"], 0)
+        self.assertFalse([n for n in self.summary["notes"] if "outside" in n],
+                         self.summary["notes"])
+
+    def test_both_images(self):
+        out = self.root / "build/out"
+        self.assertEqual((out / "seg_Low.bin").read_bytes(), b"\x60")
+        self.assertEqual((out / "seg_Code.bin").read_bytes()[-3:], b"\xA9\x07\x60")
+
+
 @unittest.skipUnless((TEMPLATE / "build" / "game.lst").exists(), "build the template first")
 class TemplateTest(unittest.TestCase):
     """The template's own build: every statement placed, and beebgame's model
