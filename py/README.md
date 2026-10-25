@@ -39,6 +39,30 @@ not on the machine.
 | `cpc/dsk.py` | Amstrad CPC `.dsk` (standard and Extended) and the AMSDOS catalogue, for reading a CPC port's work discs; `amsdos_header`/`strip_amsdos` | [edge-beeb `cpc/dsk.py`](https://github.com/kieranhj/edge-beeb/blob/master/tools/cpc/dsk.py) |
 | `cpc/cpcscr.py` | CPC screens: the 27 firmware colours and the Gate Array table, mode 0/1/2 byte packing, the 16K screen's scanline interleave, OCP `.PAL` files, rendered to PIL | [edge-beeb `cpc/cpcscr.py`](https://github.com/kieranhj/edge-beeb/blob/master/tools/cpc/cpcscr.py) |
 
+## `mame/` and `ay2sn.py`: porting without source
+
+From the 1942 arcade port (1942-beeb, 2026-09 to 10), the
+kit's first original that was a ROM set and nothing else. `../docs/arcade-porting.md` is the
+method, `../template/tools/mame/` the Lua harnesses these modules drive and read, and the skills
+`beeb-arcade-capture` and `beeb-rom-model-probe` the procedures. No module knows a 1942 address;
+the 1942 values appear in provenance headers and tests only.
+
+| Module | What it is | From |
+|---|---|---|
+| `mame/runner.py` | MAME from Python: one-instance guard, absolute output, every expected file checked for existence AND freshness, exit code, timeout kill of the process tree, `-playback`/`-record`, `-debugscript` (refusing `-debugger none`), the Lua harness's `lua_error.txt` reported, the cfg's DIP overrides printed. `MAME_DIR`/`MAME_GAME`/`MAME_EXE` or arguments; `python -m beeb_port_kit.mame.runner` | `tools/run_mame.py` |
+| `mame/records.py` | Per-frame binary records described by ONE spec string (`frame`, `bytes@A,B-C`, `slots@BASE,N,STRIDE,LEN`) that the Lua writer (`_compat.lua`) and this reader both parse; the spec rides beside the data as `schema.txt`. Refuses truncated or mis-specified files | `tools/fullgame.py`, `tools/enemy_cap.py` |
+| `mame/romset.py` | `parse_listxml` (ROMs + CRCs, CPUs and clocks, display rotation, DIP switches), `RomSet` (zip checked by name, size and CRC, clone then parent), `region`, `Banked` (a window with a fill byte; raises on non-ROM), `GfxLayout` (MAME's gfx_layout as data, planes MSB first), `prom_palette`/`lookup` | `tools/arcade.py`, `export_waves.Rom` |
+| `mame/orient.py` | ROT0/90/180/270 for coordinates, screens and cells; `flips_to_play`; `score_rotations` (all four against a screenshot, refusing a near-tie) | `arcade.to_play`, `verify_orientation.py` |
+| `mame/z80sub.py` | A headless Z80 sub-CPU on the `z80` package (imported when first used): MMIO by marks, a HELD IRQ with lateness and merged-assertion accounting, `clone()`, `AYPorts`, `disassemble` | `tools/sound_rip.py`, `tools/z80dis.py` |
+| `mame/probe.py` | `Score`: match / wrong / torn per rule, exclusions by named cause, coverage requirements, `Unread`, first-N wrong printed, exit 1 on any residual or empty rule | the shape of `probe_efire.py`, `probe_sound.py` |
+| `ay2sn.py` | AY-3-8910 register states to SN76489 states per field, offline: clocks as parameters, periodic-noise bass, drum-wins, three loudest sticky voices, tone+noise as noise; `render_ay`/`render_sn`/`write_wav` (numpy) for the ear | `tools/ay2sn.py` |
+
+`z80sub` needs `pip install z80` and the renders need numpy; both are imported lazily, and their
+tests skip without them. The 1942 cross-checks (`test_mame_romset`, `test_mame_z80sub`,
+`test_ay2sn`, `test_mame_orient`) read 1942-beeb and MAME's `1942.zip` by path - override with
+`T1942_BEEB` and `MAME_DIR` - and skip if absent. `test_mame_smoke.py` runs the Lua templates
+through MAME and is OPT-IN: `BEEB_KIT_MAME_SMOKE=1`.
+
 What is deliberately NOT here: anything that is a game's. Which files ship compressed and where
 they stage, the tile and map formats, the sprite box tables, the panel layout, the wave table -
 those are the project's exporters, and both ports' `tools/` show what they look like.
