@@ -205,6 +205,21 @@ the comments in the listing are the specification).
   a sprite's columns can straddle `&8000` and stop being 8 bytes apart.
   Established: 2026-09-03, by arithmetic and a sprite test in jsbeeb (decision 21). [Edge decisions.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/decisions.md)
 
+### Overscan: 272 lit lines in a 312-line field
+
+- **A 50 Hz field can light 272 lines, not 256, and the overscan comes out of blanking, not out of
+  the field.** 1942 runs a 256-line playfield (two CRTC cycles, the PLAYFIELD FIRST) and a 16-line
+  panel below it with 40 lines of blanking against PAL's nominal 25, about 15 lines of margin.
+  Field length unchanged: **3,993,600 cycles over 100 fields = 39,936.00 a field.** With the
+  playfield first, the smooth scroll's `8 - line` adjust falls in the TOP border, so the first lit
+  play line sits a fixed distance from VSync and the slide is unseen; a panel above the playfield
+  puts that adjust in a visible gap and costs 16 lines of blanking (1942's first cut). `R7` moves
+  the picture up and down the tube for free; light the panel's first and last lines so a real
+  display shows the extent. **jsbeeb shows overscan happily, which proves nothing about a TV.**
+  Measured: 2026-09-07/08, jsbeeb; **played on a real Master 128 and display 2026-09-28 onward**
+  (KC). 1942-beeb (private) decisions 14, 16, 18, 19, 71, `docs/layer-2-display.md`,
+  `docs/layer-2b-scroll.md`.
+
 ### Switching between frame shapes
 
 - **Writing a new R4/R5/R6/R7 set mid-frame costs malformed fields.** Paradroid measured
@@ -263,6 +278,11 @@ the comments in the listing are the specification).
   the palette registers. A write that lands mid-pixel changes the lookup part way through, and
   because the lookup is always through all sixteen entries the whole table has to be set
   whatever the bits per pixel.
+- **The MOS keeps a copy of the ULA control register at `&0248`** (`MOS_ULA_COPY`), and its flash
+  timer EORs the flash bit into it and writes `&FE20` from it. A game that sets `&FE20` itself
+  while the MOS's IRQ still runs (a loader, a title screen) must write `&0248` too, or the next
+  flash tick puts the old mode's ULA byte back.
+  Established: 1942-beeb (private) `src/lib/beeb.h.6502`, 2026-09.
 
 ### Byte layouts
 
@@ -414,6 +434,30 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
 - **The shadow screen is 20K of RAM nobody is looking at while main is displayed**, so with
   D = 0 and X = 1 (CPU sees shadow) it is a free staging area for compressed streams at boot.
   Measured: 2026-09-04, jsbeeb. [Edge layer-9-loader.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-9-loader.md)
+- **The mid-frame D flip works on a real Master**, which upgrades the jsbeeb-only entry above.
+  1942 keeps its 2-row panel in SHADOW only: a fourth rupture fire, in the horizontal blanking
+  of cycle P's last scanline (line 280), sets D for the panel's 16 lines and the VSync hook clears
+  it every field, so main RAM's copy of those 896 bytes is free for code. Its oracle hooks every
+  ACCCON write with the CRTC's counters beside it: the fire landed at `horizCounter` 74-82 in 792
+  of 798 fields and 90-112 in six (R1 = 56), and the panel's pixels on screen matched shadow's
+  bytes with main's copy poked to a pattern, 0 of 3,584 on 80 samples.
+  Measured: 2026-10-07, jsbeeb (`tools/verify_panel.mjs`); **real Master 128 2026-10-13** (KC:
+  "the panel looks good on real hw"). 1942-beeb (private) decision 141.
+- **Never read ACCCON back; compose every write.** With X (CPU bank), D (display bank) and Y
+  (HAZEL) each owned by a different party - the drawer, the VSync take, the panel fire - one
+  writer ORs the parts together (`acc_x OR buf_live OR pan_on`) and is masked across its own
+  compose-and-store. And **X names the back buffer only while drawing**: any game state inside
+  `&3000-&7FFF` read with X still on the back buffer is the other buffer's copy (1942 ignored a
+  stage-end hold on every other tick that way). A value the boot leaves in one of the ORed parts is
+  ORed into every write: 1942's `pan_on` lived on a MOS vector byte, was non-zero at boot, and put
+  `game_init`'s state into shadow - every enemy block of every stage came a block early.
+  Measured: 2026-09-10 to 10-07, jsbeeb. 1942-beeb (private) decisions 43, 141; `BUGS.md` #47.
+- **A late frame flipped mid-field shears sprites, never a double-buffered scrolling background.**
+  Both buffers hold the same level bytes at the same addresses, so a flip part way down the field
+  cannot mark the scenery, while every sprite jumps at the cut. Flipping at once instead of
+  holding a whole field for the next VSync was played and kept; text on screen is the exception
+  (a sheared caption reads as broken, so text frames wait for VSync).
+  Measured: 2026-09-11 and 09-20, jsbeeb; KC's eye. 1942-beeb (private) decisions 64, 65, `BUGS.md` #59.
 
 ### ANDY
 
@@ -515,6 +559,17 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
   MOS interrupt is gone**; `&0400-&07BF` (language workspace) once `*RUN` has handed over. Both
   verified by sentinel.
   Measured: Layer 2 onward (September 2026), jsbeeb. [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
+- **After `OSBYTE 140` HAZEL is all yours but two ranges the call itself touches.** With the DFS
+  detached, `&C000-&C2FF` (the DFS's pages above) hold nothing anyone reads: 1942 puts its own
+  disc loader and catalogue cache there. **`*FX 140` itself writes `&DA00-&DAE0`** (222 bytes, the
+  DFS tidying its workspace - the same page a soft BREAK writes), so anything unpacked into `&DA`
+  must be unpacked AFTER the call. And **HAZEL can stay paged for the whole of play**: put Y into
+  the base every run-time ACCCON write ORs in, and HAZEL code and data need no paging and no mask
+  (the MOS code underneath is not used by a game that owns its IRQ). Measured across 42 OSFILE
+  loads, every seam kind and a whole-game run.
+  Measured: 2026-09-17 and 09-24, jsbeeb Master 128 (MOS 3.20, Acorn 1770 DFS); played on a real
+  Master from a Gotek 2026-09-28 and from a real drive 2026-10-12 (KC). 1942-beeb (private)
+  `docs/hazel.md` (last two sections), decisions 96, 116.
 
 ### Real hardware
 
@@ -522,6 +577,15 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
   does not use), the first time either port ran on hardware rather than an emulator. Real B, B+,
   DFS 2.26 and second processors remain untested.
   Reported: 2026-09-06, KC, real Master 128. [Paradroid layer-13-compatibility.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-13-compatibility.md)
+- **1942 plays on a real Master 128 from a Gotek (2026-09-28) and from a real 5.25" drive 1 at
+  `*CONFIGURE FDRIVE 3` (2026-10-12)**: shadow double buffering, a mid-frame D flip, HAZEL and
+  ANDY paged through play, its own 1770 driver, background disc reads in play. **Everything real
+  hardware found that jsbeeb did not** is in this file's §6 (the 1770's head settle, the drive and
+  step rate, BREAK) and in 1942's `BUGS.md` #85, #87, #90, #92: a garbage line under the panel on
+  the title-to-game transition, a lock-up on stage 28, BREAK not clearing RAM. **The lesson for the
+  next port: put real hardware in the loop at the first layer that touches the disc, the CRTC or
+  BREAK, not at release** - 1942's first real-hardware play was day 22 of 47.
+  Reported: KC, real Master 128, 2026-09-28 to 10-23.
 
 ### Target configurations (paradroid-beeb issue #18)
 
@@ -663,6 +727,13 @@ jobs**:
   and never again. One that loads between levels, streams off the disc or saves anything is the
   loader case for its whole life - it keeps the filing system, owns the machine, and makes no OS
   call at all. That constrains the design, so settle it early.
+- **A third answer, on a Master: call `OSBYTE 140` after the boot's last filing-system load and
+  then drive the 1770 yourself.** 1942 caches the catalogue at boot and loads every later file -
+  stage seams, a set of four stages, the boss, the front end, and rationed sector-a-tick reads
+  during play - through its own NMI-driven sector reader (`lib/qdisc.6502`, after scarybeasts'
+  quicdisc). No OS call follows, so the filing system's workspace and HAZEL are free, and the
+  loads run unmasked with the rupture and the sound going. The cost is MMFS and any filing
+  system but a real 1770 (1942 decision 120), and the traps in "Driving the 1770 yourself" below.
 
 A filing system is *entitled* to hook `OSBYTE`, `OSWORD` and the vectors and to find its workspace
 intact when one of them is called. Acorn's DFS hooks none of them, which is the only reason a game
@@ -704,7 +775,12 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   at it). `&1100` is the safe staging address.
   Measured: 2026-08-30, jsbeeb. [Paradroid intro.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/intro.md)
 - **`VDU 22` clears `&3000-&7FFF`**, what the OS thinks is its screen, so data loaded above `&3000`
-  is wiped before it can be read; it also re-enables R8 and the cursor.
+  is wiped before it can be read; it also re-enables R8 and the cursor. **The same goes for
+  CODE**: a `*RUN` image loaded before the boot's mode change loses everything at or above
+  `&3000` before it is ever executed, so the code ceiling is `&3000` even on a machine whose
+  screen ends up in shadow. 1942 found it by not booting, with no diagnostic, because the code
+  that would have raised one had been erased (`BUGS.md` #17). And on a Master the mode change
+  lights the display for about five fields with whatever main RAM held: zero `&3000-&7FFF` first.
   Measured: Layer 3 (Paradroid), 2026-09-02 (Edge), jsbeeb. [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md) [Edge layer-9-loader.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-9-loader.md)
 - **OSFILE writes a file's catalogue addresses back into its parameter block after a load**, so
   reset load/exec before every call or the second file lands wherever the first said.
@@ -824,6 +900,77 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   hexwab, 2026-09-13, paradroid-beeb #18. Not measured.
 - **DFS filenames are seven characters.**
   [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md)
+- **The DFS catalogue holds 31 files, and on a big port that binds before the sector count.**
+  1942's release disc ran 758 of 800 sectors and 31 of 31 entries. Pack per-level data as
+  fixed-size chunks of ONE file (a 7-sector chunk a stage) and put small fixed-address pieces
+  inside another file at known offsets. **With Baron, the count that binds is Baron's raw image**
+  - it writes a DFS file per section - not the final disc.
+  Measured: 2026-09-24 to 10-15. 1942-beeb (private) decisions 87, 116, 138, 161.
+- **A Model B's DFS hangs loading a `!BOOT` at `&0E00`**: its workspace is `&0E00-&18FF`. A
+  machine check in `!BOOT` (OSBYTE 0, X=1: 3 is a Master 128, 5 a Compact) must therefore be a
+  small stub loaded HIGH (1942: `&5000`) that copies the real image down and jumps in on the
+  machines it accepts, and prints a message and returns to BASIC, the DFS intact, on the others.
+  Measured: 2026-10-19, jsbeeb `B-DFS1.2` and `B1770` (hung without the stub, message with it),
+  Master (boots). 1942-beeb (private) `tools/make_disc.py` `model_stub()`.
+
+### BREAK that clears RAM (MOS 3.20)
+
+- **`*FX 200,2` is not enough in a game that runs with VIA interrupts enabled.** MOS 3.20's reset
+  (read off `&8046`) clears `&0000-&DFFF`, HAZEL and shadow only if the System VIA's IER reads 0
+  or `(&0258 >> 1) = 1`, i.e. `&0258` is 2 or 3. In play the IER is not 0 (`&C2` in 1942), and a
+  game that reuses `&0258` (the MOS's low RAM is fair game once the IRQ is yours) loses the
+  setting too. **Fix: the BREAK intercept.** `*FX 247` arms a `JMP` at `&0287-&0289` that the MOS
+  runs on BREAK; point it at seven bytes that store 2 at `&0258` and `JMP (&FFFC)`, and the second
+  reset pass clears. **Nothing may live in `&0287-&0289`** - 1942 put two variables at `&0288` and
+  the intercept read `JMP &005D` in play (`BUGS.md` #92, found on real hardware at rc4). A tune
+  or title that runs with IER 0 clears anyway.
+  Measured: 2026-10-18/19, jsbeeb Master (MOS 3.20) - a soft BREAK in `tools/measure_break.mjs`
+  became a hard one - and KC's real Master (rc4). 1942-beeb (private) `src/main.6502` `brk_clear`.
+
+### MOS low RAM a game that owns IRQ1V and the NMI may use (Master, MOS 3.20)
+
+- **Measured unwritten through a whole driven game, and not read by a soft BREAK**: `&0100-&01BF`
+  (the stack peaked 41 bytes deep, at `&01D7`), `&0200-&0217` except `IRQ1V`, `&0220-&027F`,
+  `&028A-&029F`, `&02B0-&03FF`, `&0D9F-&0DFF`, and zero page `&A0-&A7` (the MOS's NMI-owner
+  workspace) once `OSBYTE 140` has given you the NMI. **What BREAK reads**: `&0218-&021F`,
+  `&0280-&0287` and `&02A0-&02AF`, found by filling each block with four patterns, pressing
+  BREAK and requiring the MOS banner and `*FX 0`'s `OS 3.20` (with `&0287-&0289` taken by the
+  intercept above if you use it). **Until IRQ1V is yours the MOS's 100 Hz IRQ writes
+  `&02B1-&02BE`** - a measurement taken after the boot cannot see that, so unpack into those pages
+  after the takeover.
+  Measured: 2026-10-07, jsbeeb Master; 1942-beeb (private) `tools/measure_lowram.mjs`,
+  `tools/measure_break.mjs`, decision 141 L2. Not measured on hardware or on MOS 3.5.
+
+### Driving the 1770 yourself (Master)
+
+- **A busy 1770 silently ignores a command.** Wait for the status register's busy bit to clear
+  before EVERY command, including a FORCE INTERRUPT you think is harmless.
+- **On the Master's board the NMI line is DRQ OR INTRQ**, so a SEEK or RESTORE's completion
+  raises an NMI as well as every data byte: a byte-store NMI routine left armed between reads
+  stores a junk byte at its pointer. Disarm it (first byte `RTI`) between transfers; read the
+  status to clear INTRQ.
+- **Take the drive and the step rate from the machine, not from a constant.** Before `*FX 140`,
+  ask the DFS for the current drive (OSGBPB 5) and read `*CONFIGURE FDRIVE` from CMOS byte 11,
+  bits 1-0. **Those bits mean 6/12/20/30 ms on a 1770 but 6/12/2/3 ms on a 1772**, so a driver
+  that patches them straight into its commands steps too fast on a 1772 board: clamp 2 and 3 to
+  12 ms (`&x1`). 1942 read drive 0 at 6 ms always - right on jsbeeb and a Gotek (which takes any
+  rate), a hang on a real drive 0 and garbage on drive 1.
+  Measured: 2026-10-11, KC's real Master and drive; the 1772 clamp from scarybeasts, 2026-10-16.
+  1942-beeb (private) `BUGS.md` #85, `src/qdcfg.6502`.
+- **A read command with E set (`&94`) settles the head 15-30 ms on a REAL 1770, every time,
+  motor running or not.** A seam that pays it once a load is invisible; background reads that
+  paid it on every sector came late. Issue `&90` (no E) and settle only after a seek. **jsbeeb up
+  to 2.3.x settles only after a spin-up**, so no emulator oracle saw it; jsbeeb PR #1226 models
+  it, and a harness can emulate it on older versions by adding the delay.
+  Measured: 2026-10-10, KC's real Master (`-BgDiag` build). 1942-beeb (private) decision 154,
+  `src/bgread.6502`.
+- **A non-blocking sector reader costs ~35 cycles a byte in its NMI routine** and lets play run
+  on: 1942 reads one sector a 25 Hz tick during play, walking each track with a coprime skip,
+  copying via a fixed staging page because the NMI's target must not move under a ROMSEL or
+  ACCCON write. Keep the motor spinning into a load you know is coming (a same-track seek) and
+  the spin-up is gone: a set load held the picture 2.87 M cycles against the DFS's 6.75 M.
+  Measured: 2026-09-24 to 10-11, jsbeeb (`tools/verify_qdisc.mjs`: every track of both sides
+  byte-exact) and real hardware. 1942-beeb (private) decisions 116, 153, 154.
 
 ---
 
