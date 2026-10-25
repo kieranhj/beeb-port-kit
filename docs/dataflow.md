@@ -165,6 +165,45 @@ The rules, the same as beebgame's README "a suggested farm", which is where they
 Mechanical edits that are meant to change nothing else still get `beeb-identical-build`'s
 listing-stream diff.
 
+## An interrupt that exits into the MOS: `isr_model.py` (2026-10-25)
+
+Upstream takes the interrupt (`ISR_ROOTS`) to read and write ALL memory if anything it reaches
+has an exit the analysis cannot follow - a `JMP` to the MOS, a `JMP (vector)`, a self-modified
+operand - or a store through a pointer. Then no byte is a known value anywhere, and the ranges,
+known values and the findings built on them go. `lib/irq.6502` ends in `RTI`, so the template
+never meets it; a handler that chains to the MOS to keep its tick, or a music handler that calls
+OSWORD through `JMP (WORDV)`, does. Every one of Stryker's Run's did, and its analysis knew no
+memory byte until it wrote `tools/isr_model.py` (2026-10-16).
+
+`template/tools/isr_model.py` is that file. `tools/analyse.py` installs it in the analysis's
+own process (`tools/dataflow/` untouched: its SHA-256 check still passes) when
+`dataflow_config.py` sets `ISR_MODEL = True`; it is off in the template. Then each site in
+`ISR_MOS_EXITS` (`'file:line'` as `report.md`'s notes print it) is the MOS, returning having
+touched only `MOS_WORKSPACE` (ranges you declare: an ASSUMPTION from the memory map, the
+config's comment has Stryker's Run's); `ISR_POINTER_STORES` bounds a store through a pointer;
+`ISR_PRESERVES` names what a handler saves and restores. Any exit not named still means all
+memory, with a note naming it; a site named but not reached stops the run (exit 1), so a site
+gone stale when code moved is an error. `report.md`'s Model notes say which were modelled.
+
+`--config` goes BEFORE the job: `python tools/analyse.py --config F report`. After it,
+argparse puts `--config F` among the pass-through extras, so the default config is passed too,
+first; upstream takes the last, and the hook does likewise since 2026-10-25 (Stryker's Run's
+took the first, and with `report --config F` ran without the model while upstream read F).
+
+**Measured, 2026-10-25:**
+
+- The template, `ISR_MODEL` off (the default): `report`'s output and every file in
+  `build/dataflow/` identical to before the hook (6 findings, 11 bytes; the interrupt reads 9
+  and writes 6 universe bytes). On (`--config` a copy with `ISR_MODEL = True`): the same
+  findings and the same 9/6 bytes, and the model's note.
+- A copy whose `irq_handler` ends `JMP irq_chain` to a `JMP &FFFF` patched with the old IRQ1V
+  (a chain to the MOS): off, the interrupt reads and writes all 33 universe bytes and 6 findings
+  (10 bytes) - `reg_xfer` gone, since nothing is known across it. On, with the `JMP &FFFF`
+  named and Stryker's Run's `MOS_WORKSPACE`: reads 12, writes 10, and 7 findings (12 bytes),
+  the `reg_xfer` back. On with nothing named: the note "unknown exit at src/lib/irq.6502:141
+  (jmp $FFFF)" and all memory, as upstream. A named site the interrupt does not reach: "isr_model:
+  the config names sites the interrupt does not reach", exit 1.
+
 ## Using it to take a Master port down to a Model B: `nmosify.py` (2026-10-25)
 
 From Stryker's Run (its decision 73, `docs/briefs/model-b-lite.md` step 1). A Master port's
