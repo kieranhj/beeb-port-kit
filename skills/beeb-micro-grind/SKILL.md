@@ -5,6 +5,15 @@ description: An aggressive, repeatable micro-optimisation grind over a BBC Micro
 
 # The micro-optimisation grind
 
+**The method is Eben Upton's**, from [beebgame](https://github.com/ebenupton/beebgame): its `tools/dataflow/README.md`, "Using the
+annotations to shrink code: a suggested farm" (vendored here as `template/tools/dataflow/README.md`).
+Cut the sources into windows of annotated lines, give each batch a reviewer and then a skeptic,
+apply what the skeptic did not refute a small batch at a time behind the game's own equivalence
+test, bisect failures, and audit what was accepted; beebgame's Commando: two passes, 171 proposals,
+about 400 bytes. Stryker's Run turned it on cycles rather than bytes - windows weighted by measured
+cycles a pass, a gate that keeps a change only if the game is no slower - and wrote the
+bookkeeping this skill drives (`grind.py`).
+
 From Stryker's Run (2026-10-17 to 10-23), where KC's brief was: "an aggressive micro-optimisation
 grind over the whole codebase; get static analysis tools from github.com/ebenupton/beebgame; run
 to annotate lines with flags, regs, memory operand ranges; spawn army of agents to evaluate every

@@ -1013,7 +1013,9 @@ order of importance:
 ### The micro-optimisation grind
 
 Once a port is correct and its suite compares a build against its control by pass (verification
-procedure 20), the skill `beeb-micro-grind` grinds the whole program: beebgame's analyses annotate
+procedure 20), the skill `beeb-micro-grind` grinds the whole program. The method is Eben Upton's,
+the "suggested farm" in beebgame's `tools/dataflow/README.md` (there, Commando's code shrunk by
+about 400 bytes); Stryker's Run turned it on cycles. beebgame's analyses annotate
 every instruction, the code is cut into 32-instruction windows weighted by measured cycles
 (`pcprof.mjs`), optimiser agents propose and skeptic agents try to refute, and survivors go in one
 at a time through the gate, kept only if every check passes and the game is no slower

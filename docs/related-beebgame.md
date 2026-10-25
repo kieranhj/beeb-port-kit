@@ -15,7 +15,7 @@ This file records the link. It was read against beebgame `main` at
 | What | beebgame | Here | How it's kept |
 | --- | --- | --- | --- |
 | The static analyses: liveness, constants, value ranges, register ABIs, findings | `tools/dataflow/` | `template/tools/dataflow/`, run by `tools/analyse.py` (Baron) and `py/beeb_port_kit/beebasm_dataflow.py` (beebasm) | **Vendored unmodified at a pinned commit** (`235e890`), every file hash-checked before it runs. `VENDORED.md` has the pin history and the checks; `docs/dataflow.md` the account |
-| The reviewer-then-skeptic review of annotated code ("a suggested farm") | `tools/dataflow/README.md` | `skills/beeb-dataflow/`; used on Edge Grinder's BANK0 and BANK1 | The method, rewritten for the kit's gates |
+| The reviewer-then-skeptic review of annotated code ("a suggested farm") | `tools/dataflow/README.md` | `skills/beeb-dataflow/`; used on Edge Grinder's BANK0 and BANK1; `skills/beeb-micro-grind/` with `template/tools/grind.py`, the same farm run on cycles over a whole program (Stryker's Run, 2026-10-17 to 10-23) | The method, rewritten for the kit's gates |
 | Watford and Solidisk write-select board emulation on a jsbeeb Model B | `test/lib/boards.mjs` | `template/tools/boards.mjs`, checked by `tools/boards_check.mjs` | A fork, unchanged under a provenance header |
 | The page-crossing branch list | `tools/pagecheck.py` (ld65 debug file) | `listing.py pages` (Baron listing), `crossings()` | Redone for Baron's listing; the idea, not the code |
 

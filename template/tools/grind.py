@@ -3,6 +3,10 @@ grind.py - the bookkeeping and the gate of the micro-optimisation grind (the kit
 beeb-micro-grind skill). Nothing here decides what is better code: the evaluation workflow's
 agents do that. This cuts the work up, keeps the record, and proves.
 
+The method is Eben Upton's, from beebgame (github.com/ebenupton/beebgame, tools/dataflow/README.md,
+"Using the annotations to shrink code: a suggested farm"; vendored in tools/dataflow/): annotated
+windows, a reviewer then a skeptic, survivors applied a batch at a time behind an equivalence gate.
+
 beeb-port-kit template, MIT, Kieran Connell 2026. From Stryker's Run's tools/grind.py
 (2026-10-17 to 10-25), which ran three rounds over that game's hand-written 6502: 580 candidates
 proposed, 256 kept by the gate, a pass's work 43,036 -> 31,869 cycles. Everything about the
