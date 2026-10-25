@@ -126,14 +126,15 @@ changing what it plays like. The order that worked, each step proven before the 
    the proof is the source built shifted by whole pages against a control padded so both load in
    the same time. Moving by whole pages keeps every page crossing, so a correct relocation runs
    cycle for cycle like the control even with VIA-timer randomness: 30,000 frames identical, and
-   the first differing instruction named when not (`tools/lockstep.mjs`, `tools/tracediff.mjs`).
+   the first differing instruction named when not (the kit's `template/tools/lockstep.mjs` and
+   `tracediff.mjs`, verification procedure 21; the template builds `-Shift 256 [-ShiftEnd]`).
    This found two places where the original's behaviour depended on its layout (BUGS #1, #2).
-4. **Measure where the time goes before changing anything** (`tools/irqprofile.mjs`, `profile.mjs`):
+4. **Measure where the time goes before changing anything** (`template/tools/irqprofile.mjs`, `pcprof.mjs`):
    the MOS's interrupt work was 21% of the CPU, which nobody had guessed.
 5. **Replace the random numbers with a seeded generator** (its decision 17), so a game replays
    exactly from its input, and **drive two builds by game-loop pass, not by frame**: the same keys
    each pass, so a faster build plays the same game and state can be compared every pass
-   (`tools/passlock.mjs`). Keys timed by frame or cycle played a different game and its figures
+   (the kit's `template/tools/pairlock.mjs`, verification procedure 20). Keys timed by frame or cycle played a different game and its figures
    were wrong (31 against 41 late frames on one seed).
 6. **Keep an oracle build that is slow and obviously right** (`DEBUG_FULLREDRAW`: everything
    redrawn every frame) and never let a fast path into it; every renderer change produces the same
