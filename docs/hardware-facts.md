@@ -18,6 +18,13 @@ A few entries carry a third source: **1942** (BBC Master 128, September 2026), t
 *with* this kit rather than distilled into it. It is unpublished, so those entries name the layer
 and the measurement rather than a link, and they say when the kit re-ran the check itself.
 
+A fourth source is **Stryker's Run** ([strykers-run](https://github.com/kieranhj/strykers-run),
+BBC Master 128 and a Model B with sideways RAM, October 2026): not a port but a 1986 BBC game
+rebuilt byte for byte from a disassembly and then made to run faster, so its facts are about the
+MOS and the Master under a game that was written for them. Its measurements are on jsbeeb 2.5.0
+(2026-10-16 to 10-18) and 2.10.x (from 2026-10-21), Master 128, MOS 3.20, Acorn 1770 DFS, unless
+the entry says otherwise.
+
 The rule the whole document exists to serve is **measure, do not recall**. Paradroid's `CLAUDE.md`
 tells the story: an early file, `src/hal_video.asm`, was written from remembered CRTC arithmetic,
 with `TODO: verify in emulator` comments and a half-finished derivation in the middle of it, and it
@@ -240,6 +247,14 @@ the comments in the listing are the specification).
   roughly double rate: 14 CRTC frames of ~18,500 cycles in a 258,364-cycle window between
   `SetupRupture` and `InstallIrq`. Switch the CRTC on next to the IRQ that drives it.
   Measured: 2026-08-31, jsbeeb, `elapsed_cycles` and `frame_count` (which counts CRTC frames). [Paradroid raster-timing.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/raster-timing.md)
+- **The 6845 decides a CRTC frame has ended at its last scanline's character 1 (C0 = 1)**, so in a
+  one-row frame R4 must be rewritten before that row's scanline 7, not at the row's end. Stryker's
+  Run's HUD is a one-row frame (H, R4 0) followed by the 24-row scrolling frame (M: R4 `&25`, R6
+  `&18`, R7 `&1F`; 39 rows in all, as the one 25-row frame was), driven by User VIA T1 firing three
+  times a field, each fire re-armed from T2's count. jsbeeb models the Hitachi part's latch.
+  Measured: 2026-10-23, jsbeeb 2.10.2 (`tools/rupture.mjs`: every CRTC and ACCCON write by the
+  6845's own counters); KC saw the rupture right on b2 2026-10-23; real hardware not yet.
+  [strykers-run BUGS.md #15](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md), [decision 67](https://github.com/kieranhj/strykers-run/blob/main/docs/decisions.md)
 
 ---
 
@@ -374,6 +389,14 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
 - **With interrupts down, polling the System VIA's VSync flag directly works** (Edge Grinder's
   memorial fade does exactly that before `install_irq`).
   Measured: Layer 9d (2026-09-05), jsbeeb. [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
+- **Chaining to the MOS loses vsyncs.** A handler that finds no vsync and chains the interrupt (the
+  100 Hz tick, a User VIA timer) to the MOS can have a vsync arrive in the ~30 cycles before the
+  MOS's dispatcher reads the VIA; the dispatcher tests vsync first, acknowledges it, and the game
+  never sees that field. Stryker's Run's original lost 12 fields of 1,000 (no palette split in
+  them). Fix: clear bit 1 of the MOS's System VIA IRQ mask (`&0279`, OSBYTE `&E9`) for as long as
+  the game owns vsync - take vsync before masking, unmask before handing it back - and 0 of 1,000
+  since. Zeroing the keyboard polling byte `&0242` (OSBYTE `&B2`) stops the tick's key scan.
+  Measured: 2026-10-16, jsbeeb 2.5.0 (`tools/split.mjs`). [strykers-run BUGS.md #3](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md), [decision 14](https://github.com/kieranhj/strykers-run/blob/main/docs/decisions.md)
 - **Taking IRQ1V outright**: disable every interrupt source on both VIAs except System VIA CA1 and
   T1, or anything unserviced holds the IRQ line asserted forever. The MOS saves the interrupted A in
   `&FC` but not X or Y.
@@ -425,12 +448,27 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
 - **The hardware wrap applies inside whichever bank is displayed.** With D = 1 and the wrap at 8K, a
   display crossing `&8000` lands on shadow `&6000`, not main. One ring per bank.
   Measured: 2026-09-04, jsbeeb. [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
-- **Nothing displayed may live below `&3000`.** jsbeeb displayed a panel at `&2000` under both
-  shadow states; b-em showed garbage on alternate frames. The two emulators disagree about what
-  the video fetches there with D set, and **real hardware is untested either way**. KC's
-  hypothesis (2026-09-07), worth checking: with the shadow bit set, a CRTC address below `&3000`
-  reads ANDY and HAZEL rather than main RAM, which would explain b-em's alternate-frame garbage.
+- **Nothing displayed below `&3000` while D is set** (until 2026-10-23 this entry said "nothing
+  displayed may live below `&3000`", the reason untested). jsbeeb (1.x, 2026-09) displayed a panel
+  at `&2000` under both shadow states; b-em showed garbage on alternate frames. KC's hypothesis
+  (2026-09-07): with the shadow bit set, a CRTC address below `&3000` reads ANDY and HAZEL rather
+  than main RAM, which would explain b-em's alternate-frame garbage.
   Measured: 2026-09-02, jsbeeb and b-em (KC), decision 17. [Edge layer-2-display.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-2-display.md) [Edge decisions.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/decisions.md)
+  **Confirmed 2026-10-23 (Stryker's Run): with
+  D set, a CRTC address below `&3000` reads ANDY (`&8000-&8FFF`) and HAZEL, not main RAM**, and
+  jsbeeb 2.10 does model it (`videoRead` ORs `&8000` into the address when D is set). Stryker's
+  Run's HUD row, a CRTC frame read from `&0B80`, showed ANDY's sprite bytes on every shadow field
+  until D was cleared from the vsync through the HUD's frame and set in the horizontal blank after
+  it. Displaying below `&3000` works with D 0 for those lines; b2 showed it right after the fix.
+  Its checks had missed it for a day because they timed the writes rather than what the video
+  read, and the screenshots happened to be main-screen fields. [strykers-run BUGS.md #15](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md)
+- **ACCCON's X puts shadow under the CPU for all of `&3000-&7FFF`, not just the screen.** A
+  renderer that draws into shadow with X set reads shadow's copy of any code or data that lives in
+  `&3000-&3FFF`, so that must be mirrored into shadow or kept below `&3000`, and anything the
+  interrupt reads must be below `&3000` (the interrupt can land mid-draw). Stryker's Run keeps its
+  interrupt's variables below `&3000` and audits the rest: `tools/shadowaudit.mjs` records every
+  read in `&3000-&3FFF` with X set and calls it stale where shadow's byte differs from main's.
+  Measured: 2026-10-16, jsbeeb 2.5.0. [strykers-run decision 23](https://github.com/kieranhj/strykers-run/blob/main/docs/decisions.md), [docs/step2-layer2.md](https://github.com/kieranhj/strykers-run/blob/main/docs/step2-layer2.md)
 - **The shadow screen is 20K of RAM nobody is looking at while main is displayed**, so with
   D = 0 and X = 1 (CPU sees shadow) it is a free staging area for compressed streams at boot.
   Measured: 2026-09-04, jsbeeb. [Edge layer-9-loader.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-9-loader.md)
@@ -570,6 +608,15 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
   Measured: 2026-09-17 and 09-24, jsbeeb Master 128 (MOS 3.20, Acorn 1770 DFS); played on a real
   Master from a Gotek 2026-09-28 and from a real drive 2026-10-12 (KC). 1942-beeb (private)
   `docs/hazel.md` (last two sections), decisions 96, 116.
+- **A game that reads "spare" ROM space as data may be reading HAZEL.** The Master MOS leaves
+  ACCCON's Y set through a game that never touches it, so `&C000-&DFFF` is HAZEL, not the MOS ROM.
+  Stryker's Run's mountain layer takes its data from `&C300` (the enhanced version's author
+  presumably meant the MOS ROM): on a Master that is whatever the DFS left there, so the mountains
+  depend on the machine's last disc activity (jsbeeb boots with HAZEL zeroed, and after a release
+  disc's menu different bytes picked a different sprite); on a Model B it is the MOS ROM. Watch
+  who reads HAZEL before calling it free, and fill it alike in both machines of an A/B check.
+  Measured: 2026-10-17 to 10-25, jsbeeb (`tools/hazelwatch.mjs`, `tools/hazelreach.mjs`: 1,242 reads
+  of `&C301-&C56C` over the whole world). [strykers-run BUGS.md #9](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md), decisions 31, 70, 80
 
 ### Real hardware
 
@@ -703,6 +750,19 @@ advancing and `&0D00` reads `&40`.
   and a bank routine may not call main-RAM code that pages a different bank and restores somebody
   else's. Both ports broke the second rule within a day of writing it down.
   Established: 2026-08-29 (Paradroid's resident depacker) and 2026-09-06 (Edge's `bank_call`). [Paradroid loader-compression.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/loader-compression.md) [Edge layer-9h-keyredef.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-9h-keyredef.md)
+
+- **No other machine's shadow RAM double-buffers like the Master's.** The B+'s CPU accesses to
+  `&3000-&7FFF` follow the displayed screen, so it cannot draw one screen while showing the other;
+  the Integra-B's 20K is the CPU's only, the video always showing main RAM. So a Master game that
+  double-buffers in shadow goes to a Model B as one screen raced against the beam: Stryker's Run's
+  Model B build draws in the 112 blank lines between frames (R4 38, R6 25, R7 32: 14,336 cycles) and
+  behind the beam, the scroll's new column the left one a row down (no hidden column), the player
+  redrawn before the beam reaches it or it shakes by a column. On a Model B `&FE34` is ROMSEL's
+  shadow, not ACCCON: every ACCCON write has to go. OSBYTE 0 with X = 1 names the machine (1 a B,
+  2 a B+, 3 a Master 128; 5, the Compact, from the AUG only).
+  Established: 2026-10-24 to 10-25 (the B+ and Integra-B from their documentation; neither jsbeeb
+  nor b2 emulates the Integra-B, BeebEm does); the Model B build played by KC in b2 2026-10-25.
+  [strykers-run docs/briefs/model-b-lite.md](https://github.com/kieranhj/strykers-run/blob/main/docs/briefs/model-b-lite.md), decisions 51, 76-79
 
 ---
 
@@ -917,6 +977,36 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   BASIC still answering, and the Master runs the game. The stub is `py/beeb_port_kit/dfs.py`
   `model_stub()`, its test `lib/test/model_stub_test.mjs`.
 
+### What the MOS costs a game that keeps it (MOS 3.20)
+
+- **The 100 Hz tick takes about 16% of the CPU in play**: in Stryker's Run's original, 3,240
+  cycles a tick, mostly the sound queues and envelopes (6.8% of all cycles) and, while any key is
+  held, a full keyboard-matrix scan every tick (6.3%). **The tick re-enables interrupts** (`CLI` at
+  `&E720` around its sound processing), so interrupts nest: a profiler must keep a stack and charge
+  each its own cycles. The whole interrupt budget was 21.0% of the CPU, 10.6% once the game owned
+  vsync and the MOS kept only the tick (decision 14), 2.2% once the game's own 50 Hz sound driver
+  replaced the MOS's (decision 25).
+  Measured: 2026-10-16, jsbeeb 2.5.0 (`tools/irqprofile.mjs`, frames 4000-5000). [strykers-run docs/step2-layer1.md](https://github.com/kieranhj/strykers-run/blob/main/docs/step2-layer1.md)
+- **MOS 1.20 and MOS 3.20 write the same SN76489 bytes in the same ticks** for the same SOUND and
+  ENVELOPE blocks: Stryker's Run's 8 effects fired from BASIC on jsbeeb's `B-DFS1.2` and Master,
+  and in the game on the Master. A capture made on one fits the other.
+  Measured: 2026-10-25, jsbeeb 2.10.2 (`template/tools/sfxcapture.mjs`).
+- **An interrupt the MOS does not recognise is offered to every paged ROM** (service call 5,
+  `&EE72`) before IRQ2V: a User VIA T1 palette split cost 1,165 cycles a field that way. Service
+  your own timers and RTI yourself; never chain them.
+  Measured: 2026-10-16, jsbeeb 2.5.0. [strykers-run decision 15](https://github.com/kieranhj/strykers-run/blob/main/docs/decisions.md)
+- **Replacing a MOS call means returning everything it returns, documented or not.** MOS 3.20's
+  OSBYTE 19 falls out of its wait through `LDY &0301,X : LDA &0300,X : TAX` (`&F0FF`), and the
+  original game kept Y from it across a screen clear; a field-counter wait that kept Y put the game
+  over text on the wrong screen.
+  Measured: 2026-10-16, jsbeeb 2.5.0. [strykers-run BUGS.md #5](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md)
+- **Paged ROMs 9 and 13 read `&0DF0-&0DFF` on a front end the MOS still runs** (Master, MOS 3.20,
+  with the DFS and the ROMs jsbeeb's Master carries): a game using that page in play saves and
+  restores it around play. **`&0982-&0CFF` (a `!BOOT` and loader's pages) and the filing system's
+  zero page `&BC`/`&BD` were measured free in play** by watches over every phase, front end, deaths
+  and the whole world included.
+  Measured: 2026-10-18 to 10-22, jsbeeb (`tools/zpwatch.mjs` and RAM watches). [strykers-run BUGS.md #12](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md), decisions 59, 67
+
 ### BREAK that clears RAM (MOS 3.20)
 
 - **`*FX 200,2` is not enough in a game that runs with VIA interrupts enabled.** MOS 3.20's reset
@@ -1061,6 +1151,13 @@ K -71, M -102, UP -58, DOWN -42; CTRL is INKEY -2 (`KEY_CTRL = &FE`).
   addresses that have to be patched, not the loop overhead saved (about 64 cycles a row against 24
   saved). Count the patches first.
   Measured: 2026-09-04, jsbeeb (`scroll_frame` 5,951 us -> 5,106 us by deleting a pass instead). [Edge performance.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/performance.md)
+
+- **Page-crossing indexed reads add up over a whole program.** Stryker's Run's main block slid
+  824 bytes and the game got 165 cycles a pass slower with no instruction changed; tables re-laid by
+  a per-read count of every indexed access (base and effective address, so each layout's crossings
+  can be computed) gave 15.6 cycles a pass back instead. A grind round's byte savings that slid a
+  hot branch across a page lost 20-60 cycles a pass.
+  Measured: 2026-10-18, jsbeeb 2.5.0 (`tools/passbench.mjs`). [strykers-run decision 40](https://github.com/kieranhj/strykers-run/blob/main/docs/decisions.md), [docs/grind/README.md](https://github.com/kieranhj/strykers-run/blob/main/docs/grind/README.md)
 
 ### Measured timing constants
 
@@ -1356,6 +1453,27 @@ again.*
   440.1 Hz confirmed the 4 MHz chip clock and `N = 125000 / f`; a 246-cycle window between a volume
   write and a silence write showed up as a 50 Hz crackle in the capture before it was heard.
   Measured: 2026-08-21 (Paradroid), 2026-09-04 (Edge; the crackle was also heard on b2 by KC). [Paradroid layer-11e-sound.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-11e-sound.md) [Edge layer-7-music.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-7-music.md)
+- **jsbeeb steps the drive head a track at a time and reads about 8.8K a second** (~230 cycles
+  a byte), so disc layout matters: Baron writes files in source order, which was the reverse of
+  Stryker's Run's boot, and re-laying them in load order cut its boot from 120 head steps to 32
+  (12.68 s to 12.38 s). Packing the files with ZX02 shrank the disc 40% but saved only ~1 s of a
+  12 s boot, the unpack costing ~60 cycles a byte written. Measured: 2026-10-24, jsbeeb 2.10.2.
+  [strykers-run docs/done.md](https://github.com/kieranhj/strykers-run/blob/main/docs/done.md)
+- **Where the picture is in jsbeeb's framebuffer**: x = (R0 + 1 - R2 - (R3 AND 15) / 2) x a
+  character's width - 8, y = (lines - R7 x (R9 + 1)) x 2, a character 8 pixels wide at 2 MHz and 16
+  at 1 MHz, a scanline two rows. Every MOS mode 0-2 and 4-5 puts it at (200, 64), 640 x 512, on the
+  B and the Master; Stryker's Run's game screen at (200, 112), 640 x 400. Not valid under a rupture.
+  Measured: 2026-10-25, jsbeeb 2.10.2 (`template/tools/capture.mjs`).
+- **A memory watch sees a zero-page read's address but not its value**, so a liveness count by
+  watch counts by address; check the source for indexed accesses that could reach the byte.
+  Measured: 2026-10-18, jsbeeb 2.5.0. [strykers-run BUGS.md #12](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md)
+- **`B-DFS1.2` is a free NMOS checker**: its 6502 core trips on any 65C02 opcode left in a build, and
+  its eight RAM banks let a harness put the game in any four (Stryker's Run's `SWR_POKE`), which is
+  how a bank-select or bank-as-data bug is provoked (BUGS #16, #17).
+  Measured: 2026-10-24 to 10-25, jsbeeb 2.10.2. [strykers-run docs/briefs/model-b-lite.md](https://github.com/kieranhj/strykers-run/blob/main/docs/briefs/model-b-lite.md)
+- **jsbeeb's versions changed load timings**: between 2.5.0 and 2.10.x Stryker's Run's front-end
+  harness's key presses, timed by frame, landed on another page. Wait on game state, not frames,
+  and date every figure with the jsbeeb it ran on. [strykers-run decision 72](https://github.com/kieranhj/strykers-run/blob/main/docs/decisions.md)
 - The MCP timed out on its first connection in one session and was fine after `/mcp` reconnect.
   [Edge layer-0-toolchain.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-0-toolchain.md)
 
@@ -1402,6 +1520,11 @@ Kept separate so they are not mistaken for the rest:
   (1942 Layer 2b) and on a Model B (`template/examples/vscroll`), both 2026-09-08. Rich
   Talbot-Watkins's demo relies on the same behaviour and runs in jsbeeb too, but nothing has
   checked it on b2, beebjit, b-em or real hardware.
+- Stryker's Run's main/shadow flip with ACCCON's X set while drawing, HAZEL left paged through
+  play, and a front end that runs in the vsync interrupt with interrupts re-enabled are jsbeeb
+  results only (2026-10); its HUD rupture has been seen on b2 and its beam-raced Model B build
+  played on b2 (KC, 2026-10-23 and 10-25), neither on real hardware yet.
+  [strykers-run PLAN.md](https://github.com/kieranhj/strykers-run/blob/main/PLAN.md)
 - DFS sector timings are jsbeeb's disc model and were flagged as such before any faster reader was
   costed. [Paradroid loader-compression.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/loader-compression.md)
 - The keyboard phantom on real hardware was reported, not instrumented, and the redefined-controls
