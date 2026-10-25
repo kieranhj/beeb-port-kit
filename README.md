@@ -9,6 +9,10 @@ All three were written by Claude Code with a human directing, reviewing, playing
 The first took a month. The second, reusing the first's method, took a week. The third had no
 source at all - only the arcade ROM, running in MAME - and took seven weeks, the first three at
 the second's pace. This kit is what each still had to rediscover, packaged so the next does not.
+A fourth project used the kit for another kind of job:
+[Stryker's Run](https://github.com/kieranhj/strykers-run) (BBC Master 128 and Model B, 2026-10-16 to
+10-25), a BBC original rebuilt byte for byte from its disassembly, then made faster, flicker free and
+playable on a Model B; what it added is in `PORTING.md` section 2.1c and through the docs and tools.
 
 **Be clear about what this is.** Everything under `docs/`, `skills/` and `PORTING.md` is written
 to be loaded into an agent's context: dense, exhaustive, and cited, because that is what makes an

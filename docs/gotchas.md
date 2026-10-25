@@ -15,7 +15,10 @@ an unguarded ceiling, or a byte that is zero on the emulator and garbage on the 
 
 Many entries also draw on **[1942](https://github.com/kieranhj/1942-beeb)** (Master 128,
 September-October 2026), the third port, the first built with this kit and the first from an
-arcade original; its `BUGS.md` numbers are cited as they stand there.
+arcade original; its `BUGS.md` numbers are cited as they stand there. Later entries draw on
+**[Stryker's Run](https://github.com/kieranhj/strykers-run)** (Master 128 and Model B, October
+2026), not a port but a BBC original rebuilt byte for byte from a disassembly and then optimised;
+its bugs are the ones that come from changing a working game you did not write.
 
 The entries only state what the two repositories record. Where a figure is quoted it is the
 figure in the source document, and where the source document itself was later corrected the
@@ -87,6 +90,15 @@ Cost: a hardware assumption reached real hardware that one boot and a screenshot
 caught.
 Source: [docs/decisions.md rows 63, 64, 67](https://github.com/kieranhj/edge-beeb/blob/master/docs/decisions.md),
 [docs/layer-8b-nula.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-8b-nula.md).
+
+
+**Choose the reference by its bytes, and test what the annotations assume.**
+Instance: Stryker's Run had two discs of the same release. Disc999's game had seven scenery bytes
+zeroed that no code writes, and a different CRTC R8; the Stairway to Hell disc matched the
+disassembly's tables, so it became the reference. The disassembly itself said the mountain layer
+read the MOS ROM at `&C300`; a watch showed it reads HAZEL (on a Master the MOS leaves HAZEL paged),
+and a brief built on the annotation had called a change "not doable" for a reason that was false.
+Source: [strykers-run decision 1](https://github.com/kieranhj/strykers-run/blob/main/docs/decisions.md), [strykers-run BUGS.md #9](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
 
 ---
 
@@ -267,6 +279,14 @@ with no fire held - nothing died, no explosion was ever drawn - sized a reservat
 then wrote 516 bytes into game state; 36 oracle runs failed at once while every boss-facing oracle
 passed. Source: [1942-beeb BUGS.md #48, #52](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
+
+**Assert the end of every region, not just the code's.**
+Instance: Stryker's Run's bank 4 holds the renderer, then its sprites, then its workspace. The
+ASSERT guarded the renderer's own end; the sprite data after it grew past `&B000` into the
+workspace the renderer writes as it draws, and the last 230-300 bytes of sprites drew as garbage.
+Found only because two builds that should have agreed parted at pass 4,139 of a 5,000-pass screen
+lockstep. Source: [strykers-run BUGS.md #6](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
+
 ---
 
 ## 4. Paths nothing has called
@@ -352,6 +372,23 @@ SHIFT to boot and never another key: nothing ever died, no explosion or power-up
 load was half the real one. Holding fire found the bug at 6,000 ticks and not at 2,600. A settle
 period hides the opening seconds; a suite on level 1 does not see level 28. Make the harness
 REPORT its coverage and fail on a path it never took. Source: [1942-beeb BUGS.md #31, #11, #25, #90](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
+
+
+**A watch proves only the paths it ran. Run every phase, deaths and game over included.**
+Instance: Stryker's Run's new random number generator went at `&92`/`&93` on a watch that saw "no
+access after boot in 30,000 frames". The original's death routine keeps the dying mover's slot in
+`&92` across a call (`STY &92 : ... : LDY &92`), so every death set the generator's low byte; the
+scripted runs had died, but not in the 30,000 frames watched. Found when the original and the
+rebuild played the same game side by side and parted at pass 571. The replacement bytes were chosen
+by a watch over the front end's checks, deaths, both helicopter flights and the whole world.
+Source: [strykers-run BUGS.md #12](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
+
+**An optimiser that changes a routine's first bytes breaks every `JSR label+n` caller.**
+Instance: Stryker's Run's micro-grind dropped `keydown_int`'s leading `TXA`; observer mode called
+`JSR keydown_int + 1`, now into an operand, and no key worked there. Play, the front end and
+define controls never take that path, so neither the proof gate nor the proposal's skeptics saw
+it. Search for `label+` callers before changing an entry, and put every rarely-taken path in the
+gate. Source: [strykers-run BUGS.md #11](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
 
 ---
 
@@ -449,6 +486,23 @@ Source: `template/tools/verify_dynamic.mjs`, 2026-10-25.
 `(&FD)` printed on a harness's exit settled in one run what three rounds of reading code had not.
 Source: [1942-beeb BUGS.md #24, #29](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
 
+
+**A Baron symbol dump has labels AND assignments; a loader that reads only labels compares nothing.**
+Instance: Stryker's Run's renderer records (`rec_*`, `REN_BASE + n`) and every zero-page name are
+assignments. `worldcheck` read only labels, so every address was `undefined`, both sides read the
+same byte, and "6,119 records, none differing" proved nothing. A harness takes every address from
+the dump, both kinds, and a missing name is an error. Source: [strykers-run BUGS.md #10](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
+
+**A breakpoint in sideways RAM must check ROMSEL.** Two of Stryker's Run's harnesses hooked a PC
+in bank 7 and fired on bank 6's code at the same address: 30 false failures, and 0 ticks counted.
+Source: strykers-run commits `1fd31bd`, `76bff0b`.
+
+**Measure what the user sees, not when it was written.** Stryker's Run's HUD rupture was checked by
+the beam position of every CRTC and ACCCON write, and the writes were right; but with ACCCON's D set
+the video read ANDY below `&3000`, so the HUD flickered garbage on every shadow field (the
+screenshots happened to be main-screen fields). The check now samples what the video reads at
+every instruction while it displays. Source: [strykers-run BUGS.md #15](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
+
 ---
 
 ## 6. Emulator configuration hiding bugs
@@ -515,6 +569,21 @@ found on hardware after the emulator numbers said fine.
 Source: [docs/decisions.md row 22](https://github.com/kieranhj/edge-beeb/blob/master/docs/decisions.md),
 [docs/layer-3-scroll.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-3-scroll.md),
 [docs/raster-timing.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/raster-timing.md).
+
+
+**jsbeeb zeroes HAZEL too, and a game that reads it shows it.** Stryker's Run's mountains are
+picked by bytes the DFS leaves in HAZEL. Booted straight into the game on jsbeeb only one mountain
+sprite ever appeared; after the release disc's menu touched the disc, an undithered sprite nobody
+had tested appeared, and users saw it first. A/B harnesses now fill HAZEL alike in both machines.
+Source: [strykers-run BUGS.md #9](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md), decisions 70, 71.
+
+**Move the resources to find the bugs that depend on where they are.** Stryker's Run found three
+by moving things: the source shifted by whole pages (decision 7) showed the ground's texture was
+read from zero page the sprite unpacker happened to leave (BUGS #1); the game's banks moved from
+4-7 to 0-3 showed a scroll path that had paged bank 0 for seven days, harmless while bank 0 was
+empty (BUGS #16), and a table walk that ran off its table into the bank numbers (BUGS #17). A
+permuted bank map, an odd load address or a pre-filled HAZEL is a cheap fault injector.
+Source: [strykers-run BUGS.md #1, #16, #17](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
 
 ---
 
@@ -591,6 +660,21 @@ game ticks in another was right in both and wrong between them. Source: [1942-be
 filename's low byte handed the filing system a name beginning with a ROMSEL value; read the
 register allocation before changing a signature, and isolate by disabling the new code and seeing
 whether the fault stays. Source: [1942-beeb BUGS.md #49, #80](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
+
+
+**The logic may read what the drawing code leaves behind.** Stryker's Run's game logic reads the
+zero page its plotter leaves (`mover_x_low` stepped column by column as it draws, the screen
+address): a build whose plot calls did nothing diverged within 1,745-4,261 passes, and soldiers
+already skipped 1-6 columns in the original where clipping left the x advanced (BUGS #4). When
+the drawing moves out of the logic, the logic's calls still walk the sprite as the plotter did.
+Source: [strykers-run decision 21](https://github.com/kieranhj/strykers-run/blob/main/docs/decisions.md), [strykers-run BUGS.md #4](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
+
+**A walk past a table's end reads the next table as data, harmlessly until that table changes.**
+Stryker's Run's scenery walk, near the end of the world, reads past `scenery_data_two` into the
+bank each layer pages. While those were the logical banks 4-7 it drew what the original drew;
+when a Model B build patched them to the machine's banks, 28-32 frames of background changed. Found
+by recording every instruction in two machines from pass 11,360 and taking the first PC that
+differed. Source: [strykers-run BUGS.md #17](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
 
 ---
 
@@ -699,6 +783,19 @@ walked path was deleted outright, the one straddling character row drawn as two 
 calls. Six straddling explosions: 127,368 cycles a frame to 85,326.
 Source: [BUGS.md #9](https://github.com/kieranhj/edge-beeb/blob/master/BUGS.md).
 
+
+**Cost on the real distribution, not the average.** Stryker's Run's row-major sprite format was
+costed on the sprite set's average row; the player's real rows are short (about 3.8 bytes) and
+clipped parts frequent, and built it was slower: 166 late frames of 1,498 against 41.
+Source: [strykers-run docs/step2-layer4-costing.md](https://github.com/kieranhj/strykers-run/blob/main/docs/step2-layer4-costing.md).
+
+**Model a reordering before building it.** Running the logic a pass ahead of the render was agreed
+on an estimate that a pass costs the larger of its logic and its render, as if both ran at once.
+Replaying the measured passes under the new order (`pipesim.py`, one CPU, vsync every 39,936
+cycles) gave 73 late frames against 75: no gain, not built. Modelling 50 Hz the same way first
+saved a dead-end build (decision 35).
+Source: [strykers-run docs/step2-layer3.md](https://github.com/kieranhj/strykers-run/blob/main/docs/step2-layer3.md).
+
 ---
 
 ## 11. Two correct measurements supporting a wrong conclusion
@@ -724,6 +821,20 @@ Source: [docs/decisions.md row 19](https://github.com/kieranhj/edge-beeb/blob/ma
 writes to the tile map through a live reproduction of the corruption, and the working document is
 still named for the hypothesis it disproved. The zero moved the search to the bank.
 Source: [BUGS.md #10](https://github.com/kieranhj/paradroid-beeb/blob/main/BUGS.md).
+
+
+**Count the artefact the player sees.** Stryker's Run's Model B build fixed a flickering player by
+holding its draw a field: torn frames fell from 38 to 2, and the player was shown a column off
+centre instead (ghosting), which the count of torn frames could not see and KC did. Counting the
+fields the player missed its frame in (`beamcheck --slot`) led to the real fix, drawing it straight
+after the scroll's column: 48 missed to 4.
+Source: [strykers-run decisions 77, 78](https://github.com/kieranhj/strykers-run/blob/main/docs/decisions.md).
+
+**After a fix, compare against the old build with the bug undone, or you compare two games.**
+Stryker's Run's proof gate reported a fix as 71.6 and 499.0 cycles a pass slower; from the first
+death the old build's clobbered generator had played another game. Undoing the clobber inside the
+old build's emulator (`--unclobber`) made it the same game: 33.0 and 28.3 cycles faster.
+Source: [strykers-run BUGS.md #12](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
 
 ---
 
@@ -812,11 +923,13 @@ traps there, one line each with their bug number; detail goes to `docs/`.
 4. Every path the layer added has been driven at least once, on purpose, by forcing the branch if
    the game does not reach it (class 4).
 5. The oracle, harness or diff was re-read for paths that did not exist when it was written, and
-   its inputs cover odd and even, both axes, a second deck (class 4).
+   its inputs cover odd and even, both axes, a second deck, and every phase a watch was meant to
+   cover - deaths, game over, the front end (class 4).
 6. Every instrument used to produce a number was itself checked: patch applied, bracket closed,
    wrap impossible, interrupts accounted for (class 5).
-7. The build was booted with RAM seeded non-zero, sideways RAM in a different set of slots, on a
-   second emulator, and where a display is being tuned, on a display (class 6).
+7. The build was booted with RAM seeded non-zero (HAZEL too, on a Master), sideways RAM in a
+   different set of slots, on a second emulator, and where a display is being tuned, on a display
+   (class 6).
 8. A transcribed routine was compared with the original for register use, call order and the
    guards inside its callees, and every value it reads was followed back to its writer (class 7).
 9. No bank routine pages its own bank; nothing in the IRQ reads a bank without paging explicitly;
