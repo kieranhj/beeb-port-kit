@@ -70,6 +70,12 @@ The project's own artefacts table wins; this is the default (`PORTING.md` §3):
    constants, decision and bug numbers) across ALL docs and fix every stale mention. Check every
    relative link resolves, and every tool and oracle named exists.
 
+9. **A project made from a template or a previous port**: `diff -q` every doc against the one it
+   was copied from, and grep every path a doc or a file header cites. Square Roots, built overnight
+   from Isometrikum, kept five documents byte-identical to the kit template's (a `BUGS.md` of
+   someone else's bugs, a memory map of a rupture it does not have), headers describing what the
+   code had stopped doing, and two docs naming tools that did not exist (`docs/gotchas.md` class 12).
+
 ## 3. Rules
 
 - **Measure, do not recall.** A number you write comes from the build, a tool's output or a cited

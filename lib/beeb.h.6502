@@ -153,6 +153,10 @@ USR_VIA_DDRB  = &FE62       ; swram.asm's USR_DDRB
 USR_VIA_T1CL  = &FE64       ; a free-running 1 MHz counter: Paradroid's
 USR_VIA_T1CH  = &FE65       ; DEBUG_TIME meter
 USR_VIA_IER   = &FE6E
+USR_VIA_T1LL  = &FE66       ; ay2sn.6502: the software bass voice's period latch, low
+USR_VIA_T1LH  = &FE67       ;   ...and high - reloads the free-running counter
+USR_VIA_ACR   = &FE6B       ; bit 6 set, bit 7 clear: T1 free-running, no PB7
+USR_VIA_IFR   = &FE6D       ; bit 6 = T1
 
 \ ---- the keyboard, through the System VIA -------------------
 \ Port A carries the key number out (PA0-PA3 column, PA4-PA6 row) and

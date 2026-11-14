@@ -1,0 +1,269 @@
+\ ******************************************************************
+\ *	unshrinkler.6502 - a Shrinkler decompressor (decision 15)
+\ *
+\ *	KIT COPY (2026-11-14) of Isometrikum's. ~4,000 cycles a byte: use it
+\ *	when size is all that counts; zx02depack.6502 otherwise
+\ *	(docs/cpc-demo-porting.md section 11).
+\ ******************************************************************
+\ *	unShrinkler, Copyright (C) 2021 Krzysztof 'XXL' Dudek, Piotr '0xF'
+\ *	Fusik (https://github.com/atari8xxl/unShrinkler, 6b01be2), zlib
+\ *	licence: this software is provided 'as-is', without any express or
+\ *	implied warranty. In no event will the authors be held liable for
+\ *	any damages arising from the use of this software. Permission is
+\ *	granted to anyone to use this software for any purpose, including
+\ *	commercial applications, and to alter it and redistribute it freely,
+\ *	subject to the following restrictions: 1. The origin of this software
+\ *	must not be misrepresented; you must not claim that you wrote the
+\ *	original software. If you use this software in a product, an
+\ *	acknowledgment in the product documentation would be appreciated but
+\ *	is not required. 2. Altered source versions must be plainly marked as
+\ *	such, and must not be misrepresented as being the original software.
+\ *	3. This notice may not be removed or altered from any source
+\ *	distribution.
+\ *
+\ *	ALTERED: translated from MADS to Baron for the Isometrikum BBC port,
+\ *	the variant unshrinkler_PARITY=0 unshrinkler_FAST=0 with page-aligned
+\ *	workspace, instruction for instruction (the MADS pseudo-ops mwy, mva,
+\ *	inw, add, scc:, sta:rne, `dta {ldx #}` written out); no algorithmic
+\ *	change. The stream is Shrinkler's `-d -b` raw data
+\ *	(tools/shrinkler.py, whose decoder is the oracle).
+\ *
+\ *	USE. The includer defines SHR_DATA, 1.5K of page-aligned workspace
+\ *	(uninitialised: the routine fills it), and declares
+\ *	    ZA_AUTO 19, shr_zp
+\ *	Then: shr_zp+0/1 = the stream, shr_zp+2/3 = the output, jsr
+\ *	unshrinkler. The output may overlap the stream's already-read part.
+\ *	Returns with shr_zp+2/3 one past the last byte written.
+\ ******************************************************************
+
+shr_src     = shr_zp + 0
+shr_dst     = shr_zp + 2
+shr_copy    = shr_zp + 4
+shr_factor  = shr_zp + 4
+shr_tabs    = shr_zp + 6
+shr_number  = shr_zp + 8
+shr_cp      = shr_zp + 10
+shr_d2      = shr_zp + 12
+shr_d3      = shr_zp + 14
+shr_frac    = shr_zp + 16
+shr_srcbits = shr_zp + 18
+
+SHR_PROBS        = SHR_DATA
+SHR_PROBS_REF    = SHR_DATA + &200
+SHR_PROBS_LENGTH = SHR_PROBS_REF
+SHR_PROBS_OFFSET = SHR_PROBS_REF + &200
+ASSERT LO(SHR_DATA) = 0
+
+.unshrinkler
+{
+    ldx #HI(SHR_PROBS_OFFSET + &100)
+    ldy #1                      ; mwy #1 d3
+    sty shr_d3
+    dey
+    sty shr_d3 + 1
+    sty shr_d2
+    sty shr_tabs                ; the workspace is page-aligned
+    tya
+.init_page
+    stx shr_tabs + 1
+.init_fill
+    sta (shr_tabs), y
+    iny
+    bne init_fill
+    sta shr_srcbits             ; eventually &80
+    eor #&80
+    dex
+    cpx #HI(SHR_DATA)
+    bcs init_page
+    tax                         ; #0
+
+.literal
+    iny                         ; Y = 0 on every entry: #1
+.literal_bit
+    jsr get_bit
+    tya
+    rol a
+    tay
+    bcc literal_bit
+    sta (shr_dst, x)            ; X = 0
+
+    inc shr_dst
+    bne inw_d
+    inc shr_dst + 1
+.inw_d
+    jsr get_kind
+    bcc literal
+
+    lda #HI(SHR_PROBS_REF)
+    jsr get_bit_from
+    bcc read_offset
+
+.read_length
+    lda #HI(SHR_PROBS_LENGTH)
+    jsr get_number
+    ldx shr_number              ; X = the length's low byte, a count of
+    beq copy_next               ; whole passes of X in the high byte
+    inc shr_number + 1
+.copy_next
+    clc
+.offset_l
+    lda #&FF                    ; the offset, low (written by read_offset)
+    adc shr_dst
+    sta shr_copy
+.offset_h
+    lda #&FF                    ; and high
+    adc shr_dst + 1
+    sta shr_copy + 1
+    lda (shr_copy), y           ; Y = 0
+    sta (shr_dst), y
+    inc shr_dst
+    bne copy_inw
+    inc shr_dst + 1
+.copy_inw
+    dex
+    bne copy_next
+    dec shr_number + 1
+    bne copy_next               ; X = 0, as get_bit wants
+
+.copy_done
+    jsr get_kind
+    bcc literal
+
+.read_offset
+    lda #HI(SHR_PROBS_OFFSET)
+    jsr get_number
+    lda #3
+    sbc shr_number              ; C = 0
+    sta offset_l + 1
+    tya                         ; #0
+    sbc shr_number + 1
+    sta offset_h + 1
+    bcc read_length
+    rts                         ; finish
+
+.get_number
+    sta shr_tabs + 1
+    lda #1
+    sta shr_number
+    sty shr_number + 1          ; #0
+.get_number_count
+    iny
+    iny
+    jsr get_bit
+    bcs get_number_count
+
+.get_number_bit
+    dey
+    jsr get_bit
+    rol shr_number
+    rol shr_number + 1
+    dey
+    bne get_number_bit
+    rts
+
+.get_kind
+    ldy #0
+    lda #HI(SHR_PROBS)
+.get_bit_from
+    sta shr_tabs + 1
+    bne get_bit                 ; always
+
+.read_bit
+    asl shr_d3
+    rol shr_d3 + 1
+    asl shr_srcbits
+    bne got_bit
+    lda (shr_src, x)            ; X = 0
+    inc shr_src
+    bne inw_s
+    inc shr_src + 1
+.inw_s
+    rol a                       ; C = 1
+    sta shr_srcbits
+.got_bit
+    rol shr_d2
+    rol shr_d2 + 1
+
+.get_bit
+    lda shr_d3 + 1
+    bpl read_bit
+
+    lda (shr_tabs), y
+    sta shr_factor + 1
+    sta shr_frac + 1
+    inc shr_tabs + 1
+    lda (shr_tabs), y
+
+    sta shr_factor              ; slow multiplication
+    ldx #4
+.compute_frac
+    lsr shr_frac + 1
+    ror a
+    dex
+    bne compute_frac
+    sta shr_frac
+
+    txa                         ; #0
+    sta shr_cp + 1
+    ldx #16
+.mul_loop
+    lsr shr_factor + 1
+    ror shr_factor
+    bcc mul_next
+    clc
+    adc shr_d3
+    pha
+    lda shr_cp + 1
+    adc shr_d3 + 1
+    sta shr_cp + 1
+    pla
+.mul_next
+    ror shr_cp + 1
+    ror a
+    dex
+    bne mul_loop
+    sta shr_cp
+
+    eor #&FF
+    sec
+    adc shr_d2
+
+    tax
+    lda shr_d2 + 1
+    sbc shr_cp + 1
+    bcs zero
+
+    ldx shr_cp
+    lda shr_cp + 1
+    bcc set_d3                  ; always
+
+.zero
+    stx shr_d2
+    sta shr_d2 + 1
+    lda shr_d3
+    sbc shr_cp                  ; C = 1
+    tax
+    lda shr_d3 + 1
+    sbc shr_cp + 1
+
+.set_d3
+    stx shr_d3
+    sta shr_d3 + 1
+    php
+    lda (shr_tabs), y
+    sbc shr_frac
+    sta (shr_tabs), y
+    dec shr_tabs + 1
+    lda (shr_tabs), y
+    sbc shr_frac + 1
+    plp
+    bcs ret_zero
+    sbc #&EF                    ; C = 0
+    sec
+    EQUB &A2                    ; ldx #: skips the CLC
+.ret_zero
+    clc
+    sta (shr_tabs), y
+    ldx #0
+    rts
+}

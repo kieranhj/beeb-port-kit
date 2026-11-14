@@ -63,4 +63,15 @@ user's home folder
    - **a branch ledger**: every branch this job made or touched, its head commit, and whether it
      is merged, pushed, and published (it should say no, no, no).
 
+**A whole port overnight from a previous one** (Square Roots from Isometrikum, 2026-11-07/08;
+`docs/cpc-demo-porting.md` section 12) adds to the brief: the reading order (the template's rules
+file, plan, decisions, done, layer docs, write-ups, then the kit); the new original's facts
+pre-measured and flagged "verify before relying on it"; the targets the owner already answered
+("the same as the template"), so most decisions are defaults; the template's traps copied in; a
+named check per layer on both models; and an end state (the local disc, the write-ups, a `PLAN.md`
+that opens with the morning's list). Tell it to **re-measure every mechanism the template brings**
+(a slide, an interrupt that does the work, a timer constant) and to copy only the tools the new
+original needs; finish with the `beeb-doc-pass` template diff (its step 9). Number the new
+project's decisions on their own.
+
 9. **Write the session's memory note**: the branch, its state, the report's path.
