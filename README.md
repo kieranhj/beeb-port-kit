@@ -14,6 +14,12 @@ A fourth project used the kit for another kind of job:
 10-25), a BBC original rebuilt byte for byte from its disassembly, then made faster, flicker free and
 playable on a Model B; what it added is in `PORTING.md` section 2.1c and through the docs and tools.
 
+Two **Amstrad CPC demos** followed (Vanity's 4K intros Isometrikum and Square Roots, ported to a
+Model B with 32K of sideways RAM in November 2026, the second overnight from the first): a packed
+Z80 binary with no source, effects locked to the field, a VideoNuLA set with the CPC's palette, and
+a size crunch to 7,582 bytes. What they added is `docs/cpc-demo-porting.md`, `template/tools/cpc/`,
+two skills and two library files.
+
 **Be clear about what this is.** Everything under `docs/`, `skills/` and `PORTING.md` is written
 to be loaded into an agent's context: dense, exhaustive, and cited, because that is what makes an
 agent measure instead of guess. The hardware facts are what any experienced BBC programmer
@@ -92,6 +98,10 @@ PORTING.md              the playbook: rules, artefacts, the layer plan, briefs a
                         patterns that transfer
 docs/arcade-porting.md  when there is no source: capturing an arcade original in MAME, driving it,
                         modelling its ROM routines to 0 wrong, rotation, DIP switches, the sound CPU
+docs/cpc-demo-porting.md  when the original is an Amstrad CPC demo: the Z80 image, the picture
+                        and the logical reference machines, models N of N, CPC screens on a
+                        Model B, RTW's re-dither and VideoNuLA, the AY at run time, the crunch to
+                        the smallest Shrinkler-packed file, and a second port built overnight
 docs/hardware-facts.md  measured facts about the CRTC, VIAs, MOS, DFS, the 1770, the assemblers and
                         the emulators
 docs/gotchas.md         the bug classes that recurred, with the instance and the rule
@@ -129,6 +139,9 @@ template/               a starter project that boots to a panel above a play are
                         A/B pair harness and the relocation proof (pairlock, lockstep,
                         tracediff), probes (irqprofile, memwatch, pcprof), video with sound,
                         nmosify and the grind's tools;
+                        tools/cpc/ with the CPC instrument (DSK, depack, a scanline CPC, CPC
+                        timing, coverage disassembly, the two reference shapes); shrinkler.py,
+                        size_report.py, grind_bytes.py and verify_image.mjs for a crunch;
                         tools/mame/ with the Lua capture harnesses; template/examples/vscroll
                         is the other frame shape - the play area FIRST, scrolled one scanline
                         at a time under the cursor keys, with its own oracle and its

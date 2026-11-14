@@ -136,3 +136,11 @@ MEASURE = tuple((name, argv, 'perPass.work') for name, argv in MEASURE)
 # image; two builds of the same source differ only in the stamp. Stryker's Run measured 0.1 on an
 # unchanged tree and used 1.0.
 NOISE = 0.5
+
+# Grinding for SIZE instead (Isometrikum's crunch, 2026-11): MEASURE runs a tool that prints the
+# executables' packed lengths, the windows are weighted by packed cost (a Shrinkler cost map in
+# pcprof's --out shape: isometrikum tools/grind_bytes.py), and these two say so. Both optional.
+# UNIT = 'bytes'                 # grind.py's commit messages and report
+# def SCORE(c):                  # the queue's order, best first
+#     cl = c.get('claim', {})
+#     return (cl.get('bytes', 0), cl.get('cycles_a_pass', 0))

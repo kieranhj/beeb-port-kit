@@ -18,7 +18,10 @@ September-October 2026), the third port, the first built with this kit and the f
 arcade original; its `BUGS.md` numbers are cited as they stand there. Later entries draw on
 **[Stryker's Run](https://github.com/kieranhj/strykers-run)** (Master 128 and Model B, October
 2026), not a port but a BBC original rebuilt byte for byte from a disassembly and then optimised;
-its bugs are the ones that come from changing a working game you did not write.
+its bugs are the ones that come from changing a working game you did not write. The latest
+entries draw on two **Amstrad CPC demos** (Isometrikum and Square Roots, November 2026; the
+repositories are not public, so they are cited by path): a Z80 original with no source, and the
+second port built overnight from the first (`docs/cpc-demo-porting.md`).
 
 The entries only state what the two repositories record. Where a figure is quoted it is the
 figure in the source document, and where the source document itself was later corrected the
@@ -99,6 +102,13 @@ disassembly's tables, so it became the reference. The disassembly itself said th
 read the MOS ROM at `&C300`; a watch showed it reads HAZEL (on a Master the MOS leaves HAZEL paged),
 and a brief built on the annotation had called a change "not doable" for a reason that was false.
 Source: [strykers-run decision 1](https://github.com/kieranhj/strykers-run/blob/main/docs/decisions.md), [strykers-run BUGS.md #9](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
+
+**A reading of the original taken from pictures is a hypothesis, and so is a brief's.**
+Instance: Square Roots' overnight brief, written from `cpcrun` frames, predicted "a palette fade,
+the hard design question". The palette is written once at boot; the "fade" is 13 tile sets. The
+brief's own rule - "verify before relying on it" - is what saved the night. Search the code for
+what the picture suggests (every `OUT &7Fxx`: pens or RAM banks?) before designing for it.
+Source: square-roots `docs/layer-7-colour.md` (CPC demo, 2026-11-08; not public).
 
 ---
 
@@ -286,6 +296,21 @@ ASSERT guarded the renderer's own end; the sprite data after it grew past `&B000
 workspace the renderer writes as it draws, and the last 230-300 bytes of sprites drew as garbage.
 Found only because two builds that should have agreed parted at pass 4,139 of a 5,000-pass screen
 lockstep. Source: [strykers-run BUGS.md #6](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
+
+**Under Baron's allocator, a routine reachable from an interrupt handler and from the main loop
+shares zero page with the interrupt's own variables.** Baron assumes code reachable from a
+`ZA_INTERRUPT` handler runs only inside it, so it may pack that handler's variables onto the
+routine's. Instance: Square Roots' screen routines were reachable from a raster fire and from the
+main loop; the allocator put the music interrupt's `mus_c`, `mus_a`, `mus_b` on the span's `so`,
+`sl`, `sn`, the music preempted a span, and the first full run failed at record 207. Rule: never
+share a routine between an interrupt and the main loop; give the interrupt its own copy with its
+own variables, or move the work out of the interrupt.
+Source: square-roots `docs/layer-5-world.md` "Found by measurement", commit f35d56f (2026-11-08).
+
+**While a gate demands an identical image, pin the zero page.** Removing one unrelated variable
+lets Baron's allocator repack the rest, and every operand that names one moves. Isometrikum's
+crunch rounds 1-3 pinned the allocation to the reference build's.
+Source: isometrikum `docs/crunch.md` (2026-11-08; not public).
 
 ---
 
@@ -523,6 +548,30 @@ CRTC's registers is wrong under a rupture, which reprograms them mid-field, and 
 be a silent game - count the chip's writes before blaming the capture.
 Source: [strykers-run BUGS.md #15](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
 
+**Sample a harness at the port's own tick, not at the emulator's frame.** Square Roots keeps the
+CPC's 304-line frame, so its T1 drifts against jsbeeb's 312-line frames; `verify_music` read the
+player's state mid-tick and differed every 39th tick, on channel 2 only. Hook the tick, or lock
+the timer to the frame the harness counts.
+Source: square-roots `docs/layer-2-music.md` "Found by measurement" (2026-11-08; not public).
+
+**A record and a pass may be one apart, and the harness must say which.** Isometrikum's pass runs
+after its field's music tick; the reference's record is taken before it. Its flash variables are
+compared one pass back, by design, and the harness says so.
+Source: isometrikum `docs/layer-5-world.md` (2026-11-07; not public).
+
+**With code in two sideways banks at `&8000`, an address hook fires in both, and before boot it
+fires in a ROM.** Isometrikum's hook at `plot_test_done` fired at the same address in the other
+bank; on the Master a ROM was running at `main_loop`'s address before the boot paged the code
+in, and the harness read a bank number that had not been written yet. Gate every address hook on
+ROMSEL and on the boot having happened; read state with the bank named.
+Source: isometrikum `docs/layer-4-plotter.md`, `docs/layer-5-world.md` (2026-11-07; not public).
+
+**Compare at a point where the original's state is canonical.** Square Roots compared memory at
+each world-work interrupt and failed: the main loop's scratch state was half way through a
+square's setup. At the first main-loop unit after it, the state is canonical and the setup it
+interrupted commutes with the work. A whole-demo comparison is only as good as where it samples.
+Source: square-roots `docs/layer-1-spec.md` "Why snapshots at units" (2026-11-08; not public).
+
 ---
 
 ## 6. Emulator configuration hiding bugs
@@ -708,6 +757,28 @@ when a Model B build patched them to the machine's banks, 28-32 frames of backgr
 by recording every instruction in two machines from pass 11,360 and taking the first PC that
 differed. Source: [strykers-run BUGS.md #17](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
 
+**On the 6502 a store sets no flags; on the Z80 the arithmetic before it did.** A Z80 `ADD A,A`
+(or a `LD` then a test) transliterated as `STA` then `BPL` tests the instruction before the store.
+Isometrikum's music went wrong at tick 260, channel 2, from exactly that; `CMP #&80` fixed it.
+Source: isometrikum `docs/layer-2-music.md` (2026-11-07; not public).
+
+**A self-modified operand is at the instruction's address + 1.** The only bug in Isometrikum's
+first full world-model run was `&35DF` - the operand of an `ADD` - taken for the `CP` at `&35E0`,
+whose operand is `&35E1`. Name every one after its own address (`cpc_35E1`) in the model and the
+port. Source: isometrikum `CLAUDE.md` "The models" (2026-11-07; not public).
+
+**A player that dispatches into the middle of instructions cannot be read from a linear
+listing.** Isometrikum's command `F6` is the `LD A,(DE)` inside `LD H,&1A` at `&22C1`. Disassemble
+along coverage (`template/tools/cpc/covdis.py`); port the dispatch as a word table and an
+RTS-jump, with `ZA_CANJUMP` after it. Source: isometrikum `PROPOSAL.md` (2026-11-07; not public).
+
+**A free-running original's behaviour depends on its speed, so its emulator's timing is part of
+the specification.** At raw Z80 T (4 per microsecond) Square Roots runs 10-25% fast, its trees land
+at other scroll phases, and at field 1,354 a span runs from `&F800`'s block into `&0000` and writes
+over the interrupt vector. Under a CPC timing model it runs to its end. A field-locked original
+(Isometrikum) does not care. Find out which you have before trusting a reference.
+Source: square-roots `docs/layer-1-spec.md`, `tools/cpctime.py` (2026-11-08; not public).
+
 ---
 
 ## 8. Bank paging rules
@@ -828,6 +899,26 @@ cycles) gave 73 late frames against 75: no gain, not built. Modelling 50 Hz the 
 saved a dead-end build (decision 35).
 Source: [strykers-run docs/step2-layer3.md](https://github.com/kieranhj/strykers-run/blob/main/docs/step2-layer3.md).
 
+**Under an LZ packer, merging repeated code saves almost nothing; deleting saves.** Shrinkler's
+matches already pack a repeated block nearly free, and a loop's control costs bytes that do not
+repeat. Isometrikum's crunch measured three merges: `disp_start` as a table loop +20 bytes,
+`objects` as a three-voice loop +19, the edge clear and copy as one routine -3 on one executable
+and +10 on the other. A round planned on raw bytes at 900-1,200 delivered 502; the planned big
+merge was abandoned. In the byte grind, 20 of 99 candidates made the packed stream larger. Price a
+size change by the packed length, alone, before building on it.
+Source: isometrikum `docs/crunch.md` round 5 (2026-11-09; not public).
+
+**Machinery a previous port needed is not evidence that this one does.** Square Roots imported
+Isometrikum's stable-raster slide: its write windows were whole 512 us rows, so the slide cost up
+to 80 us a fire, six fires a field, for nothing (its decision 19). It also imported the world work
+in the interrupt (lost fires, and the zero-page aliasing in class 3) and a T1 restart from a
+guessed constant (70 us of drift a field). Measure the windows and the budget before importing the
+mechanism. Source: square-roots `docs/decisions.md` 19, `docs/layer-3-display.md` (2026-11-08; not public).
+
+**A re-armed periodic timer drifts; chain its latch.** Restarting T1 each field from a constant
+drifted 70 us a field, and one late entry shifts it against the CRTC for good. Lock T1 once; each
+fire loads the latch for the interval to the next. Source: as above, "The fires".
+
 ---
 
 ## 11. Two correct measurements supporting a wrong conclusion
@@ -941,6 +1032,18 @@ no sound data until the player's own model has read it back. Source: [1942-beeb 
 accretion - every trap, every figure, the story of each fix - and was cut to 31K by moving the
 oracle catalogue to its own doc and dropping dated figures and history (2026-10-25). Keep rules and
 traps there, one line each with their bug number; detail goes to `docs/`.
+
+**A project made from a template keeps the template's documents until someone diffs them.**
+Square Roots, built from Isometrikum's in one unattended night, shipped `BUGS.md`, the memory map
+and three other docs byte-identical to the kit template's - the memory map describing a rupture
+at `&1900` the demo does not have - and headers that went stale as the design changed (a
+"runs only inside fire W" that no longer did; a rules file stating the ring assignment backwards;
+two docs citing tools that do not exist). End such a run with `diff -q` against the template and
+a grep for every cited path. Source: square-roots (2026-11-08; not public).
+
+**Number each project's decisions on its own.** Square Roots numbered its new decisions 15-19 "so
+the two records line up" with Isometrikum's 1-14; Isometrikum took 15 and 16 for other things the
+next day. Cite the other project's decision by project and number instead.
 
 ---
 

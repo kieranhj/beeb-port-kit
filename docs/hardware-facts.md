@@ -25,6 +25,14 @@ MOS and the Master under a game that was written for them. Its measurements are 
 (2026-10-16 to 10-18) and 2.10.x (from 2026-10-21), Master 128, MOS 3.20, Acorn 1770 DFS, unless
 the entry says otherwise.
 
+A fifth source is two **Amstrad CPC demos** by Vanity, ported in November 2026: **Isometrikum**
+(Model B + 32K sideways RAM and the Master, stock and VideoNuLA colour sets; then crunched to a
+7,582-byte executable) and **Square Roots** (the same, built overnight from the first). Both are
+unpublished (the originals are not ours to redistribute), so entries cite their paths
+(`isometrikum/docs/layer-3-display.md`). Their measurements are on jsbeeb 2.10.2 through
+jsbeeb-mcp 4.3.0, models `B-DFS1.2` and `Master`; **neither has been seen on b2, real hardware or
+a real VideoNuLA yet**, and the entries say emulator-only. `docs/cpc-demo-porting.md` is the guide.
+
 The rule the whole document exists to serve is **measure, do not recall**. Paradroid's `CLAUDE.md`
 tells the story: an early file, `src/hal_video.asm`, was written from remembered CRTC arithmetic,
 with `TODO: verify in emulator` comments and a half-finished derivation in the middle of it, and it
@@ -323,6 +331,28 @@ the comments in the listing are the specification).
 - **Palette entries go to `&FE23` as two bytes each, `[index<<4 | red]` then `[green<<4 | blue]`,
   in that order.** `&FE22 = &40` resets extended features first.
   Measured: 2026-09-05, jsbeeb, against the reference library's default table byte for byte. [Edge layer-8b-nula.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-8b-nula.md)
+
+### VideoNuLA for an Amstrad CPC original (the CPC demos)
+
+- **Palette mode 1 shows a CPC screen byte for byte.** `&FE22 = &40` (reset, which also resets
+  the two-write protocol), then `&FE22 = &11`, then 16 entries to `&FE23`: entry L = the CPC
+  colour of pen `swap03(L)` (bits 0 and 3 swapped - CPC mode 0 and MODE 2 order a pixel's bits
+  differently), CPC levels 0/1/2 as NuLA 0, 8, 15. Disable interrupts between an entry's two
+  bytes if an IRQ also writes the palette.
+  Measured: 2026-11-08, jsbeeb (emulator only; no real NuLA has seen it). isometrikum
+  `docs/layer-7-colour.md`
+- **Detecting a NuLA by timing.** A stock ULA decodes only A0, so `&FE22` is `&FE20`. Count MODE 7
+  fields with ULA control `&10`, write `&44` to `&FE22`, count again: a NuLA takes it as a reset
+  and the rate holds; a stock ULA takes `&44` as control with the clock bit clear and runs at half
+  rate. jsbeeb: stock 9,452 then 18,909 loops (0.50), `video_nula` 9,453 then 9,452 (1.00); decide
+  NuLA when 4E >= 3G. **Interrupts off, polling the CA1 flag**: with the MOS running its own
+  `&FE20` writes made a NuLA read 29/57 (stnicc-beeb's BASIC loader read 30/30 on the same machine).
+  Measured: 2026-11-08, jsbeeb, both models. isometrikum `docs/layer-7-colour.md`, `src/main.6502`
+- **CPC mode 0 is MODE 2's pixel format**: the same pixel clock and shape, the left pixel in bits
+  7, 5, 3, 1, so masks `&AA`/`&55` and sprite bytes carry over; pen p is logical colour `swap03(p)`.
+  One CRTC character is 2 bytes on the CPC and 1 on the BBC, so the BBC steps a byte natively and
+  needs no R3 half-step. Established: 2026-11-07, isometrikum `PROPOSAL.md` section 2, checked byte
+  for byte by its harnesses.
 
 ---
 
@@ -1203,9 +1233,41 @@ property of the whole IRQ path and drifted ~6 us later than the calibration as t
   single-frame sample.
   Measured: 2026-09-04, jsbeeb. [Edge performance.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/performance.md)
 
+### A CPC demo's T1 fires (Isometrikum, MODE 2, R1 = 96)
+
+- **A fire's first CRTC write lands 4 lines after its nominal line** with no correction (the CA1
+  flag's timing, the IRQ path, the slide); `T1_SYNC_TUNE = -3*SL`, applied to the next field, puts
+  every write 1 line + 5 characters after its line. Fire 0's R4 at 3:9 in 6,384 of 6,399 fields,
+  fire 1's at 49:9 in 6,383; the rest up to 54 characters late, each because a bass interrupt was
+  already running.
+  Measured: 2026-11-07, jsbeeb. isometrikum `docs/layer-3-display.md`, `src/display.6502`
+- **A stable-raster NOP slide of 80 us holds one write position in 2,994 of 2,999 fields; 64 us
+  splits the writes between two positions 2 cycles apart.** Page-aligned (`ASSERT HI(slide) =
+  HI(slide_end)`), entered by a self-modified low byte from `loaded - T1CL`. Only worth it where a
+  write window is narrow: Square Roots' windows were whole 512 us rows and the slide was removed.
+  Measured: 2026-11-07 (Isometrikum) and 2026-11-08 (Square Roots), jsbeeb.
+- **A CPC frame need not be 312 lines.** Square Roots' is 304 (2,127,627 lines in 7,000 fields,
+  51.4 Hz, measured on the Python CPC `cpcrun.py`); the BBC runs it as R4 = 37 with a T1 field of 19,456 us
+  (304 x 64), and 312 would make the demo 2.7% slower. A harness counting jsbeeb's frames drifts
+  against such a frame (gotchas class 5).
+  Measured: 2026-11-08, jsbeeb and cpcrun. square-roots `docs/layer-2-music.md`, `docs/layer-3-display.md`
+- **Re-arming T1 from a constant drifts; chaining its latch does not.** A fire-0 restart drifted
+  70 us a field; each fire loading the latch for the next interval, T1 locked once at install, held.
+  Measured: 2026-11-08, jsbeeb. square-roots `docs/layer-3-display.md`
+
+### The software bass under raster fires
+
+- **The User VIA T1 bass toggle is only as punctual as the interrupts in front of it.**
+  Isometrikum's VSync music costs 2,337 cycles a field (5.9%), the bass 1.95 interrupts a field at
+  152 cycles. Toggles within 8 cycles of the period: 85.5% with two fires, 77.5% with five, worst
+  +-4,700 cycles; Square Roots' 69% (worst +-3,500) once its world work ran in the main loop. Letting
+  the bass nest (CLI after each fire's CRTC writes) is the unbuilt cure.
+  Measured: 2026-11-07/08, jsbeeb (`verify_music.mjs`'s toggles line). isometrikum
+  `docs/layer-2-music.md`, square-roots `PLAN.md`
+
 ---
 
-## 9. ZX0 / ZX02 compression
+## 9. ZX0, ZX02 and Shrinkler compression
 
 - **ZX02 is the one to use on a 6502, and it is not close.** Daniel Serpell's 6502-tuned fork of
   ZX0: the depacker is 131 bytes against ZX0's 257 and decodes at 53.9 cycles per output byte
@@ -1241,6 +1303,24 @@ property of the whole IRQ path and drifted ~6 us later than the calibration as t
   (The 2026-09-07 py65 figures above are higher - 118k per 1K for the same ZX0 depacker - because
   they count every cycle of the decode alone, not a load's wall clock. Compare them with each
   other, not across the two methods.)
+
+- **Shrinkler is the smallest; it is also ~75x slower than ZX02.** Isometrikum's four streams,
+  34,311 bytes: 12,271 as ZX02, 10,623 as Shrinkler (`-d -b -p -9`, raw data, no parity context).
+  unShrinkler (Dudek and Fusik; `lib/unshrinkler.6502`, `PARITY=0 FAST=0`) is about 320 bytes with
+  1.5K of page-aligned workspace and decodes at **~4,000 cycles a byte**: the original's 6.6K in
+  13.5 s, the crunched executable in 34 s on both models. ZX02's depacker is 131 bytes at 54 cycles
+  a byte. Use Shrinkler only when size is all that counts.
+  Measured: 2026-11-08, py65 (the depacker against `template/tools/shrinkler.py`'s transcribed
+  decoder) and jsbeeb (the boot). isometrikum `docs/crunch.md`, `tools/shrinklersrc/VENDORED.md`
+- **Shrinkler's strongest preset gains nothing over `-9` on 6502 code, and merging streams barely
+  pays**: one stream for everything saved ~32 bytes, LOW and PLOT folded into INIT ~25, each eaten by
+  the copy code. **Repeated code packs nearly free**, so folding copies into a loop costs bytes
+  (+19, +20 measured); deleting and generating at boot are what pay.
+  Measured: 2026-11-08/09, isometrikum `docs/crunch.md`.
+- **A run of zeros costs almost nothing packed**, so workspace and generated tables can ship as
+  zeros inside the stream (the assembler still lays out their labels) and be rebuilt at boot:
+  Isometrikum's `genr_*` ranges, 6,124 bytes, took the executable from 10,771 to 9,197.
+  Measured: 2026-11-08, isometrikum `docs/crunch.md` round 2a.
 
 ---
 
@@ -1476,6 +1556,13 @@ again.*
   and date every figure with the jsbeeb it ran on. [strykers-run decision 72](https://github.com/kieranhj/strykers-run/blob/main/docs/decisions.md)
 - The MCP timed out on its first connection in one session and was fine after `/mcp` reconnect.
   [Edge layer-0-toolchain.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-0-toolchain.md)
+
+- **jsbeeb 2.10's 6845 starts VSync the instant C4 = R7** (its HD6845SP model, `video.js`), so
+  R7 = 0 may be written only once the last CRTC cycle is past its row 0. In Isometrikum's one-row
+  case that leaves lines 310-311 and the write landed at 310:39 - the riskiest item there for real
+  hardware, not yet tried on one. And a cycle's R4 must be in place before that cycle's row 0 ends,
+  because the cycle after may be programmed R4 = 0.
+  Measured: 2026-11-07, jsbeeb 2.10.2. isometrikum `docs/layer-3-display.md`, `CLAUDE.md` Layer 3
 
 ### b-em, b2 and beebjit
 

@@ -43,6 +43,12 @@ SECTION zeropage, org = &70, guard = &100
 .zxwrk  SKIP 2
 ENDSECTION
 
+\ unshrinkler.6502's 19 bytes and 1.5K of page-aligned workspace
+SECTION zp2, org = &90, guard = &100
+.shr_zp SKIP 19
+ENDSECTION
+SHR_DATA      = &3A00
+
 \ ---- the image ------------------------------------------------
 SECTION Test, org = &1900, filename = "TEST"
 .test_start
@@ -84,6 +90,8 @@ INCLUDE "../qdload_init.6502"
     QD_FILE "SET1"
 .qd_cat_end
 
+INCLUDE "../ay2sn.6502"           \ the runtime AY -> SN layer at the CPC's 1 MHz
+INCLUDE "../unshrinkler.6502"     \ the Shrinkler depacker
 INCLUDE "../nmos.6502"            \ macros only: a few instantiated in test_main
 INCLUDE "../sfx50.6502"           \ with a one-ramp effect in sfx50.py's file's shape
 .sfx_request    EQUB 0, 0, 0, 0
@@ -109,6 +117,8 @@ INCLUDE "../sfx50.6502"           \ with a one-ramp effect in sfx50.py's file's 
     jsr qd_warm
     jsr sfx_tick
     jsr sfx_silence
+    jsr ay2sn : jsr bass_irq
+    jsr unshrinkler
     STZ_LDA name                \ nmos.6502: three of its macros, NMOS forms here
     INC_A_CLC                   \ (lib/test/nmos_test.py runs every one both ways)
     BRA_JMP test_main_done

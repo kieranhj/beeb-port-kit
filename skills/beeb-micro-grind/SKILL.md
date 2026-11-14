@@ -197,6 +197,24 @@ region and its free bytes from the listing (the `SKIP`s and ASSERTs), with the d
 project's docs: the optimisers and the project skeptic read it. Stryker's Run's table had nine
 regions, from 1,044 bytes free in main RAM to 0 in its zero-page block.
 
+## Grinding for bytes
+
+Isometrikum's crunch (2026-11, `docs/cpc-demo-porting.md` section 11) ran this skill for **packed
+bytes**: `template/tools/grind_bytes.py profile` turns `size_report.py`'s Shrinkler cost map into
+`pcprof.mjs`'s `--out` shape, so `grind.py windows --profile` weighs windows by packed cost;
+`grind_bytes.py measure` is the MEASURE (the executables' lengths); `grind_config.py` sets
+`UNIT = 'bytes'` and a `SCORE` that ranks by claimed bytes (both commented in the template's); the
+gate is the suite plus a slack floor, so a byte saved may not cost the pass its budget. One round:
+328 agents, 99 candidates, 56 kept, **20 made the packed stream larger**, 20 stale. What differs:
+
+- **Raw bytes are not the measure.** Under an LZ packer a 1-3 byte raw saving often packs to 0, and
+  folding repeated code into a loop usually packs *larger* (repeats are nearly free). Tell the
+  optimisers to delete, not to merge, and the skeptics to doubt any merge.
+- **Protect what the generator rebuilds** (`genr_*` ranges shipped as zeros, templates copied as
+  data): `PROTECT_BYTES` from the symbols, as Isometrikum's `grind_config.py` does.
+- Run it once, after the big rounds (generation at boot, dead code); then work by hand from the
+  cost map, one change measured packed at a time (skill `beeb-crunch`).
+
 ## Reporting
 
 After a round: windows evaluated, candidates by status (approved, refuted, unreviewed; then

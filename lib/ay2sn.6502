@@ -1,0 +1,437 @@
+\ ******************************************************************
+\ * ay2sn.6502 - the runtime AY-3-8912 -> SN76489 layer
+\ * KIT COPY (2026-11-14): Square Roots' file, which is Isometrikum's
+\ * before its crunch cut what those tunes never do (no tone ever
+\ * disabled, one noise rate, 4-bit volumes). Measure your tunes' AY use
+\ * (docs/cpc-demo-porting.md section 9) before cutting the same. Tables:
+\ * ay2sn_tables.6502 (template/tools/make_ay2sn_tables.py); the Python
+\ * model template/tools/ay2sn_model.py. beeb.h.6502 names the User VIA.
+\ *
+\ *
+\ * FORKED 2026-11-07 from Unspoken's src/lib/ay2sn.6502 (itself forked
+\ * 2026-10-16 from arkos-player-bbc lib/ay2sn.asm 18eb2b1, Kieran
+\ * Connell, MIT), for Isometrikum - a CPC tune again, so the clock goes
+\ * back to the arkos original's. Unspoken's fixes are kept: sn_write
+\ * holds WE low 18+ cycles (its change 5), bass_update services a due
+\ * half-cycle before retuning (its change 6), software bass only (its
+\ * change 3). Changes here:
+\ *
+\ *  1. THE CLOCK. The CPC's AY runs at 1 MHz: SN period = AY period x 2,
+\ *     a shift (Unspoken's tone_f_* tables are gone).
+\ *  2. THE FLOOR. "Below the SN's 122 Hz" is AY period >= 512 (N >= 1024):
+\ *     bass_pick tests the period's high nibble >= 2.
+\ *  3. NO ENVELOPE. Isometrikum's player never sets a volume's bit 4 (it
+\ *     writes volume >> 4) and never writes R11-R13 (measured over the
+\ *     whole demo, tools/cpcref.py's ay.log), so the envelope generator
+\ *     and its tables are removed; a volume is AY_VOL5 of its low nibble.
+\ *
+\ * The host must: call ay2sn with I set (from the VSync IRQ); call
+\ * bass_irq when User VIA T1 interrupts (test IFR AND IER); set the
+\ * User VIA's T1 free-running (ACR bit 6 set, bit 7 clear) once.
+\ * tools/ay2sn_model.py is this file in Python, for the verifier.
+\ ******************************************************************
+
+.ay2sn
+{
+    lda #255 : sta SYS_VIA_DDRA \ DDRA once a call, not once a byte
+
+    lda #15                     \ nothing has the noise open yet
+    sta noise_att
+    lda #255                    \ and no channel has claimed the bass
+    sta bass_chan
+    sta bass_skip
+    jsr bass_pick               \ decide now which channel may take the voice
+
+    ldx #0
+.ch_loop
+    \ ---- volume ----------------------------------------------------
+    lda ay_regs+8,x             \ (change 3: never an envelope)
+    and #15
+    tay
+    lda ay_vol5,y
+    tay
+    lda ym_sn_vol,y
+    sta att
+
+    \ ---- does this channel have the noise open? --------------------
+    lda ay_regs+7
+    and noise_bit,x
+    bne not_noise_ch
+    lda att
+    cmp noise_att
+    bcs not_noise_ch
+    sta noise_att
+.not_noise_ch
+
+    \ ---- tone disabled? then the channel is silent -----------------
+    lda ay_regs+7
+    and tone_bit,x
+    beq tone_on
+    lda #15
+    sta att
+.tone_on
+
+    \ ---- period: N = P * 2 (change 1) -------------------------------
+    ldy per_idx,x
+    lda ay_regs,y
+    asl a
+    sta snper
+    lda ay_regs+1,y
+    and #15
+    rol a
+    sta snper+1
+
+    \ Too low for the chip? If the software voice is this channel's, take it.
+    lda snper+1
+    cmp #4
+    bcc fit
+    cpx bass_want
+    bne fit
+    jsr bass_claim
+.fit
+    lda snper+1
+    cmp #4
+    bcc fits
+.halve
+    lsr snper+1
+    ror snper
+    lda snper+1
+    cmp #4
+    bcs halve
+.fits
+    lda snper
+    ora snper+1
+    bne nonzero
+    inc snper                   \ never write a period of zero
+.nonzero
+
+    \ ---- park this channel's SN bytes; the writes come after the loop
+    lda snper
+    and #15
+    ora sn_tone_latch,x
+    sta sn_t0,x
+    lda att
+    ora sn_vol_latch,x
+    sta sn_v,x
+    ldy snper+1
+    lda sn_hi4,y
+    sta tmp2
+    lda snper
+    lsr a : lsr a : lsr a : lsr a
+    ora tmp2
+    sta sn_t1,x
+
+    inx
+    cpx #3
+    beq chans_done
+    jmp ch_loop
+.chans_done
+    ldx #0 : jsr sn_chan
+    ldx #1 : jsr sn_chan
+    ldx #2 : jsr sn_chan
+
+    \ ---- noise -----------------------------------------------------
+    \ &E4: bit 2 set is WHITE noise; bits 0-1 the rate.
+    lda ay_regs+7
+    and #&38
+    cmp #&38
+    beq no_noise
+    lda ay_regs+6
+    and #31
+    tay
+    lda ay_noise_rate,y
+    ora #&e4
+    cmp noise_last
+    beq noise_same
+    sta noise_last
+    jsr sn_write
+.noise_same
+    lda noise_att
+    ora #&f0
+    jsr sn_vol3
+    jmp bass_update
+.no_noise
+    lda #&ff                    \ channel 3 silent
+    jsr sn_vol3
+    jmp bass_update
+}
+
+\ ******************************************************************
+\ * The software bass voice (Simon Morris's technique, via the original):
+\ * the claiming channel's TONE is parked at period 1, inaudible, and
+\ * User VIA T1 toggles its ATTENUATION at the note's frequency.
+\ ******************************************************************
+
+\ ---- bass_pick: which channel gets the voice this call (sticky) ----
+.bass_pick
+{
+    lda #255
+    sta bass_want
+    lda #0
+    sta bass_mask
+    ldx #2
+.scan
+    lda ay_regs+8,x
+    and #31
+    beq next                    \ silent: no bass
+    lda ay_regs+7
+    and tone_bit,x
+    bne next                    \ tone disabled
+    ldy per_idx,x               \ AY period >= 512: below 122 Hz (change 2)
+    lda ay_regs+1,y
+    and #15
+    cmp #2
+    bcc next
+    lda chan_bit,x
+    ora bass_mask
+    sta bass_mask
+.next
+    dex
+    bpl scan
+
+    lda bass_mask
+    beq out                     \ nobody wants it
+
+    ldx bass_prev               \ does last call's channel still want it?
+    bmi lowest
+    lda chan_bit,x
+    and bass_mask
+    bne take
+.lowest
+    ldx #0                      \ no: the lowest-numbered claimant
+    lda bass_mask
+    lsr a : bcs take
+    inx
+    lsr a : bcs take
+    inx
+.take
+    stx bass_want
+.out
+    rts
+}
+
+.chan_bit       EQUB 1, 2, 4
+.sn_hi4         EQUB 0, 16, 32, 48
+
+\ ---- bass_claim: X = channel, snper = the SN period (>= 1024) -------
+.bass_claim
+{
+    stx bass_chan
+    stx bass_skip               \ the interrupt owns this channel's volume
+
+    \ half a period in us is 4 * snper; the VIA counts N + 2
+    lda snper   : asl a : sta bass_n
+    lda snper+1 : rol a : sta bass_n+1
+    asl bass_n  : rol bass_n+1
+    lda bass_n   : sec : sbc #2 : sta bass_n
+    lda bass_n+1 : sbc #0 : sta bass_n+1
+
+    lda sn_vol_latch,x : ora att  : sta bass_on
+    lda sn_vol_latch,x : ora #15  : sta bass_off
+
+    lda #1 : sta snper          \ the inaudible carrier
+    lda #0 : sta snper+1
+    rts
+}
+
+\ ---- bass_update: start, retune or stop the timer. Ends the call ----
+.bass_update
+{
+    lda bass_chan
+    sta bass_prev
+    bpl playing
+    jmp bass_stop
+.playing
+    \ retune only when the note changed: rewriting the latches every call
+    \ pulls the timer's phase towards the call rate (the original's note)
+    lda bass_n
+    cmp bass_last
+    bne retune
+    lda bass_n+1
+    cmp bass_last+1
+    beq no_retune
+.retune
+    \ Change 6 (2026-10-16): writing T1L-H CLEARS a pending T1 interrupt
+    \ (6522), so a half-cycle that fell due while this IRQ was running was
+    \ lost on every such retune - the square wave's phase flipped, a click.
+    \ MEASURED with tools/verify_music.py: 578 intervals of exactly two
+    \ periods over the tune. So do that toggle first, then retune.
+    \ And the underflow must not land between that test and the T1L-H
+    \ write either (MEASURED: 21 such races, each also reloading a mixed
+    \ old-high/new-low period). Read T1C-H FIRST (never T1C-L: reading it
+    \ clears the flag): if it is non-zero, 256 us or more remain and the
+    \ writes below cannot race it. If it is zero, wait for the underflow
+    \ (at most 256 us) and service it, then write.
+    lda bass_running
+    beq no_pending              \ a stopped voice's flag is stale: T1 restarts
+    lda USR_VIA_T1CH
+    bit USR_VIA_IFR
+    bvs service                 \ bit 6: T1 has underflowed, not yet serviced
+    cmp #0
+    bne no_pending              \ >= 256 us to go: safe
+.spin
+    bit USR_VIA_IFR
+    bvc spin
+.service
+    jsr bass_irq
+.bass_update_toggle             \ verify_music.mjs: a write returning here is the bass
+.no_pending
+    lda bass_n   : sta USR_VIA_T1LL : sta bass_last
+    lda bass_n+1 : sta USR_VIA_T1LH : sta bass_last+1
+.no_retune
+    lda bass_running
+    bne done
+    lda #1 : sta bass_running
+    lda bass_n   : sta USR_VIA_T1CL \ and start it
+    lda bass_n+1 : sta USR_VIA_T1CH
+    lda #&C0 : sta USR_VIA_IER      \ bit 7 set = enable T1
+.done
+    rts
+}
+
+\ ---- bass_stop: silence the voice and stop its timer ----------------
+\ Does NOT write the channel's volume: ay2sn already has (the original's
+\ note - doing it here clicked on every note ending).
+.bass_stop
+{
+    lda #&FF : sta bass_last        \ force a retune when it comes back
+    sta bass_prev
+}
+.bass_timer_off
+{
+    lda #0   : sta bass_running
+    lda #&40 : sta USR_VIA_IER      \ disable T1
+    sta USR_VIA_IFR                 \ and drop a pending one
+    rts
+}
+
+\ ---- bass_irq: User VIA T1 fired - half a cycle of the square wave --
+.bass_irq
+{
+    lda #&40
+    sta USR_VIA_IFR
+    lda #255 : sta SYS_VIA_DDRA
+    lda bass_phase
+    eor #1
+    sta bass_phase
+    bne send
+    lda bass_off
+    jmp sn_write
+.send
+    lda bass_on
+    jmp sn_write
+}
+
+\ ---- sn_chan: X = channel; send only what the chip does not hold ----
+.sn_chan
+{
+    lda sn_t0,x
+    cmp sn_cache_t0,x
+    bne do_tone
+    lda sn_t1,x
+    cmp sn_cache_t1,x
+    beq tone_same
+.do_tone
+    lda sn_t0,x : sta sn_cache_t0,x : jsr sn_write
+    lda sn_t1,x : sta sn_cache_t1,x : jsr sn_write
+.tone_same
+    cpx bass_skip
+    beq irq_owns
+    lda sn_v,x
+    cmp sn_cache_v,x
+    beq out
+    sta sn_cache_v,x
+    jmp sn_write
+.irq_owns
+    lda #0                      \ not a legal volume byte: forces the next write
+    sta sn_cache_v,x
+.out
+    rts
+}
+
+\ ---- sn_forget: invalidate the cache ---------------------------------
+.sn_forget
+{
+    lda #0
+    ldx #9
+.wipe
+    sta sn_cache_t0,x
+    dex
+    bpl wipe
+    rts
+}
+
+.sn_vol3
+{
+    cmp sn_cache_v+3
+    beq same
+    sta sn_cache_v+3
+    jmp sn_write
+.same
+    rts
+}
+
+\ ---- sn_write: one byte to the SN76489 (DDRA already &FF) ------------
+\ Change 5 (2026-10-16): WE is held low for 16+ cycles. The original's
+\ `lda ORB : ora #8` between the two stores held it ~10, and jsbeeb 2.5
+\ only latches a byte if WE is still low 14 cycles after it fell
+\ (soundchip.js minCyclesWELow, from Repton 2's 14) - MEASURED: with the
+\ original sn_write most bytes never reached the chip. The MOS holds WE
+\ low for ~8 us, which is what real hardware is understood to need.
+.sn_write
+{
+    sta SYS_VIA_ORA_NH
+    lda #0
+    sta SYS_VIA_ORB             \ WE low
+    nop : nop : nop : nop : nop : nop : nop
+    lda #8
+    sta SYS_VIA_ORB             \ WE high, 18+ cycles later
+    rts
+}
+
+\ ---- silence: all four channels off, bass stopped, cache invalidated --
+.ay2sn_silence
+{
+    lda #255 : sta SYS_VIA_DDRA
+    jsr sn_forget
+    jsr bass_stop
+    lda #&9f : jsr sn_write
+    lda #&bf : jsr sn_write
+    lda #&df : jsr sn_write
+    lda #&ff : jmp sn_write
+}
+
+\ ---- state ------------------------------------------------------------
+\ sn_cache_t0, sn_cache_t1, sn_cache_v contiguous: sn_forget wipes 10.
+.sn_cache_t0  SKIP 3
+.sn_cache_t1  SKIP 3
+.sn_cache_v   SKIP 4        \ three tone channels, then the noise channel
+.ay_regs      SKIP 14       \ the AY register file the player fills, R0-R13
+.att          SKIP 1
+.snper        SKIP 2
+.tmp2         SKIP 1
+.noise_last   SKIP 1
+.noise_att    SKIP 1
+.sn_t0        SKIP 3
+.sn_t1        SKIP 3
+.sn_v         SKIP 3
+.bass_chan    SKIP 1        \ 0-2 while a voice is claimed, 255 otherwise
+.bass_skip    SKIP 1        \ the channel whose volume ay2sn must NOT write
+.bass_running SKIP 1
+.bass_phase   SKIP 1
+.bass_on      SKIP 1
+.bass_off     SKIP 1
+.bass_n       SKIP 2        \ the timer count: half a period, in us, less 2
+.bass_last    SKIP 2
+.bass_want    SKIP 1
+.bass_prev    SKIP 1
+.bass_mask    SKIP 1
+
+.ay_vol5        EQUB 0, 3, 4, 7, 8, 11, 12, 15, 16, 19, 20, 23, 24, 27, 28, 31
+.per_idx        EQUB 0, 2, 4
+.sn_tone_latch  EQUB &80, &a0, &c0
+.sn_vol_latch   EQUB &90, &b0, &d0
+.noise_bit      EQUB 8, 16, 32      \ R7's noise-disable bit, per channel
+.tone_bit       EQUB 1, 2, 4        \ R7's tone-disable bit
+
+INCLUDE "ay2sn_tables.6502"

@@ -154,6 +154,23 @@ that runs off one table into the next, a call that relies on a MOS routine's und
 registers (gotchas, classes 4-7) - and the relocation proof and the side-by-side run are what find
 them.
 
+### 2.1d When the original is a CPC demo
+
+Isometrikum and Square Roots (Vanity's CPC 4K demos, November 2026) had no source, a packed Z80
+binary and effects tied to the field. The rules hold; what changes is that **the specification is
+a 64K image at the demo's entry**, unpacked by the original's own depacker run on a Z80 core, and
+that there are **two CPCs in the loop**: a picture machine at CPC timing that finds the code and
+shows the effects, and a logical reference machine that writes a 64K record per field for every
+model and every 6502 routine to be scored against, N of N. Which reference depends on one
+question asked first - is the main loop **field-locked** or **free-running**? - because a
+free-running original's speed is part of its specification. A demo's other questions: the frame
+may not be 312 lines; CPC mode 0 is MODE 2 with pen bits 0 and 3 swapped; the stock BBC re-dithers
+the CPC's 27 colours by RTW's chart while a VideoNuLA set shows the original's bytes; and the
+port will be asked how small it is (section 11 there: the crunch, 10,623 -> 7,582 bytes).
+[`docs/cpc-demo-porting.md`](docs/cpc-demo-porting.md) is the guide, `template/tools/cpc/` the
+instrument, and the skills `beeb-cpc-reference` and `beeb-crunch` the procedures. Its section 12
+is what building a second port overnight from the first got right and wrong.
+
 ### 2.2 Choose the machine
 
 The baseline is a **BBC Model B with at least 16K of sideways RAM**, not necessarily 64K. Use
@@ -851,6 +868,13 @@ another route:
   exact; only the conversion is judged by ear. The converter is `py/beeb_port_kit/ay2sn.py`, useful
   to any AY source (CPC, Spectrum 128, MSX, arcade), and `docs/arcade-porting.md` has the route.
 
+- **The CPC demos** had the original's own player, in Z80: it was **transcribed** to the 6502 and
+  scored tick for tick against a Python model of the Z80 (Isometrikum 7,600 of 7,600 ticks,
+  state and AY writes), and the AY registers it writes are converted **at run time** by
+  `lib/ay2sn.6502` at the CPC's 1 MHz, with software bass on the User VIA's T1 for notes under the
+  SN's floor. Measure the AY use first (envelopes, noise rates, which channel carries the bass)
+  and port only what the tunes use. `docs/cpc-demo-porting.md` section 9.
+
 Whichever you use, verify it the way Edge Grinder does: capture the sound chip writes out of the
 emulator and search for them inside a reference stream rebuilt from the data the build actually
 includes. A wrong address plays happily for thousands of frames before it runs off the end.
@@ -1028,6 +1052,11 @@ the gate never ran (its BUGS #11). It costs hundreds of agents a round, and afte
 holds the gate's last build: rebuild before reading it.
 ([docs/grind/README.md](https://github.com/kieranhj/strykers-run/blob/main/docs/grind/README.md))
 
+**Grinding for bytes.** Isometrikum's crunch ran the same grind for packed size
+(`grind_config.py`'s `UNIT = 'bytes'` and `SCORE`; `template/tools/grind_bytes.py`): 99
+candidates, 56 kept, 20 that made the Shrinkler stream *larger*. Under an LZ packer repeated
+code is nearly free, so merges lose and deletions win; skill `beeb-crunch` has the order that paid.
+
 ---
 
 ## 13. Where to look in the ports
@@ -1065,4 +1094,7 @@ the third:
   the cycles given back for RAM, listed to win back.
 - [Stryker's Run `docs/grind/README.md`](https://github.com/kieranhj/strykers-run/blob/main/docs/grind/README.md): the micro-optimisation grind's
   ledger - every proposal, its skeptics, its gate result.
+- `docs/cpc-demo-porting.md`, standing in for the two CPC demo ports (Isometrikum, Square Roots),
+  whose repositories are not public: the Z80 reference, the field-locked and free-running
+  references, the display rings sized by replay, the crunch, and the overnight second port.
 - All four `BUGS.md` files, end to end (Stryker's Run's #12, #15 and #17 especially).
