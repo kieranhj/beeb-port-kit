@@ -25,7 +25,11 @@ is a worked one.
    the original's capture, a model written from the specification, a round trip
    (`docs/verification.md` procedure 15). Decide whether this is a DATA oracle (the buffer holds
    the exported bytes) or a BEHAVIOUR oracle (the object does what the original's does) - a plane
-   circling for ever is drawn perfectly, so you may need both.
+   circling for ever is drawn perfectly, so you may need both. **A home-made reference is not
+   independent either**: phX's expected pictures came from its own reference CPC, which had the
+   outro's scanlines in the wrong order, and the BBC copied it (its decision 63). Say what checks
+   the reference - a third-party emulator, the original's source - beside what the reference
+   checks.
 
 2. **Start from the skeleton**, in `tools/` beside `verify_dynamic.mjs`:
 
@@ -66,7 +70,10 @@ is a worked one.
 
 6. **Gate on coverage.** List the paths from the code under test (each branch that changes what
    is drawn or decided), `cov.need(name, n, why)` each, `cov.hit(name)` in the hooks. Count the
-   CASE, not the call.
+   CASE, not the call. **And cover the timeline**: where oracles check a sequence part by part,
+   list every oracle's field window and make the gaps between them empty or named. phX's Clown
+   faded to white between its oracle's last field (3,497) and Epsilon's first (3,971); every check
+   passed and the fade was missing (its `BUGS.md` 9; `docs/verification.md` procedure 16).
 
 7. **For logic, record and replay.** Record the port's inputs and outputs per step to a trace;
    a Python `check_*.py` runs the reference model over it, **re-seeded from the port's state at
@@ -86,6 +93,19 @@ is a worked one.
    exit 1 with the defect named. Keep a negative control in the suite where it is cheap (an env
    switch that pokes one byte; `verify_cmds.py` marks the line `expect: 1`). An oracle never seen
    failing has not been shown able to.
+
+**Nothing may read RAM it did not write.** jsbeeb zeroes RAM; a real machine's power-on RAM is
+junk, and the junk survives BREAK. phX's `harness.mjs` (not yet the template's) takes `JUNK=seed`:
+before booting it fills zero page below the MOS's, main RAM from PAGE, ANDY, HAZEL, shadow and the
+sideways banks from a seeded PRNG (`JUNK_ONLY=zp,main,...` narrows it), then boots by a **soft**
+BREAK, which keeps it - as the owner's SHIFT+BREAK after a run did. Run the suite under a few
+seeds; a result that changes with the seed is an uninitialised read (`beeb-bss-bugs`).
+
+**Run it on two jsbeeb versions** when the port stands on hardware edges: the MCP's pin by default,
+jsbeeb's main with `JSBEEB_SRC=<checkout>/src`. The JSON carries the version; an expected picture
+that depends on it is kept per version, and a check that differs between the two goes in
+`BUGS.md` with its reason (phX's Bobs: 0 of 640 on the pin, which has no MA13 flip; 640 of 640 on
+main).
 
 **For "the change left the game alone"** - an optimisation, a renderer against its
 draw-everything twin, a relocation - the oracle is the other build, and the template has the

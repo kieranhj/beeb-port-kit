@@ -87,8 +87,9 @@ host filenames are lowercase, and no `.exe` or absolute path goes in the build.
 
 **`RELEASE` and `MASTER` are `-D` symbols and every build passes both**, so that a build says
 what it is. **The build timestamp is not a `-D`**: Baron has no `TIME$`, so
-`tools/build_stamp.py` writes `build/build_time.6502` (one line, `BUILD_TIME = "..."`) and
-`main.6502` includes it. The time is the **source's**, not the clock's: `SOURCE_DATE_EPOCH`, or
+`tools/build_stamp.py` writes `build/build_time.6502` (`BUILD_TIME = "..."` and `BUILD_COMMIT =
+"..."`, HEAD's short hash) and `main.6502` includes it; `INFO` prints both, so commit before
+building a disc you publish. The time is the **source's**, not the clock's: `SOURCE_DATE_EPOCH`, or
 the last commit, with `+` if the tree is dirty. So two machines building the same commit get
 the same disc. A bare invocation:
 

@@ -166,7 +166,7 @@ export async function open({ name, disc, symbols, model = "B-DFS1.2", tube = fal
 
     if (!disc) die("no disc given");
     if (!existsSync(disc)) die(`no ${disc} - build first`);
-    const symPath = symbols || disc.replace(/\.ssd$/i, ".symbols.json");
+    const symPath = symbols || disc.replace(/\.[sd]sd$/i, ".symbols.json");  // .ssd or .dsd
     if (!existsSync(symPath)) die(`no ${symPath}: the symbol dump is where every address comes from`);
     const { found, labels, extents, sources } = readSymbols(symPath);
     h.labels = labels;

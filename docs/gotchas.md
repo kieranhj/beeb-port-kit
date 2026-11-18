@@ -21,7 +21,11 @@ arcade original; its `BUGS.md` numbers are cited as they stand there. Later entr
 its bugs are the ones that come from changing a working game you did not write. The latest
 entries draw on two **Amstrad CPC demos** (Isometrikum and Square Roots, November 2026; the
 repositories are not public, so they are cited by path): a Z80 original with no source, and the
-second port built overnight from the first (`docs/cpc-demo-porting.md`).
+second port built overnight from the first (`docs/cpc-demo-porting.md`). The newest draw on
+**phX** (a CPC demo ported to the Master 128, November 2026; not public, cited by path as
+`phX/...`): multi-part, multi-load and cycle-exact, with the original's own source available,
+a home-made reference CPC, WinAPE as a third opinion, two jsbeeb versions and KC's two real
+Masters in the loop.
 
 The entries only state what the two repositories record. Where a figure is quoted it is the
 figure in the source document, and where the source document itself was later corrected the
@@ -109,6 +113,18 @@ the hard design question". The palette is written once at boot; the "fade" is 13
 brief's own rule - "verify before relying on it" - is what saved the night. Search the code for
 what the picture suggests (every `OUT &7Fxx`: pens or RAM banks?) before designing for it.
 Source: square-roots `docs/layer-7-colour.md` (CPC demo, 2026-11-08; not public).
+
+**The home-made reference is an oracle too: it can be wrong, and the port copies it faithfully.**
+Instance: phX's Python CPC showed the outro's three scanlines in the order (2, 0, 1), plus a
+frame-restart "quirk" (a dark line through the text); the BBC reproduced both, 4,444 fields
+checked identical, and KC saw the line on jsbeeb while his WinAPE screenshots were clean. The
+demo's own source says routine k shows scanline k; WinAPE (CRTC type 0) agreed (decision 63, BUGS
+8). The same review found the logo one row taller than the CPC's (BUGS 10) and every mid-line
+Gate Array write half a microsecond early in the reference's video model (BUGS 11: 394 pixels over
+25 captures, all one way). Each was invisible to the port's harnesses because every expected
+picture was the reference's. Rule: **check the reference against a third-party emulator and,
+where it exists, the original's source**, part by part, before the port's checks rest on it.
+Source: `phX/docs/decisions.md` 63, `phX/BUGS.md` #8, #10, #11 (2026-11-17).
 
 ---
 
@@ -198,6 +214,14 @@ where the strip oracle could not see them. Source: [1942-beeb BUGS.md #31](https
 
 **Baron's `NOT` is bitwise.** `IF NOT(RELEASE)` is true for `RELEASE = 1` (NOT 1 = -2, non-zero),
 and a release disc shipped the debug keys. Write `IF RELEASE = 0`. Source: [1942-beeb BUGS.md #40](https://github.com/kieranhj/1942-beeb/blob/master/BUGS.md).
+
+**Baron's `AND` is bitwise too, `FOR 1..0` runs twice, and a `SECTION` cannot span two `IF`s.**
+`IF HW AND PART = 0` parses as `HW AND (PART = 0)`, a bitwise AND: write `HW <> 0 AND PART = 0`.
+A `FOR` whose range may be empty counts down instead and runs twice; guard it with an `IF` (the
+same trap note records phX's `WAIT 3` macro giving 7 cycles until it was fixed, with an `ASSERT`
+that n is 0 or at least 2). And a `SECTION` cannot open inside one `IF` and close inside another:
+wrap the whole file.
+Source: `phX/CLAUDE.md` Traps, `phX/docs/hwtest.md` "Traps found on the way" (2026-11-14 to 11-16).
 
 ---
 
@@ -312,6 +336,15 @@ lets Baron's allocator repack the rest, and every operand that names one moves. 
 crunch rounds 1-3 pinned the allocation to the reference build's.
 Source: isometrikum `docs/crunch.md` (2026-11-08; not public).
 
+**The OS's hooks in low RAM are regions too, and a program that copies over page 2 can take one.**
+Instance: phX arms the MOS's BREAK intercept (the `JMP` at `&0287-&0289`, `*FX 247-249`) so every
+BREAK reboots as from power-on. One of its overlays, copied into page 2 196 fields into the run,
+overwrote the `JMP`; every later BREAK was a soft one into the demo's workspace, and on KC's
+Master the DFS could not be selected afterwards. 1942 met the same three bytes with two variables
+(its BUGS #92). Lay every page-2 overlay around them, and check with a PLAIN BREAK at many points
+(SHIFT+BREAK reboots the disc either way, so phX's SHIFT+BREAK check passed throughout).
+Source: `phX/docs/decisions.md` 59 (2026-11-16).
+
 ---
 
 ## 4. Paths nothing has called
@@ -414,6 +447,15 @@ Instance: Stryker's Run's micro-grind dropped `keydown_int`'s leading `TXA`; obs
 define controls never take that path, so neither the proof gate nor the proposal's skeptics saw
 it. Search for `label+` callers before changing an entry, and put every rarely-taken path in the
 gate. Source: [strykers-run BUGS.md #11](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
+
+**Per-part oracles leave the fields between parts unchecked.**
+Instance: phX's CPC fades the static Clown to white over 21 fields and holds it white before the
+next part; the reference had it, WinAPE had it, and the BBC played only the earlier flash, holding
+the full-colour Clown to the cut. One part's check ended at CPC field 3,497 and the next began at
+3,971, so nothing compared the fields between; a source review found it. Rule: **lay the oracles'
+windows end to end over the whole timeline and fail on a gap**, or give the hand-overs a check of
+their own (phX's `verify_clown_end.mjs`, 530 of 530 after the fix).
+Source: `phX/BUGS.md` #9 (2026-11-17).
 
 ---
 
@@ -572,6 +614,19 @@ square's setup. At the first main-loop unit after it, the state is canonical and
 interrupted commutes with the work. A whole-demo comparison is only as good as where it samples.
 Source: square-roots `docs/layer-1-spec.md` "Why snapshots at units" (2026-11-08; not public).
 
+**jsbeeb's frame count is not a field count: it steps only when C4 = R6.** phX's logo cut its
+display with R8 and never met R6, so `frameCount` stood still: every harness passed headless,
+and on bbc.xania.org the picture went white, because the web display decays its phosphor by that
+count. A harness that steps frames, or trusts the count as a clock, fails unless the count moves
+one a field - make that a check (phX's `verify_frame.mjs` does), and end every frame's display with
+one R6 match inside blanked lines (`hardware-facts.md` §11).
+Source: `phX/docs/layer-3-6845.md` "jsbeeb versions" (2026-11-14).
+
+**jsbeeb's raster row starts at HSync, not at C0 = 0.** `video.bitmapY` advances at HSync (about
+C0 104 with R2 = 100), so a harness grouping fetched bytes by raster row puts C0 104-127 with the
+next CRTC line. phX's R12/R13 window looked broken until that was seen.
+Source: `phX/docs/layer-3-6845.md` "What was measured" (2026-11-14).
+
 ---
 
 ## 6. Emulator configuration hiding bugs
@@ -611,14 +666,20 @@ costing every project a build artefact nobody needed.
 Source: [docs/layer-4-player.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-4-player.md),
 [CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md).
 
-**Nothing displayed may live below `&3000` on a Master with shadow RAM. Emulators disagree there.**
+**Nothing displayed below `&3000` while ACCCON's D is set on a Master. Emulators disagreed there;
+the hardware has now answered.**
 Instance: Edge Grinder's panel at `&2000` displayed correctly in jsbeeb under both shadow states;
-b-em showed garbage on alternate frames. What the video fetches below `&3000` with the D bit set is
-emulator-dependent and was not verified on hardware. The panel moved to `&3000` and is drawn into
-both banks. Likewise the mid-frame display-bank switch the titles rely on is measured in jsbeeb
-only, and the docs say so.
+b-em showed garbage on alternate frames. This entry used to say that what the video fetches below
+`&3000` with D set was emulator-dependent and not verified on hardware. It is now: with D set the
+6845 reads ANDY and HAZEL there (jsbeeb 2.10, Stryker's Run's HUD), and **a real Master reads
+HAZEL** (phX's hardware-test card I, KC's Master, 2026-11-15: the lines showed the green HAZEL had
+been filled with, not main RAM's blue). b-em was wrong. Edge's panel moved to `&3000` and is drawn
+into both banks; the rule now is D = 0 over any row below `&3000`. The mid-frame display-bank
+switch the titles rely on is also measured on real Masters now (1942's panel; phX's card A: at
+the character written, odd or even C0).
 Source: [docs/decisions.md row 17](https://github.com/kieranhj/edge-beeb/blob/master/docs/decisions.md),
-[CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md).
+[CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md), `phX/docs/hwtest.md`
+"Results: tests I-L".
 
 **A field can be the right length and still in the wrong place. Field-length instruments cannot
 see a misplaced field; a second emulator or a TV can.**
@@ -653,6 +714,33 @@ read from zero page the sprite unpacker happened to leave (BUGS #1); the game's 
 empty (BUGS #16), and a table walk that ran off its table into the bank numbers (BUGS #17). A
 permuted bank map, an odd load address or a pre-filled HAZEL is a cheap fault injector.
 Source: [strykers-run BUGS.md #1, #16, #17](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md).
+
+**What jsbeeb ignores, a real machine may not: never set ACCCON bits 5-7.** jsbeeb ignores TST,
+IFJ and IRR, so a write that sets them passes every emulator check; phX's analyser draw once wrote
+CRTC R0 values into ACCCON. What a real Master does with them was not observed - which is the
+point: watch every ACCCON write over the whole run (phX's `tools/acccon_watch.mjs`) and change
+ACCCON a bit at a time with `tsb`/`trb` (one instruction, so no IRQ lands between its read and its
+write) or by a masked compose (`hardware-facts.md` §4).
+Source: `phX/CLAUDE.md` Traps (B7 step 0).
+
+**A real 1770 is faster than jsbeeb's at the end of a command, and the difference hangs a
+chained-NMI loader.** On KC's Master, Gotek and real floppy alike, phX's first published WIP stopped
+at its first ID: READ ADDRESS's INTRQ rose almost at once after the sixth byte (jsbeeb 2.10.2: ~96
+us later), while DRQ was still up or the byte routine still armed, so no NMI edge came again. Then,
+fixing it, a nested NMI overwrote the A its routine kept in zero page, and could store a seventh
+byte. Other differences the port met: jsbeeb 2.10.2 settles the head 30 ms on every command with E
+and skews each track ~3 sectors; FORCE INTERRUPT needs a wait before the next command. Rule: in
+the last byte's NMI look at BUSY rather than wait for the INTRQ, keep A on the stack, put a
+watchdog over every step, and **put real hardware in the loop at the disc driver's first step**
+(phX's decision 36). jsbeeb main 2.22.1 reworked the 1770's timings (#1860).
+Source: `phX/docs/hwtest.md` "B7", `phX/CLAUDE.md` Traps (2026-11-15); `hardware-facts.md` §6.
+
+**The Master's MOS is not the Model B's in the corners.** `&028C` (the current language) read
+`&FF` under a `*RUN` boot, and restoring ROMSEL from it paged ANDY over the DFS; save ROMSHAD
+(`&F4`). And a `*RUN` from `!BOOT` arrives with interrupts disabled, so a boot program that waits
+for a key in OSRDCH waits for ever until it does `cli` (the kit's boot stub never waits, so never
+met it). Both jsbeeb Master; `hardware-facts.md` §4.
+Source: `phX/docs/hwtest.md` "Traps found on the way" (2026-11-14).
 
 ---
 
@@ -1044,6 +1132,41 @@ a grep for every cited path. Source: square-roots (2026-11-08; not public).
 **Number each project's decisions on its own.** Square Roots numbered its new decisions 15-19 "so
 the two records line up" with Isometrikum's 1-14; Isometrikum took 15 and 16 for other things the
 next day. Cite the other project's decision by project and number instead.
+
+---
+
+## 13. The tools around the build
+
+*These are the traps of the session rather than of the machine - the shell, git, the publishing
+round trip - met by an agent doing the work, and each cost real work or a wrong report.*
+
+**A shell heredoc can eat backslashes. Write a script with the file-writing tool, then run it.**
+phX's edit scripts lost their backslashes passing through a heredoc; the rule is now in its rules
+file: write Python edit scripts with the Write tool. Source: `phX/CLAUDE.md` Traps.
+
+**Commit before building a disc you will publish: the stamp names the last commit.** phX's
+`tools/build_stamp.py` writes `BUILD_COMMIT` from `git rev-parse --short=7 HEAD`, with `+` when
+the tree is dirty, and the link KC is sent carries the same hash. A build from uncommitted work is
+stamped with the commit before it (and a `+`), so neither the disc's `INFO` nor the link says what
+was tested. Source: `phX/tools/build_stamp.py` (KC, 2026-11-17).
+
+**A WIP link carries its version, URL-encoded, and a cached disc looks exactly like a new one.**
+KC's rule since 2026-11-17: every published WIP link names the commit as `?v=<hash>` on the disc
+URL, encoded inside the emulator's `disc=` parameter (`...phx-wip.dsd%3Fv%3D244a965`). Without it
+a bare link cannot say which build was tested, and the web host's cache can serve the previous
+disc under the same name: a stale disc, not a 404. GitHub Pages serves each URL with
+`Cache-Control: max-age=600` (measured from the response headers, phX 2026-11-18), so a link opened
+before the deploy lands can give the old disc for up to ten minutes: check the served file's hash
+against the local one before handing the link out. Source: KC's phX session notes, 2026-11-17/18.
+
+**`git worktree remove --force` and recursive deletes follow Windows junctions.** phX's worktrees
+share `work/` and `extracted/` - measurement data not in git - with the main checkout through
+directory junctions; on 2026-11-18 a tidy-up deleted part of the main checkout's `work/` through
+one before a permission error stopped it. Before removing a worktree or folder, list the links
+(PowerShell `Get-ChildItem -Recurse -Attributes ReparsePoint | ? LinkType` - **filter on `LinkType`,
+because OneDrive's placeholder files are reparse points too**), unlink each
+(`[IO.Directory]::Delete(path, $false)`), check none is left, then delete. Never `--force` there.
+Source: KC's phX session notes, 2026-11-18.
 
 ---
 

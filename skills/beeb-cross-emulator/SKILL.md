@@ -1,6 +1,6 @@
 ---
 name: beeb-cross-emulator
-description: Checklist for getting a second opinion on a BBC Micro port's display-bank switches, mid-frame CRTC changes and displayed-memory tricks from b2 or beebjit, and then real hardware, because jsbeeb cannot see everything. Use when a rupture, a shadow-bank flip, a CRTC register change or a display below &3000 is about to be called done, or when something works in jsbeeb and a tester says it does not.
+description: Checklist for getting a second opinion on a BBC Micro port's display-bank switches, mid-frame CRTC changes and displayed-memory tricks from b2 or beebjit, jsbeeb's main branch beside the pinned one, and real hardware, because no one emulator sees everything - with a table of what each models. Use when a rupture, a shadow-bank flip, a CRTC register change or a display below &3000 is about to be called done, or when something works in jsbeeb and a tester says it does not.
 ---
 
 # Cross-emulator check for display-bank and CRTC tricks
@@ -10,11 +10,16 @@ these was found by a second emulator or by hardware, after jsbeeb had said it wa
 
 - **What the video fetches below `&3000` with the shadow bit set.** jsbeeb displayed Edge
   Grinder's panel at `&2000` under both shadow states; b-em showed garbage on alternate frames.
-  The rule became *nothing displayed may live below `&3000`* (Edge decision 17).
+  The rule became *nothing displayed may live below `&3000`* (Edge decision 17). **A real Master
+  has since answered it**: with ACCCON D = 1 the 6845 reads HAZEL for CRTC addresses below
+  `&3000` (`&1800` shows `&C800`; phX's hardware-test disc, test I, 2026-11-15), as jsbeeb and b2
+  model it. b-em was the wrong one; the rule stands.
 - **A misplaced field.** Paradroid's handover into the rupture produced one short field and a
   vertical roll; jsbeeb reported 39,93x-cycle fields throughout. b2 showed it. A frame-length
   instrument measures length, not phase.
-- **The mid-frame bank flip** is measured in jsbeeb only, and Edge Grinder's rules say so.
+- **The mid-frame bank flip** was measured in jsbeeb only, and Edge Grinder's rules say so. phX's
+  test A has since switched ACCCON D mid-line on two real Masters: it acts at the character
+  written, odd or even C0, cleanly - as jsbeeb shows.
 - **The vertical total adjust displaying when `R6 = rows + 1`** - the fact a scanline vertical
   scroll's bottom sliver comes free from - is a jsbeeb 1.25.0 result on a Master (1942) and on a
   Model B (the kit's own `template/examples/vscroll`), both 2026-09-08. Rich Talbot-Watkins's demo
@@ -24,7 +29,23 @@ these was found by a second emulator or by hardware, after jsbeeb had said it wa
 
 **Second emulator:** b2 or beebjit (b-em is no longer used); `b2 -0 <ssd> -b` or `beebjit -0 <ssd> -autoboot` (`-master` for a Master, `-swram 4` per bank)
 **b2 debug build:** HTTP API on port **48075**; `peek` reads memory, `paste` types BASIC, **there is no screenshot endpoint**
-**Real hardware:** last, and dated in the layer doc
+**Real hardware:** last for a game; from the first raster or disc layer for a demo; dated in the layer doc
+
+## What each emulator models (phX, 2026-11; the facts are in `docs/hardware-facts.md`)
+
+| | Master MA13 address flip | palette / R8 writes early | 1770 timings | ACCCON D below `&3000` | monitor (black clamp, sync) |
+|---|---|---|---|---|---|
+| **real Master** | MA6 every other character, MA7 too on alternate lines | `&FE21` about a MODE 2 pixel early; R8 part of a character early | READ ADDRESS's INTRQ at once after byte 6 | reads HAZEL | Sony clamps black in the back porch and loses sync on a frame ending on a 2-character line; the CUB bends |
+| **jsbeeb pin** (the MCP's, 2.10.2) | none | at the character written | READ ADDRESS's INTRQ 48 us or more late; tracks skewed ~3 sectors | HAZEL | none |
+| **jsbeeb main** (2.22.x, `JSBEEB_SRC`) | modelled (#1859) | `4 - p` texels early (#1868) | timed from a real Master (#1860) | HAZEL | none |
+| **beebjit** | MA6 only | `&FE20` a little early (test B) | its own drive timing (phX's load margins differ) | - | none |
+| **b2** | none | - | - | HAZEL | none |
+| **b-em** (not used) | - | - | - | wrong | none |
+
+`-` = not checked. **No emulator models a monitor**: a lit back porch, a frame ending on a short
+line, an HSync position that sits the picture off the tube are found on the owner's monitors only.
+Run the headless suite on **both jsbeeb versions** (`beeb-oracle-harness`): a check that passes on
+one and fails on the other is a fact about the emulator, and goes in `BUGS.md` with its reason.
 
 ## What must be seen, and where
 
@@ -65,8 +86,11 @@ these was found by a second emulator or by hardware, after jsbeeb had said it wa
    and the pictures do not, the difference is in what the emulators *display* from the same
    bytes - which is exactly the class of fault this skill exists for, and is real.
 
-4. **Real hardware last, and record it.** Paradroid's first run on a real Master is dated in
-   its `layer-13-compatibility.md` with the list of machines still untested. A NuLA build wants
+4. **Real hardware, and record it.** Paradroid's first run on a real Master is dated in
+   its `layer-13-compatibility.md` with the list of machines still untested. For anything on a
+   knife edge (mid-line palette, RVI, MA13, the 1770), build a **hardware-test disc** early - a
+   menu of numbered tests, a phone checklist, results per machine and monitor (`PORTING.md`
+   section 12) - rather than waiting for the release. A NuLA build wants
    NuLA hardware as well as jsbeeb (which does emulate the palette, measured 2026-09-05 - the
    belief that it did not let a register mistake reach hardware first).
 

@@ -602,15 +602,20 @@ these was found by a second emulator or by hardware:
 - **What the video fetches below `&3000` with the shadow bit set.** jsbeeb displayed Edge
   Grinder's panel at `&2000` under both shadow states; b-em showed garbage on alternate frames
   (KC, 2026-09-02). Decision 17 moved the panel to `&3000` in both banks and the rule became
-  *nothing displayed may live below `&3000`*. Real hardware is untested either way.
+  *nothing displayed may live below `&3000`*. **Real hardware has since answered it**: phX's
+  hardware-test disc (test I, 2026-11-15) set D = 1 over CRTC addresses `&1800-&1AFF`, and a real
+  Master 128 showed HAZEL there (`&C800-&CAFF`), as jsbeeb and b2 do; b-em is the one that is
+  wrong. The rule stands, now for a measured reason.
 - **A misplaced field.** Paradroid's handover into the rupture produced one short field and a
   vertical roll; jsbeeb reported 39,93x-cycle fields throughout and showed no fault. KC caught it
   on b2 and photographed it
   ([raster-timing.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/raster-timing.md)
   "Round three"). The frame-length instrument measures length, not phase; the doc says "jsbeeb
   cannot confirm this one - b2 is the instrument for it".
-- **The mid-frame bank flip** (`hardware-facts.md`) is measured in jsbeeb only; Edge Grinder's
-  rules say so explicitly, and that decision 17 is why it matters.
+- **The mid-frame bank flip** (`hardware-facts.md`) was measured in jsbeeb only; Edge Grinder's
+  rules say so explicitly, and that decision 17 is why it matters. phX's test A has since switched
+  ACCCON D mid-line and mid-field on two real Masters: it acts at the character written, at odd
+  and even C0, cleanly, as jsbeeb shows.
 - **Perceived smoothness** - procedure 6: no emulator can judge it.
 
 The procedure:
@@ -808,6 +813,19 @@ The checklist for a new check:
 4. Put the check in a tool with a one-line invocation and a header saying what it proves. Both
    ports' `tools/verify_*.py` headers are the model.
 
+**A home-made reference is not an independent oracle.** When there is no original machine to
+capture - a CPC demo run on a CPC written for the port - every expected picture is the
+reference's, and the reference is code that can be wrong in exactly the way the port then is.
+phX's outro showed every row's scanlines in the order (2, 0, 1) and a dark line through its text,
+in the reference CPC and so in jsbeeb, where an oracle built on the same reference could not see
+it; KC saw it on a real Master, his WinAPE screenshots were clean, and the original's source
+said the order was (0, 1, 2) (phX decision 63). Two more of its defects were the reference's (a logo one row too tall, Gate
+Array writes half a microsecond early: its `BUGS.md` 10 and 11). So the reference gets oracles of
+its own: **a third-party emulator** (phX's WinAPE gate, `docs/cpc-demo-porting.md` section 14),
+**the original's source** where it exists (a review at the end, section 13 there), and the
+owner's eyes on real hardware. The checklist's step 2 applies to the reference as much as to the
+port.
+
 ---
 
 ## Headless harnesses
@@ -875,6 +893,18 @@ of cycles (1942's seam ticks reached 4.3M with the drive spinning up after two m
 **One JSON line, last, with the jsbeeb version in it**, and explanations on stderr. The version is
 a variable (procedure 19); a figure without it cannot be compared with the next one.
 
+**Two jsbeeb versions, when the port stands on hardware edges.** The harnesses load the MCP's
+pinned jsbeeb by default; `JSBEEB_SRC=<checkout>/src` loads another (`jsbeeb_src.mjs`). phX ran
+its suite on both the pin (2.10.2) and jsbeeb's main (2.22.1, with the jsbeeb maintainer's
+real-Master fixes: the MA13 flip, palette and R8 writes taking effect early as a Master's do,
+the 1770's timings).
+Where they differ the result is a fact about the emulator, so: an oracle whose expected picture
+depends on the version keeps one expected file per version and says which it read; a
+real-hardware question is answered on the version that models the hardware; and the project's
+`BUGS.md` keeps the list of checks that differ between the two, each with its reason (phX: the
+Bobs 0 of 640 on the pin, which has no MA13 flip, and 640 of 640 on main; the sine scrollers 46
+of 632 on main until their expected pictures took the new palette timing).
+
 **Two rules every oracle keeps, and neither is about code:**
 
 1. **Prove every new oracle FAILS on the unfixed build** - or, for a new check with nothing to
@@ -933,6 +963,16 @@ h.finish(report, wrong === 0, { samples: judged, cover: cov });   // a gap is ex
    run drops only the wrap requirement, and says why in the code.
 4. `REQUIRE=` lets one oracle serve several runs that must each cover a different kind (1942's
    `verify_smallpay` names the kills each stage's run must have paid for).
+
+**Timeline coverage: the fields between two oracles.** A sequence checked part by part leaves
+the fields where one part's oracle ends and the next one's starts unchecked, and the original
+may do something there. phX's Clown fades to white over CPC fields 3,938-3,958 before Epsilon;
+the Clown's oracle stopped at 3,497 and Epsilon's started at 3,971, every check passed, and the
+port cut from the full-colour picture to white (its `BUGS.md` 9, found by the source review).
+So list every oracle's field window over the whole timeline and **check the gaps are empty** -
+each field of the demo inside some window, or named in a list of fields nobody checks with the
+reason - or run one whole-demo check of the cheap things (each field's length, the palette, the
+music) from the first field to the last.
 
 ---
 
@@ -1146,7 +1186,8 @@ Recorded so the next port does not assume they are filled:
 - The headless suite is jsbeeb-only. b2, b-em and real hardware are still checked by hand
   (procedure 11), and 1942's hardware-only findings - the 1770's head settle, the drive's step
   rate, BREAK - were found by playing on a Master, not by an oracle.
-- The mid-frame bank flip, the 8K-wrap ring and the display-below-`&3000` rule are measured on
-  one or two emulators and on no hardware (procedure 11).
+- The 8K-wrap ring is measured on one or two emulators and on no hardware (procedure 11). The
+  mid-frame shadow switch and the display below `&3000` have been seen on real Masters since
+  (phX's hardware-test disc, tests A and I); a Model B's equivalents have not.
 - Procedure 9's BASIC loop is reconstructed from the doc's description of the method, not
   copied from a saved program; prove it on a known key first, as the doc says.
