@@ -380,7 +380,10 @@ SECTION Game, org = CODE_ORG, guard = CODE_TOP, filename = "Game", exec = main
 {
     \\ 10K hardware wrap: addressable latch lines 4 and 5 both SET
     \\ (measured: 1/1 wraps &8000 to &5800; beeb.h.6502's header)
-    lda #&0f : sta SYS_VIA_DDRB     ; latch bits are outputs
+    \\ DDRB is left as the MOS set it: PB0-3, the latch, are outputs on
+    \\ both machines (&0F on a Model B, &CF on a Master). &0F on a Master
+    \\ cuts the MOS off from the CMOS chip (PB6-7), so a load after the
+    \\ takeover reads CMOS as &FF (lib/test/ddrb_test.mjs).
     lda #12  : sta SYS_VIA_ORB      ; line 4 = 1
     lda #13  : sta SYS_VIA_ORB      ; line 5 = 1
 
