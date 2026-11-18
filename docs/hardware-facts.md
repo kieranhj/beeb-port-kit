@@ -538,34 +538,44 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
 - **The loader cannot write into ANDY while the filing system is running**; Edge Grinder loads the
   ANDY stream before its last file and unpacks it afterwards.
   Established: Layer 7 (2026-09-04), jsbeeb. [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
-- **The MOS uses three of ANDY's sixteen pages, each only when one particular thing happens.**
-  Whether a port can use all 4K depends on whether its game ever does those things once ANDY is
-  filled. The page map:
+- **The MOS uses all of ANDY, each part only when one particular thing happens, and reads the
+  font in `&8900-&8FFF` every time it prints a character.** Whether a port can use all 4K depends on
+  whether its game ever does those things once ANDY is filled. The page map:
 
-  | Page | Written by | Free for a game that... |
+  | Page | Used by | Free for a game that... |
   |---|---|---|
-  | `&80` | the soft-key buffer: `*KEY 1 HELLO` put "HELLO" at `&8022` | never issues `*KEY` after filling it |
-  | `&81`-`&87` | nothing tried (1,792 bytes) | always |
-  | `&88` | **`&8800`-`&882F` on every mode change and every soft BREAK**: 48 bytes of MODE 1's colour patterns and pixel masks. `&8830`-`&88FF` untouched | fills ANDY after its last mode change and reloads after a BREAK |
-  | `&89`-`&8E` | nothing tried (1,536 bytes) | always |
-  | `&8F` | user-defined characters: `VDU 23,224,...` wrote 8 bytes | never defines a character after filling it |
+  | `&80`-`&83` | the soft-key buffer: `*KEY 1 HELLO` put "HELLO" at `&8022`; two 200-character keys filled `&8022`-`&81B1`, their pointers `&8002`-`&8021` (the Master Reference Manual gives the buffer `&8000`-`&83FF`, F.6-10) | never issues `*KEY` after filling it |
+  | `&84`-`&87` | a flood fill's workspace: `PLOT &85` and `PLOT &8D` in a maze of walls wrote all of it, a plain square's fill and `CIRCLE FILL` none of it | never flood-fills through the MOS |
+  | `&88` | **`&8800`-`&882F` on every mode change and every soft BREAK**: 48 bytes of MODE 1's colour patterns and pixel masks; `GCOL` and an ECF pattern `&8800`-`&8827`, a flood fill `&8830`-`&8837` | fills ANDY after its last mode change, reloads after a BREAK, and doesn't flood-fill |
+  | `&89`-`&8F` | **the soft font**, characters 32-255 at `&8900 + 8(n - 32)`: written by `VDU 23,n` (`&8908` for 33, `&8F00` for 224, `&8FD0` for 250) and by nothing else tried, but **read** by every character the MOS prints (`PRINT` in MODE 1 drew a poked font) and by OSWORD 10. A soft BREAK doesn't make it again | never prints through the MOS after filling it, and makes the next BREAK a hard one (OSBYTE 200) or restores the font (OSBYTE 25, X = 0) before giving the machine back |
 
   **None of these wrote to ANDY:** 26 OSFILE loads (every file on a disc, twice), `*CAT`, the
   MOS sound for a second (`SOUND 1,-15,100,20`), PRINT, and half a second idle.
   **So all 4K is usable** by a game that fills ANDY after its one mode change, never calls
-  `*KEY` or `VDU 23` afterwards, and reloads from disc after a BREAK. The kit template qualifies
-  (one `VDU 22`, before `install_irq`; nothing through the MOS's VDU afterwards). 1942 loads its
-  text code at `&8000` on that basis. A game that changes mode during play, or keeps the MOS's
-  VDU driver running for text, has `&81`-`&87` and `&89`-`&8E`: 3,328 bytes. It can use page
-  `&88` from `&8830`, and `&8F` if it never defines characters.
-  **Not measured, and each could move the map**: real hardware; MOS 3.5; ADFS and MMFS; any
-  user-defined character other than 224; the soft-key buffer's full length. **Two traps in the
-  measurement**: a fill over page `&80` corrupts the key buffer, so a later `*KEY` fails with "Bad
+  `*KEY`, `VDU 23` or a flood fill afterwards, never prints through the MOS, and makes BREAK a
+  hard reset (or reloads from disc after it). The kit template qualifies (one `VDU 22`, before
+  `install_irq`; nothing through the MOS's VDU afterwards). 1942 loads its text code at `&8000`
+  on that basis. A game that keeps the MOS's VDU driver running for text has to leave the font,
+  `&8900-&8FFF`, alone: until 2026-11-18 this entry gave such a game `&89`-`&8E`, from pages
+  nothing had written. It has `&81`-`&87` if it defines no long soft keys and doesn't flood-fill,
+  and page `&88` from `&8838`.
+  **Not measured, and each could move the map**: MOS 3.5; ADFS and MMFS; the soft-key buffer's
+  full length (to `&81B1` measured). On real hardware, only the font after a BREAK (below).
+  **Two traps in the measurement**: a fill over page `&80` corrupts the key buffer, so a later `*KEY` fails with "Bad
   key" (test keys on a fresh machine first). jsbeeb's `run_until_prompt` also stops at BASIC's
   `INKEY` (use `run_frames` for a timed wait). The routines and the BASIC that drove them are in
   1942's `docs/andy.md`, ready to retype on a real machine.
   Measured: 2026-09-11, jsbeeb Master 128 (MOS 3.20, 1770 DFS), from machine code in main RAM
   paging ANDY as `unpack_andy` does, a fill and a check around each event. [1942-beeb docs/andy.md](https://github.com/kieranhj/1942-beeb/blob/master/docs/andy.md)
+  The soft keys' length, the flood fill, the font (its reads, `VDU 23` for 33 and 250, BREAK):
+  2026-11-17 and 11-18, jsbeeb 2.18.0, Super Sprint ([super-sprint-beeb](https://github.com/tom-seddon/super-sprint-beeb)): ANDY read
+  and written from outside the emulated CPU (jsbeeb's ROMSEL paged for each access alone),
+  compared before and after each command typed at BASIC; a soft BREAK left a poked character as
+  poked, `*FX200,2` then BREAK made it again. The font after a BREAK also on Tom Seddon's real
+  Master 128, 2026-11-09: the character set came out wrong after a BREAK from the game, which had
+  filled ANDY, until its loader set OSBYTE 200,3 (its `break_check`: 965 of 1,792 font bytes still
+  the game's after a BREAK before, 0 after, on DFS and ADFS). [super-sprint-beeb 73257b8](https://github.com/tom-seddon/super-sprint-beeb/commit/73257b8)
+  [super-sprint-beeb upstream-notes.md](https://github.com/tom-seddon/super-sprint-beeb/blob/main/docs/upstream-notes.md)
 - **Code that reads ANDY lives in main RAM**: with ANDY paged, the first 4K of the paged sideways
   bank is hidden. The kit's IRQ never touches ROMSEL, so it can't unpage ANDY under a running
   routine. An IRQ that pages anything has to save and restore ROMSEL, ANDY bit included.
@@ -623,7 +633,8 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
   registers, different windows), so a pointer walking off the end of a bank lands in HAZEL and a
   data stream can lie across the join. Two of Edge Grinder's eleven music streams do.
   Measured: 2026-09-04, jsbeeb: SN76489 captures match the reference VGM across the join. [Edge layer-7-music.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-7-music.md)
-- **The MOS user-font page `&0C00` and `&0800-&0BFF` (sound, serial, soft keys) are yours once the
+- **The MOS user-font page `&0C00` and `&0800-&0BFF` (sound, serial, soft keys; a Model B's names:
+  on a Master the font and keys are in ANDY and `&0B00` is Econet's, §6's table) are yours once the
   MOS interrupt is gone**; `&0400-&07BF` (language workspace) once `*RUN` has handed over. Both
   verified by sentinel.
   Measured: Layer 2 onward (September 2026), jsbeeb. [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
@@ -851,6 +862,24 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
 [Paradroid layer-11e-sound.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-11e-sound.md),
 [Paradroid layer-13-compatibility.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-13-compatibility.md),
 [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
+
+- **On a Master the table's names from `&0880` up are a Model B's.** The Master Reference Manual
+  (F.6-3, F.6-4) has the printer buffer at `&0880-&08BF`; `&0900-&09BF` the RS423 output buffer,
+  part of the cassette's output, or sound envelopes 5-16; `&09C0-&09FF` the speech buffer or the
+  rest of the cassette's output; `&0A00-&0AFF` the RS423 or cassette input buffer; each free when
+  nothing uses it for those. `&0B00-&0CFF` is Econet's workspace, the soft keys and the font being in
+  ANDY (§4); `&0D00-&0D5F` the NMI routine, `&0D60-&0D7F` Econet's again, `&0D9F-&0DEF` the
+  extended vectors, `&0DF0-&0DFF` the ROMs' bytes. And a Master's OSHWM is `&0E00` (`PAGE` `&E00` on
+  jsbeeb's `Master`, `MasterADFS` and `MasterANFS` alike, against `B-DFS1.2`'s `&1900` and
+  `B1770`'s `&1F00`), so the `&0E00-&18FF` rows are the Model B's too. Super Sprint keeps 512
+  bytes of its state in `&0900-&0AFF` across every load: a pattern in both pages came through
+  `*CAT`, `*LOAD`, `*SAVE` and `*LOAD` on the 1770 DFS with none of 512 bytes changed, and
+  through ANFS refusing a logon; the game loads its tracks on DFS and ADFS (Tom Seddon's real
+  Master 128 and Compact), MMFS and a hard disc (b2) and BeebLink. `&0B00-&0CFF` was left alone by
+  `*CAT`, `*LOAD`, `*SAVE` and `*INFO` on DFS and ADFS in jsbeeb, but Super Sprint leaves it alone
+  as Econet's: none of this has been run on a network.
+  Measured: 2026-11-03 to 11-09, jsbeeb (Master, MOS 3.20) and the hardware named; `PAGE`
+  2026-11-17, jsbeeb 2.18.0. [super-sprint-beeb decisions.md D26](https://github.com/tom-seddon/super-sprint-beeb/blob/main/docs/decisions.md) [super-sprint-beeb upstream-notes.md](https://github.com/tom-seddon/super-sprint-beeb/blob/main/docs/upstream-notes.md)
 
 - **The MOS plays your data as notes.** Hand IRQ1V back with a charset over `&0800-&08FF` and the
   MOS's 100 Hz sound driver finds its queue pointers and buffers full of bitmaps: a quiet, rising
