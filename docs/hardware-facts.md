@@ -306,6 +306,15 @@ the comments in the listing are the specification).
   while the MOS's IRQ still runs (a loader, a title screen) must write `&0248` too, or the next
   flash tick puts the old mode's ULA byte back.
   Established: 1942-beeb (private) `src/lib/beeb.h.6502`, 2026-09.
+- **A game that gives the machine back to the MOS for a load has to stop the flash first, and
+  clear a count already running.** The MOS's flash writes `&0248` to `&FE20`: run during a load
+  after the game had set its own mode, it put the ULA on MODE 7's clock and halved the CRTC's
+  (5 vsyncs in 10 fields). OSBYTE 9 and 10 with X = 0 stop new flashes, but a count already
+  running when the game took IRQ1V stays frozen (`&0251` read 20) and runs out in the first load;
+  OSBYTE 193 with X = Y = 0 clears it. Only all three calls together kept 10 vsyncs in 10 fields
+  after every load.
+  Measured: 2026-11-03, jsbeeb (Master, MOS 3.20), Super Sprint ([super-sprint-beeb](https://github.com/tom-seddon/super-sprint-beeb)); jsbeeb only.
+  [super-sprint-beeb 7ef8a09](https://github.com/tom-seddon/super-sprint-beeb/commit/7ef8a09)
 
 ### Byte layouts
 
@@ -875,6 +884,26 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
 - **OSFILE writes a file's catalogue addresses back into its parameter block after a load**, so
   reset load/exec before every call or the second file lands wherever the first said.
   Measured: Layer 2 (2026-09-02), jsbeeb. [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
+  **A save writes back too**: after OSFILE with A = 0, XY+10 holds the file's length and XY+14
+  its attributes in place of the start and end addresses, so a block saved twice (a scores file)
+  needs them put back. A `&100`-byte save left `&100` and 0 on DFS, `&100` and `&33` on ADFS
+  (the Master Reference Manual, J.11-9, says the same).
+  Measured: 2026-11-17, jsbeeb 2.18.0, Super Sprint ([super-sprint-beeb](https://github.com/tom-seddon/super-sprint-beeb)). [super-sprint-beeb upstream-notes.md](https://github.com/tom-seddon/super-sprint-beeb/blob/main/docs/upstream-notes.md)
+- **ADFS knows a changed floppy by its free space map's id alone** (sector 1's bytes 251-252), so a
+  port that asks for a disc swap on ADFS (a save disc, a second disc) has to say `*MOUNT` or run
+  it. After a swap with the motor stopped first, as a person's: a disc with another id gave error
+  200, "Disc changed", to `*INFO` and `*SAVE` (but not to `*CAT`), and `*MOUNT` cleared it; a disc
+  with the same id but another directory or another map went unnoticed, `*INFO` and `*CAT` giving
+  the first disc's catalogue, so a write would use the first disc's map and directory on the
+  second (inferred, not tried). ADFS writes a new low byte of the id on every map write (any `*SAVE`, an overwrite
+  too), by timing: from `&5350`, `&91 &DA &A0 &23` with no pause between saves, `&15 &D4 &A3 &41`
+  with pauses; the high byte stays. So two copies of one disc image, each written to, share an id
+  about 1 time in 256, and an image's own id can't help, as every copy starts the same. The Master
+  Reference Manual names the bytes and nothing more (J.10-2); its error list says 208 (J.8-3), its
+  table and this measurement 200 (J.8-5).
+  Measured: 2026-11-17 and 11-18, jsbeeb 2.18.0, `MasterADFS` (MOS 3.20's ADFS), Super Sprint ([super-sprint-beeb](https://github.com/tom-seddon/super-sprint-beeb)), whose
+  time attack disc's merger now says to `*MOUNT` after changing discs. Not seen on real hardware or
+  on the Compact's ADFS. [super-sprint-beeb upstream-notes.md](https://github.com/tom-seddon/super-sprint-beeb/blob/main/docs/upstream-notes.md)
 - **DFS does not need the MOS to service interrupts, and does not need interrupts at all.** An
   8 KB, 32-sector `*LOAD` completed byte-for-byte in three configurations: IRQ1V pointed at a
   handler that only clears both VIAs' flags and returns (`TIME` unmoved, 232 interrupts through the
@@ -886,6 +915,15 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   Measured: 2026-09-09, jsbeeb-mcp 3.4.0 / jsbeeb 1.25.0, `B-DFS1.2`, MODE 7, purpose-built
   one-file disc. Load before the takeover anyway, for the reasons that do hold: DFS pages its ROM
   over `&8000`, its workspace is live until the last call returns, and loads cost whole frames.
+  **But "masked" holds only while DFS 1.2 doesn't wait for the drive**: its wait loop at `&AB6C`
+  is `PHP : CLI : PLP : BIT &FF : BPL` back, a one-instruction window each pass (the ESCAPE
+  check). A `SEI`'d OSFILE load, or `*LOAD` through OSCLI, with the motor stopped took 136
+  interrupts through IRQ1V, the first returning to `&AB6F`; the same load just after another, the
+  motor running, took none. So a handler left on IRQ1V across a DFS 1.2 load has to be ready to
+  run, masked or not.
+  Measured: 2026-11-18, jsbeeb 2.18.0, `B-DFS1.2`, Super Sprint ([super-sprint-beeb](https://github.com/tom-seddon/super-sprint-beeb)): a counter on IRQ1V, `SEI`, the
+  load, the counter and the interrupted address read after; 5K and 13K files alike.
+  [super-sprint-beeb upstream-notes.md](https://github.com/tom-seddon/super-sprint-beeb/blob/main/docs/upstream-notes.md)
 - **But a null IRQ1V handler is NOT the same as no handler, and on a Master it hangs.** The entry
   above is a Model B with an 8271. On a **Master 128 (MOS 3.20, Acorn 1770 DFS)** the same idea in
   the same shape does not survive, and the rule is narrower than "interrupts are not needed":
@@ -906,7 +944,15 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   again: anything of yours parked there must be saved across the call (Paradroid's own bug, and
   1942's `WAVELO`). The `SEI` run is sound - `TIME` moved 1 cs over a load taking ~150, and `P` on
   return from `OSCLI` still had I set - so the transfer really did run masked; the 1770 transfers
-  on NMI, which `SEI` does not touch.
+  on NMI, which `SEI` does not touch. **That holds for the 1770 DFS, not for ADFS**: a `SEI`'d
+  OSFILE load took no interrupts on the 1770 DFS (`Master` and `B1770`, motor stopped or running),
+  but 2 on ADFS (`MasterADFS`), whose wait loop at `&832A` opens the same window as DFS 1.2's
+  (`PHP : CLI : PLP : BIT &CD : BNE` back), the first returning to `&832D`. The Master Reference
+  Manual says it of every filing system call (J.11): the interrupt status is preserved, but
+  interrupts "may be enabled during the call". So on ADFS "mask" is not an option, only "chain and
+  change nothing": masking doesn't keep IRQ1V quiet there, so whatever is on it runs. (I set on
+  return proves nothing either way: the window's `PLP` puts it back.)
+  Measured: 2026-11-18, jsbeeb 2.18.0, Super Sprint ([super-sprint-beeb](https://github.com/tom-seddon/super-sprint-beeb)), as the B's above. [super-sprint-beeb upstream-notes.md](https://github.com/tom-seddon/super-sprint-beeb/blob/main/docs/upstream-notes.md)
 
   **The cost of a call, which kills the obvious workaround** of loading in chunks and servicing a
   player between them: ~15 centiseconds of fixed overhead plus ~4 a sector, so **a one-sector call
