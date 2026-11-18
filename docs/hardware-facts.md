@@ -33,6 +33,11 @@ unpublished (the originals are not ours to redistribute), so entries cite their 
 jsbeeb-mcp 4.3.0, models `B-DFS1.2` and `Master`; **neither has been seen on b2, real hardware or
 a real VideoNuLA yet**, and the entries say emulator-only. `docs/cpc-demo-porting.md` is the guide.
 
+A sixth source is **Super Sprint** ([super-sprint-beeb](https://github.com/tom-seddon/super-sprint-beeb), Tom Seddon, the Atari
+ST game ported to the BBC Master 128 and Master Compact, November 2026). Its measurements are on
+jsbeeb 2.18.0 (jsbeeb-mcp 4.3.0), model `Master`, MOS 3.20, unless the entry says otherwise, and on
+Tom's real Master 128 where the entry says so.
+
 The rule the whole document exists to serve is **measure, do not recall**. Paradroid's `CLAUDE.md`
 tells the story: an early file, `src/hal_video.asm`, was written from remembered CRTC arithmetic,
 with `TODO: verify in emulator` comments and a half-finished derivation in the middle of it, and it
@@ -294,7 +299,25 @@ the comments in the listing are the specification).
   loop. A pass that takes a cycle extra (an indexed load crossing a page) carries into every
   later write on the line, and the loop is only as stable as its passes are equal. Found by the
   skeptic in Edge's BANK1 review, where moving `ttl_pal` would move the credit bars; Edge's
-  `bank1.asm` comment was corrected (`7363c8b`). Still unmeasured on hardware.
+  `bank1.asm` comment was corrected (`7363c8b`). Measured on hardware since: the next entry.
+- **The Master's 1 MHz (stretched) addresses, measured on a real Master 128: `&FC00-&FE1F`,
+  `&FE28-&FE2B` and `&FE40-&FE9F`, and none at all with ACCCON's TST bit set.** So VIDPROC
+  (`&FE20`) is a 2 MHz access, as KC says (for reads; writes not timed), and so is all the rest of
+  `&FE20-&FE3F` but the 1770's four registers. Tom Seddon's tester
+  ([gist](https://gist.github.com/tom-seddon/b6c28d4edce8dd7e4a71dc82c7903179)) times 100
+  `LDA abs` of each address in `&FC00-&FEFF` against the User VIA's T1 started at 256 us (100 reads
+  at 2 MHz take about 200 us, so an address whose reads run the count out is stretched), skipping
+  the User VIA's own `&FE60-&FE7F`, which the region around it covers. The Master Reference Manual
+  (F.6-8) agrees but for VIDPROC, which it lists as 1 MHz: the CRTC, ACIA, serial ULA and ADC
+  (`&FE00-&FE1F`), the 1770 (`&FE28`), the two VIAs and the modem's page (`&FE80`) at 1 MHz,
+  drive control (`&FE24`), ROMSEL, ACCCON, INTOFF/INTON, Econet (`&FEA0`) and the Tube (`&FEE0`) at
+  2 MHz. **jsbeeb stretches the Model B's map on every model**: the same tester in jsbeeb 2.18.0
+  lists `&FC00-&FE1F`, `&FE40-&FE7F` and `&FEC0-&FEDF` (the Model B's ADC) on `Master` as on
+  `B-DFS1.2`, and none with TST set. So on its Master `&FEC0-&FEDF` is stretched where a real one's
+  isn't, and the 1770 (`LDA &FE28` 4 cycles, `LDA &FE4F` 6) and `&FE80-&FE9F` aren't where a real
+  one's are; 2.23.0's `is1MHzAccess` is the same. A loop timed in jsbeeb against the 1770's
+  registers is a cycle or so short an access on hardware (qdisc's NMI, §6).
+  Measured: 2026-11-17 and 11-18, Tom's real Master 128; jsbeeb 2.18.0 the same days. [super-sprint-beeb upstream-notes.md](https://github.com/tom-seddon/super-sprint-beeb/blob/main/docs/upstream-notes.md)
 - **Why a palette write glitches pixels, and why all sixteen entries must always be programmed**
   (KC, 2026-09-07, from the ULA's design rather than a measurement): pixels are shifted out one
   bit at a time at the 16 MHz pixel clock, and the resulting bits are masked and looked up in
@@ -375,6 +398,21 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
 [Edge layer-6e-titles.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-6e-titles.md),
 [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md),
 [Paradroid layer-3-scroll.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-3-scroll.md)
+
+### DDRB on a Master: leave it as the MOS has it
+
+- **On a Master, `&0F` in DDRB (`&FE42`) cuts the MOS off from the CMOS chip**, which hangs on
+  PB6 and PB7: MOS 3.20 writes `&CF` there once, at reset. A game that writes `&0F` and later gives
+  the machine back to the OS for a load has the filing system read its CMOS settings as `&FF`
+  (`LDY &FE4F` at `&98C9`): Super Sprint's DFS took FDRIVE as 7 and stepped at 30 ms, so its loads
+  slowed from the second race. A Model B's MOS leaves DDRB at `&0F` itself (DDRA `&7F`, on both),
+  so the template's `lda #&0f : sta SYS_VIA_DDRB` (`template/src/main.6502`) changes nothing on a
+  B, and on a Master is harmless only while nothing goes back to the OS. Leave DDRB alone, or put
+  the MOS's value back before a load. DDRA needs no care: the MOS sets it before each use.
+  Measured: 2026-11-04, Tom's real Master 128 (the seeks), reproduced in jsbeeb (CMOS byte 11 read
+  `&C8` in every load, `&FF` with `&0F` forced back: a load 287 fields against 186); the Model
+  B's value 2026-11-17, jsbeeb 2.18.0, `B-DFS1.2` and `B1770`.
+  [super-sprint-beeb ca4de2e](https://github.com/tom-seddon/super-sprint-beeb/commit/ca4de2e) [super-sprint-beeb upstream-notes.md](https://github.com/tom-seddon/super-sprint-beeb/blob/main/docs/upstream-notes.md)
 
 ### Timers
 
@@ -714,6 +752,16 @@ advancing and `&0D00` reads `&40`.
   OSBYTE 126 for the boot beep; on this evidence it does nothing at this point in the boot.
   Measured: 2026-09-11, jsbeeb, breakpoint at `&0900` on the template's release image. Code read
   from `bbc-documents/B/os/os.txt` (OS 1.20). MOS 3.20 not disassembled.
+- **A real Master can boot showing shadow, and a load that restores the OS's ACCCON then shows
+  shadow too.** Tom Seddon's Master booted with ACCCON's D set (a disc tool had selected MODE 135),
+  and Super Sprint saved the OS's ACCCON at its takeover and put it back whole for each load, so
+  every load showed the shadow screen while it drew "Loading" and the next picture in main: the old
+  HUD row stuck, "Loading" never seen. Restore the OS's value with D and X cleared. jsbeeb boots
+  with D clear, so nothing there showed it; **`*CONFIGURE MODE 135` and CTRL+BREAK make jsbeeb
+  boot that way every time**, power-on included (ACCCON `&1B` against `&18`), a test that lasts,
+  beside the table's `*SHADOW` and soft BREAK.
+  Reported: 2026-11-05, Tom's real Master 128 ([super-sprint-beeb 8d04629](https://github.com/tom-seddon/super-sprint-beeb/commit/8d04629));
+  the `*CONFIGURE` route measured 2026-11-17, jsbeeb 2.18.0.
 - **Not measured here**: a real second processor, a real `*SHADOW` machine, B+, other DFSs,
   softloaded filing systems (Paradroid's ZMMFS handling), a real machine's BREAK beep under a
   `*RUN` boot.
@@ -1079,7 +1127,8 @@ scarybeasts' quicdisc; `lib/README.md`). Its test `lib/test/qdisc_test.mjs`, kit
 jsbeeb 2.10.2: 161 reads covering every track of both sides of a patterned double-sided disc, 0
 bytes wrong, 0 sentinels moved with a seek before every read; **35.4 cycles a byte in the NMI, a
 whole-track read 506,810 cycles, a one-track seek 12,151**. jsbeeb's Master CMOS is `FDRIVE 0`
-(byte 11 reads `&25`), so only real hardware exercises the other step rates.
+(byte 11 reads `&25`; `&C8` in jsbeeb 2.18.0, FDRIVE 0 too), so only real hardware exercises the
+other step rates.
 
 - **A busy 1770 silently ignores a command.** Wait for the status register's busy bit to clear
   before EVERY command, including a FORCE INTERRUPT you think is harmless.
@@ -1088,13 +1137,21 @@ whole-track read 506,810 cycles, a one-track seek 12,151**. jsbeeb's Master CMOS
   stores a junk byte at its pointer. Disarm it (first byte `RTI`) between transfers; read the
   status to clear INTRQ.
 - **Take the drive and the step rate from the machine, not from a constant.** Before `*FX 140`,
-  ask the DFS for the current drive (OSGBPB 5) and read `*CONFIGURE FDRIVE` from CMOS byte 11,
-  bits 1-0. **Those bits mean 6/12/20/30 ms on a 1770 but 6/12/2/3 ms on a 1772**, so a driver
-  that patches them straight into its commands steps too fast on a 1772 board: clamp 2 and 3 to
-  12 ms (`&x1`). 1942 read drive 0 at 6 ms always - right on jsbeeb and a Gotek (which takes any
-  rate), a hang on a real drive 0 and garbage on drive 1.
-  Measured: 2026-10-11, KC's real Master and drive; the 1772 clamp from scarybeasts, 2026-10-16.
-  1942-beeb (private) `BUGS.md` #85, `src/qdcfg.6502`.
+  ask the DFS for the current drive (OSGBPB 5) and read `*CONFIGURE FDRIVE` from CMOS byte 11.
+  1942 read drive 0 at 6 ms always - right on jsbeeb and a Gotek (which takes any rate), a hang
+  on a real drive 0 and garbage on drive 1.
+  Measured: 2026-10-11, KC's real Master and drive. 1942-beeb (private) `BUGS.md` #85, `src/qdcfg.6502`.
+- **FDRIVE is CMOS byte 11's bits 2-0, and the DFS steps by bit 1 alone**: the 1770's rate 0
+  (6 ms) for FDRIVE 0, 1, 4 and 5, rate 3 (30 ms on a 1770, 3 ms on a 1772) for 2, 3, 6 and 7. Bit
+  0 is ADFS's write precompensation, not a rate. So a driver that patches bits 1-0 straight into
+  its commands (as this entry first said to) steps at 12 ms for FDRIVE 1, where the DFS uses 6,
+  and at 20 ms (2 ms on a 1772) for FDRIVE 2, where the DFS uses 30 (3); step as the DFS does,
+  rate 3 if bit 1 is set, else 0. scarybeasts' clamp of 2 and 3 to 12 ms on a 1772 board
+  (2026-10-16) then steps slower than the DFS would there, which is safe. The Master Reference
+  Manual's table (C.5-4) says the same.
+  Measured: 2026-11-17, jsbeeb 2.18.0 (the Master's own DFS code): `*CONFIGURE FDRIVE n` for each
+  n, CTRL+BREAK, every write to `&FE28` during a `*LOAD`: byte 11 read `&C8` + n, and every
+  restore, seek and step command carried rate 0 or 3 as above. [super-sprint-beeb upstream-notes.md](https://github.com/tom-seddon/super-sprint-beeb/blob/main/docs/upstream-notes.md)
 - **A read command with E set (`&94`) settles the head 15-30 ms on a REAL 1770, every time,
   motor running or not.** A seam that pays it once a load is invisible; background reads that
   paid it on every sector came late. Issue `&90` (no E) and settle only after a seek. **jsbeeb up
@@ -1135,6 +1192,34 @@ whole-track read 506,810 cycles, a one-track seek 12,151**. jsbeeb's Master CMOS
 | H | 84 | R | 51 | `:` | 72 | SPACE | 98 |
 | I | 37 | S | 81 | | | ESCAPE | 112 |
 | J | 69 | T | 35 | | | | |
+
+The rest of the main keyboard, and the Master's numeric keypad:
+
+| Key | Internal | Key | Internal | Key | Internal | Key | Internal |
+|---|---|---|---|---|---|---|---|
+| 0 | 39 | 8 | 21 | `[` | 56 | CAPS LOCK | 64 |
+| 1 | 48 | 9 | 38 | `]` | 88 | SHIFT LOCK | 80 |
+| 2 | 49 | `-` | 23 | `;` | 87 | TAB | 96 |
+| 3 | 17 | `^` | 24 | `,` | 102 | DELETE | 89 |
+| 4 | 18 | `_` (`£`) | 40 | `.` | 103 | COPY | 105 |
+| 5 | 19 | `@` | 71 | `\` | 120 | | |
+| 6 | 52 | | | | | | |
+| 7 | 36 | | | | | | |
+
+| Keypad | Internal | Keypad | Internal | Keypad | Internal | Keypad | Internal |
+|---|---|---|---|---|---|---|---|
+| 0 | 106 | 5 | 123 | `+` | 58 | `,` | 92 |
+| 1 | 107 | 6 | 26 | `-` | 59 | `.` | 76 |
+| 2 | 124 | 7 | 27 | `*` | 91 | DELETE | 75 |
+| 3 | 108 | 8 | 42 | `/` | 74 | RETURN | 60 |
+| 4 | 122 | 9 | 43 | `#` | 90 | | |
+
+Measured: Super Sprint's key-redefining screen, which names each key from its number: the main
+keyboard's numbers in jsbeeb by its oracle (`tools/options_check.mjs`), which presses each through
+the matrix, and the keypad's by Tom on his real Master 128 (2026-11-06); every key in both tables
+then pressed on that Master, and each named itself. jsbeeb's `keymap.js` has all 19 keypad keys at the same
+numbers, and the Master Reference Manual's table (D.2-34) agrees.
+[super-sprint-beeb tools/screens.py](https://github.com/tom-seddon/super-sprint-beeb/blob/main/tools/screens.py) (`Matrix`, `Pad`)
 
 INKEY (negative) codes confirmed in Paradroid's Layer 3 through `OSBYTE &81`: Z -98, X -67,
 K -71, M -102, UP -58, DOWN -42; CTRL is INKEY -2 (`KEY_CTRL = &FE`).
