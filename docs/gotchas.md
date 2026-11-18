@@ -597,9 +597,12 @@ Source: [docs/layer-11f-frontend.md](https://github.com/kieranhj/paradroid-beeb/
 **An empty sideways socket can pass a RAM probe on a real Master, and never in jsbeeb.** A probe
 that writes a byte and calls the bank RAM when its second reading differs from its first is fooled
 by anything that reads differently twice. A Master's data bus is unbuffered, so an empty socket
-reads whatever byte the video read last (Tom Seddon, from the hardware's design, not measured):
-with MODE 7's boot screen up, a space mostly and a letter now and then. jsbeeb's empty socket reads
-0 every time, so no emulated boot shows it.
+reads whatever byte the video read last: with MODE 7's boot screen up, a space mostly and a letter
+now and then. Measured on Tom Seddon's real Master 128 (2026-11-18, Super Sprint's
+[`tools/hwtests/float.bas`](https://github.com/tom-seddon/super-sprint-beeb/blob/main/tools/hwtests/float.bas)):
+with the screen filled with one byte, `&41` and then `&5A`, in MODE 7 and in MODE 1, every one of
+64 reads of bank 8's `&8008` gave the screen's byte. jsbeeb 2.18.0 read `&00` every time (an
+empty bank is a zero-filled array), so no emulated boot shows it.
 Instance: Super Sprint ([super-sprint-beeb](https://github.com/tom-seddon/super-sprint-beeb))'s first `!BOOT` probe followed the beeb-baron skill's recipe (banks 15 down
 to 0, `&8000` EORed with `&FF`, the two readings compared) and tried bank 8 first, a stock
 Master's empty socket (IC27), which the MOS's ROM type table doesn't list. One boot on Tom's
