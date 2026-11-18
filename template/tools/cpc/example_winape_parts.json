@@ -1,0 +1,39 @@
+{
+  "comment": [
+    "winape_match.py --config: an EXAMPLE. The part names and first fields are made-up placeholders;",
+    "a port lists its original's own parts (from the reference: the field each part's picture first",
+    "appears, cpcboot.py's frames and contact.py). Every key is optional (winape_match.py DEFAULTS).",
+    "parts: [first field, name], ascending; a field belongs to the last part that starts at or before it.",
+    "capture_box [x0, y0, x1, y1] and capture_scale: where the picture is in a winape_shot.ps1 capture",
+    "  (these values: WinAPE 2.0b2, -Size 820,720, __COMPAT_LAYER=HighDpiAware; check one capture by eye).",
+    "ref_dy, ref_dx: the same picture's place in a cpcboot.py fNNNNN.png (312 x 512).",
+    "height, width: the compared picture in scanlines and mode-1 pixels.",
+    "level_lo, capture_hi, ref_hi: a gun is level 0 / 1 / 2 above lo / hi (WinAPE 0/99/247, ours 0/128/255).",
+    "t0_ms: ms after launch of the reference's field 0 (the time WinAPE takes to start and reset); field_ms.",
+    "window: fields either side of the time's estimate to search; min_score: below it, no diff (a load, a fade).",
+    "overrides: [{file, first_field, row0, xrep, lines, cols}] raw hardware-colour fields replacing the",
+    "  reference from first_field on (file relative to this config)."
+  ],
+  "parts": [
+    [0, "loader"],
+    [400, "intro"],
+    [1200, "part_a"],
+    [2500, "part_b"],
+    [4000, "part_c"],
+    [6000, "end"]
+  ],
+  "capture_box": [3, 58, 771, 596],
+  "capture_scale": 2,
+  "ref_dy": 31,
+  "ref_dx": 0,
+  "height": 269,
+  "width": 384,
+  "level_lo": 40,
+  "capture_hi": 170,
+  "ref_hi": 190,
+  "t0_ms": 3700,
+  "field_ms": 19.968,
+  "window": 1200,
+  "min_score": 0.9,
+  "overrides": []
+}

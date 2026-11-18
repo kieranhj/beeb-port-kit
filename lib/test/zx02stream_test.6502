@@ -1,0 +1,213 @@
+\ ******************************************************************
+\ *	zx02stream_test.6502 - lib/zx02stream.6502 on a real boot: two
+\ *	ZX02 streams, one after the other, decoded into a 1K ring by the
+\ *	main loop AND an interrupt, read out of the ring by a reader that
+\ *	takes up to 16 bytes at a time across the wrap (the mirror)
+\ ******************************************************************
+\ *	Not a game. Built and run by lib/test/zx02stream_test.mjs, which
+\ *	writes the streams first (make_stream_data.py, zx02 -m 1024) and
+\ *	compares ZT_OUT with what they decode to. From the kit's root:
+\ *
+\ *	  node lib/test/zx02stream_test.mjs [MODEL]
+\ *
+\ *	PHASE 1, IRQs on. IRQ1V is chained: every interrupt runs zs_irq
+\ *	(or counts that zs_main had it busy) before the MOS's handler. The
+\ *	main loop: a unit of 1-37 bytes (a table) by zs_main, the next
+\ *	stream started when the first ends, then the reader: whatever is
+\ *	ahead, up to 16 bytes, copied out by (ZT_READ),Y and the pointer
+\ *	moved on with the IRQ off; a delay between passes, so interrupts
+\ *	land on every state. Ends when both streams are done and read.
+\ *	PHASE 2, IRQs off, timed: stream A again in 4-byte units, then in
+\ *	32-byte units, the reader keeping up (ZT_READ := zs_w each unit).
+\ ******************************************************************
+INCLUDE "build/stream_data.6502"
+
+ZS_RING     = &3000
+ZS_PAGES    = 4
+ZS_MIRROR   = 15
+ZS_GAP      = 16
+ZS_READ     = zt_read
+ZS_IRQ_UNIT = 5
+ZT_OUT      = &4000
+ZT_CHUNK    = 16                ; the reader's record: ZS_MIRROR + 1
+ASSERT ZT_OUT + ZST_A_LEN + ZST_B_LEN <= &7C00
+IRQ1V = &0204
+
+SECTION zeropage, org = &70, guard = &90
+.zs_src SKIP 2
+.zs_w   SKIP 2
+.zs_m   SKIP 2
+.zt_read SKIP 2
+.zt_out SKIP 2
+ENDSECTION
+
+SECTION ZsT, org = &1900, guard = &3000, filename = "ZST", exec = zt_main
+.zt_main
+{
+    sei
+    lda IRQ1V : sta zt_old
+    lda IRQ1V+1 : sta zt_old+1
+    lda #LO(zt_irq) : sta IRQ1V
+    lda #HI(zt_irq) : sta IRQ1V+1
+    lda #1 : sta zs_busy        ; (zs_reset, zs_start: busy)
+    jsr zs_reset
+    lda #LO(ZS_RING) : sta zt_read
+    lda #HI(ZS_RING) : sta zt_read+1
+    lda #LO(ZT_OUT) : sta zt_out
+    lda #HI(ZT_OUT) : sta zt_out+1
+    lda #LO(zt_sa) : sta zs_src
+    lda #HI(zt_sa) : sta zs_src+1
+    jsr zs_start
+    lda #0 : sta zs_busy
+    cli
+.pass
+    ldx zt_ui                   ; a unit of the table's size
+    inx
+    cpx #zt_units_end - zt_units
+    bcc u1
+    ldx #0
+.u1
+    stx zt_ui
+    lda zt_units,x
+    jsr zs_main
+    lda zs_state
+    cmp #ZS_DONE
+    bne read
+    lda zt_which                ; a stream ended: start B, or B's end is the end
+    bne read
+    inc zt_which
+    lda #1 : sta zs_busy
+    lda #LO(zt_sb) : sta zs_src
+    lda #HI(zt_sb) : sta zs_src+1
+    jsr zs_start
+    lda #0 : sta zs_busy
+.read
+    jsr zs_ahead
+    bne have
+    lda zt_which                ; nothing ahead: finished if B is done
+    beq delay
+    lda zs_state
+    cmp #ZS_DONE
+    beq phase2
+    bne delay
+.have
+    cmp #ZT_CHUNK
+    bcc n1
+    lda #ZT_CHUNK
+.n1
+    sta zt_k
+    ldy #0
+.copy
+    lda (zt_read),y             ; across the wrap: the mirror
+    sta (zt_out),y
+    iny
+    cpy zt_k
+    bne copy
+    tya
+    clc
+    adc zt_out : sta zt_out
+    bcc o1
+    inc zt_out+1
+.o1
+    sei                         ; the reader's pointer moves with the IRQ off (zs_irq reads it)
+    tya
+    clc
+    adc zt_read
+    sta zt_read
+    bcc r1
+    inc zt_read+1
+    lda zt_read+1
+    cmp #HI(ZS_RING) + ZS_PAGES
+    bne r1
+    lda #HI(ZS_RING) : sta zt_read+1
+.r1
+    cli
+    inc zt_reads
+    bne delay
+    inc zt_reads+1
+.delay
+    ldx zt_ui                   ; 0-255 x 8 cycles: interrupts land everywhere
+    lda zt_units,x
+    asl a
+    tax
+.d1
+    dex
+    bne d1
+    jmp pass
+}
+
+.phase2                         ; (the breakpoint zt_t0)
+    sei
+    lda zt_out : sta zt_out1
+    lda zt_out+1 : sta zt_out1+1
+    lda #4
+    jsr zt_timed
+.zt_t1
+    lda #32
+    jsr zt_timed
+.zt_t2
+.zt_done
+    cli
+.zt_idle
+    jmp zt_idle
+
+.zt_timed
+{
+    sta zt_k
+    jsr zs_reset
+    lda #LO(ZS_RING) : sta zt_read
+    lda #HI(ZS_RING) : sta zt_read+1
+    lda #LO(zt_sa) : sta zs_src
+    lda #HI(zt_sa) : sta zs_src+1
+    jsr zs_start
+.unit
+    lda zt_k
+    jsr zs_go
+    lda zs_w : sta zt_read      ; the reader keeps up
+    lda zs_w+1 : sta zt_read+1
+    bcc unit
+    rts
+}
+
+\ every interrupt: one unit, unless zs_main has it; then the MOS's handler
+.zt_irq
+{
+    txa : pha
+    tya : pha
+    lda zs_busy
+    beq go
+    inc zt_blocked
+    bne out
+    inc zt_blocked+1
+    bne out
+.go
+    jsr zs_irq
+    bcs out
+    inc zt_irqruns
+    bne out
+    inc zt_irqruns+1
+.out
+    pla : tay
+    pla : tax
+    jmp (zt_old)
+}
+
+INCLUDE "../zx02stream.6502"
+
+.zt_old      EQUW 0
+.zt_ui       EQUB 0
+.zt_k        EQUB 0
+.zt_which    EQUB 0
+.zt_reads    EQUW 0
+.zt_blocked  EQUW 0
+.zt_irqruns  EQUW 0
+.zt_out1     EQUW 0             ; zt_out at the end of phase 1
+.zt_units    EQUB 1, 7, 3, 37, 2, 16, 5, 11, 1, 29, 4, 23, 9, 1, 13, 31, 6, 2, 19, 8
+.zt_units_end
+.zt_sa INCBIN "build/zst_a.zx02"
+.zt_sb INCBIN "build/zst_b.zx02"
+ENDSECTION
+
+SECTION Boot, org = &7E00, guard = &7F00, filename = "!BOOT"
+    EQUS "*RUN ZST", 13          ; *EXEC'd (--opt 3)
+ENDSECTION

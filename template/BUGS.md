@@ -7,6 +7,7 @@ ruled out. Index first, detail below.
 |---|---|---|
 | 1 | FIXED | Every T1 fire alternated by ~24 cycles between frame-lock take and non-take fields: the take ran before the T1 restart in `rupt_vsync` |
 | 2 | OPEN | `examples/vscroll/tools/verify_vscroll.mjs` throws on jsbeeb 2.3.1 and later: it passes numeric key codes, not `keys()` |
+| 3 | OPEN | Master build only: a BREAK mid-run leaves the tape filing system selected - SHIFT+BREAK does not reboot the disc ("Searching / Bad command") and after a plain BREAK `*CAT` hangs |
 
 <!--
 Format for an entry:
@@ -70,3 +71,23 @@ it - moved by the take's ~24 cycles on every second field. A single-write fire i
 The T1 restart is the first thing in `rupt_vsync` (decision 5). Consecutive fields now show the
 switch at the same character on both parities (screenshot pairs one field apart, pixel-scanned),
 and VSync-entry -> fire 1 reads 9,295 / 9,299.
+
+## 3. Master: BREAK mid-run leaves the tape filing system selected
+
+**Open 2026-11-18.** Found by the new `tools/verify_break.mjs` and `verify_break_plain.mjs` (from
+the phX port) on `build/game-master.ssd`, jsbeeb 2.10.2 and main 2.22.1 alike. The Model B build
+passes both. Not seen on a real Master yet.
+
+### What was measured
+- SHIFT+BREAK mid-run: the screen shows "Searching" then "Bad command" - the MOS tries to boot
+  from tape; `verify_break` reports "the MOS did not ask for a boot".
+- Plain BREAK mid-run: the MOS does not redraw (R12 still holds the template's value 400 fields
+  later; the screen appears only after a key), and `*CAT` then hangs: tape is still the filing
+  system.
+
+### Ruled out
+Nothing yet. The likely cause is `release_fs` (OSBYTE 140), which selects the tape filing system
+and survives a soft BREAK on MOS 3.20; a cure is a BREAK intercept that reselects the disc
+(`lib/break.6502`, `docs/hardware-facts.md` §6 "BREAK that clears RAM") or `*FX 200` with the
+VIA's interrupts off. Once fixed, add both checks to `tools/verify_cmds.py` for the Master build.
+

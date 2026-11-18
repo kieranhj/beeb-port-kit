@@ -1,0 +1,143 @@
+\ ******************************************************************
+\ *	fzdepack.6502 - the FZ decompressor (template/tools/fz.py), as a macro
+\ ******************************************************************
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, PLAIN 6502:
+\ *	runs on a Model B's NMOS 6502 and a Master's 65SC12 alike.
+\ *
+\ *	From the phX port (src/lib/fzdepack.6502, 2026-11), a Master-only
+\ *	demo, where it was 65C02 (BRA, LDA (zp)). Here every 65C02 form is
+\ *	replaced at no cost, so one file serves both machines: LDA (zp)
+\ *	becomes LDA (zp),Y where Y is 0 (the same 5 cycles), and each BRA a
+\ *	branch on a flag known there (BEQ after LDY #0) or a JMP (3 cycles,
+\ *	as the BRA). Nothing else changed.
+\ *
+\ *	WHAT IT IS. A byte-aligned LZ that unpacks about twice as fast as
+\ *	ZX02 (~29 cycles a byte against ~54) for ~25% more bytes: take it
+\ *	where the unpack's TIME is the budget (phX: two big unpacks in the
+\ *	background time beside a real-time effect), ZX02 where the bytes
+\ *	are. The format is fz.py's docstring:
+\ *	  t &00-&7F literals (t + 1), &80-&BF near match (length t AND &3F + 2,
+\ *	  one offset byte), &C0-&FE far match (+ 3, two offset bytes), &FF end.
+\ *	Forwards; a stream may share memory with its output only at its
+\ *	END (fz.py in_place_gap, proved by in_place_check).
+\ *
+\ *	MEASURED. phX: ~29 cycles a byte on its pictures and banks (its
+\ *	tools/fz_bench.py, py65's 65C02). The kit: template/tools/fz_bench.py
+\ *	steps THIS file and zx02depack.6502 in py65's NMOS 6502 over the
+\ *	files it is given, the output checked byte for byte; and
+\ *	lib/test/fz_test.mjs depacks a stream on jsbeeb, Model B and Master,
+\ *	against fz.py's decompress. 2026-11-18: jsbeeb 2.10.2, Model B and
+\ *	Master alike, 25.6 cycles a byte (6,000 synthetic bytes, IRQ off),
+\ *	in place 25.7; py65 over four kit files (20,461 bytes) 30.5 a byte
+\ *	against ZX02's 56.6, packed 10,185 bytes against 7,937. 143 bytes
+\ *	with its RTS. The same cycles as phX's 65C02 form on hardware (py65
+\ *	charges a 65C02 BRA 2 cycles, not 3, so it reads ~1% less there).
+\ *
+\ *	THE INCLUDER DEFINES zxsrc (2) -> the stream, zxdst (2) -> the output,
+\ *	zxwrk (2): the match's source (zx02depack.6502's zero page: the two
+\ *	never run at once). On return zxdst is one past the last byte written
+\ *	and zxsrc one past the end marker. A, X, Y clobbered.
+\ *	Then, where it is to live:
+\ *	  .fz_unpack
+\ *	  FZ_DEPACKER
+\ *	  RTS
+\ *	The macro falls through at its end, so it can be inlined.
+\ *
+\ *	Fork this into your project; keep this header.
+\ ******************************************************************
+
+MACRO FZ_DEPACKER
+    ldy #0
+.fz_tok                         ; Y = 0 here, always
+    lda (zxsrc), y              ; the token
+    inc zxsrc
+    bne fz_t1
+    inc zxsrc+1
+.fz_t1
+    cmp #&80
+    bcs fz_match
+    tax                         ; literals: t + 1 of them
+    inx
+.fz_lit
+    lda (zxsrc), y
+    sta (zxdst), y
+    iny
+    dex
+    bne fz_lit
+    tya                         ; both pointers on by Y (1-128)
+    clc
+    adc zxsrc
+    sta zxsrc
+    bcc fz_l2
+    inc zxsrc+1
+.fz_l2
+    tya
+    clc
+    adc zxdst
+    sta zxdst
+    bcc fz_l3
+    inc zxdst+1
+.fz_l3
+    ldy #0
+    beq fz_tok                  ; always (BRA)
+.fz_match
+    cmp #&C0
+    bcs fz_far
+    and #&3F                    ; near: length + 2, one byte v = offset - 1
+    tax
+    inx
+    inx
+    lda (zxsrc), y              ; (Y = 0)
+    inc zxsrc
+    bne fz_n1
+    inc zxsrc+1
+.fz_n1
+    eor #&FF                    ; zxwrk = zxdst - (v + 1) = zxdst + (&FF00 OR NOT v)
+    clc
+    adc zxdst
+    sta zxwrk
+    lda zxdst+1
+    adc #&FF
+    sta zxwrk+1
+.fz_copy
+    lda (zxwrk), y
+    sta (zxdst), y
+    iny
+    dex
+    bne fz_copy
+    tya                         ; zxdst on by Y (2-65)
+    clc
+    adc zxdst
+    sta zxdst
+    bcc fz_l3
+    inc zxdst+1
+    jmp fz_l3                   ; (BRA)
+.fz_far
+    cmp #&FF
+    beq fz_done
+    and #&3F                    ; far: length + 3, two bytes (offset - 1)
+    tax
+    inx
+    inx
+    inx
+    lda (zxsrc), y              ; (Y = 0)
+    eor #&FF
+    clc
+    adc zxdst
+    sta zxwrk
+    iny
+    lda (zxsrc), y
+    eor #&FF
+    adc zxdst+1
+    sta zxwrk+1
+    clc
+    lda zxsrc
+    adc #2
+    sta zxsrc
+    bcc fz_f1
+    inc zxsrc+1
+.fz_f1
+    ldy #0
+    beq fz_copy                 ; always (BRA)
+.fz_done
+ENDMACRO

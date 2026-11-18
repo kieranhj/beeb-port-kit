@@ -47,7 +47,7 @@
 \ *	    the NMI line is DRQ OR INTRQ (jsbeeb's wd-fdc.js, from beebjit),
 \ *	    so a SEEK's completion interrupt runs it too - and quicdisc's
 \ *	    version then stores one junk byte after the buffer. Here its
-\ *	    first byte is RTI (&40) while no read runs and STA zp (&85)
+\ *	    first byte is RTI (&40) while no read runs and PHA (&48)
 \ *	    while one does;
 \ *	  - THE DRIVE AND THE STEP RATE ARE THE MACHINE'S (1942 BUGS.md #85,
 \ *	    a real drive, 2026-10-11): qd_cfg asks the DFS which drive the
@@ -61,17 +61,27 @@
 \ *	    both sides of a patterned double-sided disc byte-exact, a run
 \ *	    inside a track, the sentinel after every buffer untouched with a
 \ *	    SEEK between reads. The header of that file has the figures.
-\ *	  - 35 CYCLES A BYTE on the common path, COUNTED (NMI entry 7, sta zp
-\ *	    3, lda 4, sta 4, inc 6, beq 2, lda zp 3, rti 6), +18 on a page's
-\ *	    last byte. A single-density byte arrives every 64 us = 128 cycles,
-\ *	    so a read leaves ~73% of the CPU to the caller.
+\ *	  - 36 CYCLES A BYTE on the common path, COUNTED (NMI entry 7, pha 3,
+\ *	    lda 4, sta 4, inc 6, beq 2, pla 4, rti 6), +18 on a page's last
+\ *	    byte. A single-density byte arrives every 64 us = 128 cycles, so a
+\ *	    read leaves ~72% of the CPU to the caller. (35 before 2026-11-18,
+\ *	    when A was kept in zero page: see "A ON THE STACK" below.)
 \ *	  - A READ COMMAND WITH E SET (&94) SETTLES THE HEAD 15-30 ms ON A
 \ *	    REAL 1770, EVERY TIME, motor running or not (1942, KC's Master,
 \ *	    2026-10-10). jsbeeb up to 2.3.x settles only after a spin-up
 \ *	    (fixed upstream, jsbeeb PR #1226), so no emulator run shows it.
-\ *	    qd_read issues QD_READM = &94 because qdload.6502 seeks before
-\ *	    every run; a reader that reads track after track on one track
-\ *	    without seeking can patch qd_read_op + 1 to &90 and save it.
+\ *	    So the E bit goes only where the head has moved (from the phX
+\ *	    port, 2026-11: "settle only after a seek"): qd_seek and qd_init's
+\ *	    restore leave qd_read_op + 1 = QD_READM (&94), and every qd_read
+\ *	    leaves it QD_READ (&90) for the next run on the same track.
+\ *	    qdload.6502 seeks before every run, so its loads still settle.
+\ *	    lib/test/qdisc_test.mjs reads a run with no seek before it and
+\ *	    times it (jsbeeb 2.10.2 settles 30 ms on every E command).
+\ *	  - A ON THE STACK (from the phX port, 2026-11; ../docs/hardware-
+\ *	    facts.md section 6, "Nested NMIs happen"): the routine saves A by
+\ *	    PHA, not in a zero-page byte, because a late INTRQ can raise a
+\ *	    second NMI inside the first, and a second STA zp loses the
+\ *	    program's A. QD_NMI_A is no longer used.
 \ *	  - A BUSY 1770 SILENTLY IGNORES A COMMAND ("command while busy -
 \ *	    ignoring", jsbeeb). Wait for idle (qd_wait) before every one.
 \ *	  - THE TARGET MUST STAY PUT FOR THE WHOLE READ: the NMI stores
@@ -87,19 +97,15 @@
 \ *	Not measured: MOS 3.5 / the Compact, a 1772 board (the step rate
 \ *	clamp is for one: qdisc_init.6502), MMFS, ADFS-formatted discs.
 \ *
-\ *	THE INCLUDER DEFINES, before this file is included:
-\ *	  QD_NMI_A   one zero-page byte, the NMI routine's saved A. 1942 used
-\ *	             &A0: &A0-&A7 are the MOS's NMI-owner workspace, and after
-\ *	             *FX 140,0 the NMI owner is this (measured unwritten by
-\ *	             anything else through a whole game, 1942 2026-10-11).
-\ *	             Never a Baron ZA_AUTO: the NMI can fire inside any code.
-\ *	And it OWNS &0D00-&0D31 (QD_NMI): the NMI routine and its page count.
+\ *	THE INCLUDER DEFINES nothing. (Before 2026-11-18 it defined QD_NMI_A,
+\ *	a zero-page byte for the NMI routine's A; the routine now keeps A on
+\ *	the stack, and a definition left in is harmless.)
+\ *	It OWNS &0D00-&0D31 (QD_NMI): the NMI routine and its page count.
 \ *	Call nothing here before qd_init (qdisc_init.6502).
 \ *
 \ *	Fork this into your project; keep this header.
 \ ******************************************************************
 
-ASSERT QD_NMI_A >= 0 AND QD_NMI_A < &100   ; a zero-page byte: STA zp is the switch
 
 QD_CTRL  = &FE24
 QD_CMD   = &FE28                ; write: command; read: status (clears INTRQ)
@@ -110,13 +116,14 @@ QD_SIDE0 = &25                  ; drive 0, not reset, single density
 QD_SIDE  = &10                  ; drive control's side bit
 QD_RESTORE = &00                ; restore to track 0, spin-up, 6 ms steps
 QD_SEEK    = &10                ; seek to the data register's track
-QD_READM   = &94                ; read sectors, MULTIPLE, spin-up, E: settle
+QD_READM   = &94                ; read sectors, MULTIPLE, spin-up, E: settle (after a seek)
+QD_READ    = &90                ; the same, no E: the next run on the same track
 QD_ABORT   = &D0                ; force interrupt: no completion NMI
 
 QD_NMI       = &0D00            ; the routine, copied here by qd_init
 QD_NMI_PAGES = QD_NMI + &31     ; pages still to come
-QD_NMI_ST    = QD_NMI + 6       ; the store's operand, the running pointer
-QD_ARMED     = &85              ; STA zp - the routine's first byte while reading
+QD_NMI_ST    = QD_NMI + 5       ; the store's operand, the running pointer
+QD_ARMED     = &48              ; PHA - the routine's first byte while reading
 QD_IDLE      = &40              ; RTI
 
 \ ---- qd_seek: A = track. Returns at once; poll qd_busy. ------------
@@ -125,6 +132,8 @@ QD_IDLE      = &40              ; RTI
 \ what qd_cfg found. The constants are drive 0 at 6 ms.
 .qd_seek
     sta QD_DATA
+    lda #QD_READM               ; the head moves: the next read settles (E)
+    sta qd_read_op + 1
     lda QD_CMD                  ; clear any INTRQ, so the next one is an edge
 .qd_seek_op
     lda #QD_SEEK
@@ -154,8 +163,10 @@ QD_IDLE      = &40              ; RTI
     sta QD_NMI
     lda QD_CMD                  ; clear any INTRQ
 .qd_read_op
-    lda #QD_READM
+    lda #QD_READM               ; (QD_READM after a seek, else QD_READ)
     sta QD_CMD
+    lda #QD_READ                ; the next run on this track: no settle
+    sta qd_read_op + 1
 \ falls into qd_settle
 \ ---- the 1770 wants ~48 us before BUSY reads true after a command ---
 .qd_settle

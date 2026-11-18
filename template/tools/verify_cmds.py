@@ -88,6 +88,20 @@ def lines():
         add("harness.mjs's helpers on a known answer: names from the dump, a key by its "
             "internal number, callFrom, the refusal of an unbanked hook, bank-aware names (%s)" % model,
             ["node", "tools/harness_selftest.mjs", disc])
+        add("JUNK=seed: the build boots from random RAM (every RAM a PRNG's, then a soft BREAK), "
+            "the same seed twice alike and another seed different (%s)" % model,
+            ["node", "tools/harness_selftest.mjs", disc, "--junk=1234"])
+        add("the frame contract: draw entered at one beam position (the MOS's IRQ path spreads "
+            "it 4), fields a fixed cycle count apart, one VSync a field, frameCount +1 (%s)" % model,
+            ["node", "tools/verify_frame.mjs", disc, "300", "--entry=rupt_vsync", "--jitter=4",
+             "--model=" + model])
+        if model == "Master":
+            add("every ACCCON write over a run: none sets bits 5-7 (jsbeeb ignores them; a real "
+                "Master may not) (%s)" % model,
+                ["node", "tools/acccon_watch.mjs", disc, "3000", "--model=Master"])
+            add("NEGATIVE CONTROL: acccon_watch with a write of bit 7 planted must FAIL (%s)" % model,
+                ["node", "tools/acccon_watch.mjs", disc, "3000", "--model=Master", "--control"],
+                expect=1)
         add("the A/B pair harness on the build against ITSELF: the same keys per pass, the "
             "state and the shown strip identical for 600 passes (%s)" % model,
             ["node", "tools/pairlock.mjs", "examples/pairlock/template.mjs", disc, disc,

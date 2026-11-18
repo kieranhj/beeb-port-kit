@@ -18,7 +18,9 @@
 \ *	     sectors) into QT_BUF with a sentinel after it, a SEEK before
 \ *	     each read - its completion interrupt is the one the disarmed
 \ *	     routine must ignore - and a run inside a track, sectors 3-7 of
-\ *	     track 40 (qt_done after each);
+\ *	     track 40; then with NO seek sectors 8-9 (qd_read's next run on
+\ *	     a track: no E), 3-7 again, and 8-9 with E forced - the control,
+\ *	     which must take longer (qt_done after each);
 \ *	  3. qd_load_stream of each file and qd_load_part of FILEB's sectors
 \ *	     13-29, which cross two track boundaries, each with a sentinel
 \ *	     after it and a qd_warm before it (qt_loaded after each);
@@ -26,7 +28,6 @@
 \ ******************************************************************
 INCLUDE "../beeb.h.6502"
 
-QD_NMI_A     = &A0              ; qdisc.6502: the NMI's saved A
 QD_NCH       = 7                ; qdload.6502: whole names
 QD_CAT_STAGE = &2E00            ; qdload_init.6502: the catalogue's 512 bytes
 
@@ -40,7 +41,7 @@ SECTION zeropage, org = &70, guard = &90
 .qt_first SKIP 1                ; &74  the first sector read
 .qt_pages SKIP 1                ; &75
 .qt_idle  SKIP 3                ; &76  idle-loop passes during the READ
-.qt_phase SKIP 1                ; &79  0 whole tracks, 1 the run
+.qt_phase SKIP 1                ; &79  0 whole tracks, 1 the run, 2-4 runs after it (no seek)
 .qt_ok    SKIP 1                ; &7A  the status after the read
 .qt_sp    SKIP 2                ; &7B  -> the sentinel
 .qt_lid   SKIP 1                ; &7D  which load (qt_loaded)
@@ -91,6 +92,29 @@ SECTION Test, org = &1900, guard = QD_CAT_STAGE, filename = "QDTEST", exec = qt_
     lda #5
     sta qt_pages
     jsr read_it
+    lda #2                      ; 2: sectors 8-9 straight after, NO SEEK: qd_read's
+    sta qt_phase                ; next run on a track goes without E (no settle)
+    lda #8
+    sta qt_first
+    lda #2
+    sta qt_pages
+    jsr read_noseek
+    lda #3                      ; 3: sectors 3-7 again, no seek
+    sta qt_phase
+    lda #3
+    sta qt_first
+    lda #5
+    sta qt_pages
+    jsr read_noseek
+    lda #4                      ; 4, THE CONTROL: 8-9 straight after, E forced -
+    sta qt_phase                ; the settle that 2 saves
+    lda #8
+    sta qt_first
+    lda #2
+    sta qt_pages
+    lda #QD_READM
+    sta qd_read_op + 1
+    jsr read_noseek
     jmp qt_loads
 }
 
@@ -162,6 +186,11 @@ NLOADS = 5
     lda #10
     sta qt_pages
 \ falls into read_it
+    jmp read_it
+.read_noseek                    ; the track the head is on: no seek before the read
+    lda qt_pages
+    jsr set_sentinel
+    jmp read_ns
 .read_it
     lda qt_pages
     jsr set_sentinel
@@ -169,6 +198,7 @@ NLOADS = 5
 .qt_sk                          ; THE ORACLE TIMES THE SEEK FROM HERE
     jsr qd_seek
     jsr qd_wait
+.read_ns
     lda #LO(QT_BUF)
     sta qd_dst
     lda #HI(QT_BUF)

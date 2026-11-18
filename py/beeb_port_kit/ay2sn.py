@@ -18,6 +18,15 @@ having it here: a CPC or Spectrum source has AYs too, at other clocks.
           a bass voice takes tone 2 AND the noise channel, silencing tone 2 itself.
           When a drum wants the noise in the same field the drum wins and the bass
           drops an octave at a time into range instead (arkos's rule).
+          BASS_VOICE (opt-in, convert(bass_voice=v); from the phX port, 2026-11, KC's
+          ear): voice v (chip * 3 + channel) is ALWAYS periodic noise, whatever its
+          pitch, so the bass keeps one timbre. When a drum wants the noise the drum
+          wins and the bass RESTS that field (no octave-dropped tone; stats
+          "bass_cut") - but only for the first drum_max fields of a run of noise:
+          after that the bass takes the noise back (stats "drum_cut"), or a long
+          noise bed would silence the bass. Which voice is the bass can change
+          between sections of a tune: convert each section with its own bass_voice
+          (template/tools/music_convert.py's config).
   VOLUME  AY 4-bit v -> 5-bit (v << 1) | (v & 1) -> 15 - ((n + 1) >> 1) attenuation
           (arkos make_tables.py). The AY's hardware envelope is not converted; 1942's
           sound ROM never set a volume register's bit 4 (sound_rip.py's inventory).
@@ -27,7 +36,7 @@ having it here: a CPC or Spectrum source has AYs too, at other clocks.
           22: 22 x 32 = 704), so it repeats at an audio rate and cannot be stepped
           per field. Flatten it before calling this: such a channel becomes a plain
           tone at full volume at its TONE's pitch, or at the envelope's own pitch
-          (period x 16) when its tone is off (phX tools/music_convert.py).
+          (period x 16) when its tone is off (template/tools/music_convert.py, from phX).
   NOISE   AY 5-bit noise period -> the nearest of the SN's three fixed rates BY
           FREQUENCY; volume from the loudest noise-enabled channel.
   VOICES  up to three tones. One chip's three channels map straight across; two
@@ -139,15 +148,18 @@ class Converter:
         return [c for c in range(n)
                 if any(any(r[c][8 + ch] & 15 for ch in range(3)) for r in rows)]
 
-    def convert(self, rows, loop=None, chips=None, tn_noise=False, atten_add=0):
+    def convert(self, rows, loop=None, chips=None, tn_noise=False, atten_add=0,
+                bass_voice=None, drum_max=4):
         """[field state], stats. atten_add makes every audible attenuation that many
-        2 dB steps quieter - a per-sound trim for the ear."""
+        2 dB steps quieter - a per-sound trim for the ear. bass_voice (None = off,
+        the default and the original behaviour) and drum_max: see BASS_VOICE above."""
         frows, lf = self.fields(rows, loop)
         chips = self.chips_of(rows) if chips is None else chips
         slots = [None, None, None]
         out = []
+        noise_run = 0
         st = {"fields": len(frows), "loop": lf, "chips": chips, "periodic": 0,
-              "octave": 0, "dropped": 0, "drum": 0}
+              "octave": 0, "dropped": 0, "drum": 0, "bass_cut": 0, "drum_cut": 0}
         for row in frows:
             tv, (nvol, nper) = self.voices(row, chips, tn_noise)
             tv.sort(key=lambda v: -v[2])
@@ -164,14 +176,24 @@ class Converter:
             if nvol:
                 noise_ctl, noise_att = 4 | self.noise_rate(nper), sn_atten(nvol)
                 st["drum"] += 1
+            noise_run = noise_run + 1 if nvol else 0
+            if bass_voice is not None and bass_voice in ids and noise_run > drum_max:
+                noise_ctl, noise_att = None, SILENT     # the bass takes the noise back
+                st["drum_cut"] += 1
             bass = None
             for s, vid in enumerate(slots):
                 if vid is None:
                     continue
                 _, p, vol = byid[vid]
                 n = self.sn_period(p)
-                if n > self.sn_max:
+                if bass_voice is not None and vid == bass_voice:
                     if noise_ctl is None and bass is None:
+                        bass = (s, n, vol)
+                    else:
+                        st["bass_cut"] += 1             # the drum has the noise: bass rests
+                    continue
+                if n > self.sn_max:
+                    if bass_voice is None and noise_ctl is None and bass is None:
                         bass = (s, n, vol)
                         continue
                     while n > self.sn_max:

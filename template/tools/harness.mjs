@@ -12,6 +12,12 @@
 // an exact name preferred over scope leaves, and keepTrail/watchBad/hang;
 // tools/harness_selftest.mjs proves each on the template's build. The pair
 // harness (two builds, keys by pass) is passplay.mjs and pairlock.mjs.
+// From the phX port, 2026-11: JUNK=seed (every RAM filled from a PRNG, then a
+// SOFT BREAK - a real machine's RAM is not jsbeeb's zeros), runUntil (run on
+// until a symbol reaches a value: phX's SEQ_ROW, generalised as RUN_UNTIL),
+// pressWhen (press a key once a symbol is set: phX's disclaimer skip,
+// generalised as PRESS_WHEN), afterBreak (both of them again after a harness's
+// own BREAK) and cli() for the tools' `--name=value` options.
 //
 // THE CONTRACT, which is the point of the file:
 //
@@ -150,6 +156,88 @@ export function labelAt(labels, a, { banks, romsel = 0, acccon = 0, master = tru
 }
 
 const hex = (a, w = 4) => "&" + a.toString(16).toUpperCase().padStart(w, "0");
+
+/** A tool's command line: positionals, and `--name=value` / `--flag` (true) options.
+ *  Only the `=` form takes a value, so a positional can never be eaten by a flag. */
+export function cli(argv = process.argv.slice(2)) {
+    const pos = [], opt = {};
+    for (const a of argv) {
+        const m = /^--([^=]+)(?:=(.*))?$/s.exec(a);
+        if (m) opt[m[1]] = m[2] === undefined ? true : m[2];
+        else pos.push(a);
+    }
+    return { pos, opt };
+}
+
+/** A number from the command line or the environment: decimal, &hex or 0xhex. */
+export function num(t, dflt) {
+    if (t === undefined || t === true || t === "") return dflt;
+    if (typeof t === "number") return t;
+    const s = String(t);
+    const v = /^(&|0x|\$)/i.test(s) ? parseInt(s.replace(/^(&|0x|\$)/i, ""), 16) : Number(s);
+    if (!Number.isFinite(v)) throw new Error(`${s} is not a number`);
+    return v;
+}
+
+/** The xorshift32 the JUNK fill draws from: the same seed, the same bytes, on every
+ *  machine and jsbeeb version (it touches nothing of the emulator's). */
+export function junkBytes(seed) {
+    let x = (seed >>> 0) || 1;
+    return () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x & 255; };
+}
+
+/** Fill a jsbeeb machine's RAM from junkBytes(seed). `only` names the regions:
+ *    zp      &0000-&008F (the user's zero page; the MOS's &90-&FF is left)
+ *    main    &0E00-&7FFF (from a DFS machine's PAGE; the MOS's and the DFS's pages left)
+ *    swr     every sideways RAM bank the model has (a B's 0-7, a Master's 4-7)
+ *    andy    a Master's ANDY (&8000-&8FFF, 4K)
+ *    hazel   a Master's HAZEL from &C000 + hz0 to &C000 + hz1 (default &C300-&DBFF: the
+ *            MOS's and the DFS's own HAZEL workspace below and above is left alone:
+ *            phX's defaults)
+ *    shadow  a Master's LYNNE (&3000-&7FFF shadow, 20K)
+ *  A Model B has no andy/hazel/shadow: they are skipped there. Exported so a harness
+ *  that builds its own machine can do the same. Returns the regions filled. */
+export function junkFill(cpu, seed, { only = ["zp", "main", "andy", "hazel", "shadow", "swr"], hz0 = 0x300, hz1 = 0x1c00 } = {}) {
+    const rnd = junkBytes(seed), m = cpu.ramRomOs, done = [];
+    const fill = (name, a, b) => { for (let i = a; i < b; i++) m[i] = rnd(); done.push(name); };
+    const master = !!cpu.model.isMaster;
+    // jsbeeb's map (6502.js romSelect): 0-&7FFF main, &8000 ANDY, &9000 HAZEL, &B000 LYNNE,
+    // then romOffset + bank * 16K for the sideways banks
+    if (only.includes("zp")) fill("zp", 0x0000, 0x0090);
+    if (only.includes("main")) fill("main", 0x0e00, 0x8000);
+    if (master && only.includes("andy")) fill("andy", 0x8000, 0x9000);
+    if (master && only.includes("hazel")) fill("hazel", 0x9000 + hz0, 0x9000 + hz1);
+    if (master && only.includes("shadow")) fill("shadow", 0xb000, 0x10000);
+    if (only.includes("swr"))
+        for (let b = 0; b < 16; b++)
+            if (cpu.model.swram?.[b]) fill(`swr${b}`, cpu.romOffset + b * 16384, cpu.romOffset + (b + 1) * 16384);
+    return done;
+}
+
+/** "name>=value" (also >, <=, <, ==, !=), the name with :w (a word) or :sw (a signed
+ *  word): RUN_UNTIL's and runUntil's condition, parsed. */
+export function parseCond(t) {
+    const m = /^([A-Za-z_][\w.]*(?:[+-](?:&[0-9A-Fa-f]+|0x[0-9A-Fa-f]+|\d+))?)(?::(w|sw|b))?\s*(>=|<=|==|!=|>|<|=)\s*(-?(?:&[0-9A-Fa-f]+|0x[0-9A-Fa-f]+|\d+))$/.exec(t.trim());
+    if (!m) throw new Error(`${t} is not NAME[:w|:sw]>=VALUE (or >, <=, <, ==, !=)`);
+    const neg = m[4].startsWith("-");
+    const v = num(neg ? m[4].slice(1) : m[4]);
+    return { sym: m[1], size: m[2] || "b", op: m[3] === "=" ? "==" : m[3], value: neg ? -v : v };
+}
+
+/** PRESS_WHEN's "KEY@COND": KEY a keys() name (SPACE) or an internal key number
+ *  (98, &62); COND a parseCond condition, or a bare symbol meaning "!= 0" - and then
+ *  the symbol is CLEARED before the BREAK, because a soft BREAK keeps RAM and a value
+ *  left from the last run would press at once. A trailing ? makes it optional: a build
+ *  without the symbol boots without the press. No @COND: press at once. */
+export function parsePress(t) {
+    let s = t.trim(), optional = false;
+    if (s.endsWith("?")) { optional = true; s = s.slice(0, -1); }
+    const [k, c] = s.split("@");
+    const key = /^(\d+|&[0-9A-Fa-f]+|0x[0-9A-Fa-f]+)$/.test(k) ? num(k) : k;
+    if (!c) return { key, cond: null, clear: false, optional };
+    const bare = /^[A-Za-z_][\w.]*$/.test(c);
+    return { key, cond: bare ? { sym: c, size: "b", op: "!=", value: 0 } : parseCond(c), clear: bare, optional };
+}
 
 /** Open a harness: resolve the symbols NOW, so a missing name fails before a boot.
  *  `model` may be changed (h.model = ...) until boot() - e.g. from h.define("MASTER"). */
@@ -307,15 +395,50 @@ export async function open({ name, disc, symbols, model = "B-DFS1.2", tube = fal
      *  program does nothing", and must not be judged as a result. `shiftFrames`
      *  (50) is how long SHIFT is held after the BREAK; `settle` the fields after.
      *  h.frames counts the fields run since the BREAK, for a start script by frame. */
-    h.boot = async ({ field, settle = 150, fieldBytes = 1, shiftFrames = 50 } = {}) => {
+    //   Three options, each also an environment variable so ANY harness takes them
+    // without a change (an option given to boot() wins over the variable):
+    //   junk / JUNK=seed     every RAM filled from junkFill(seed) after the power-on, then
+    //                        a SOFT BREAK, which keeps it - a real machine after a power-on
+    //                        or another program, not jsbeeb's zeros. JUNK_ONLY=zp,main,...
+    //                        narrows the regions, JUNK_HZ0/JUNK_HZ1 HAZEL's span (junkFill).
+    //                        The same seed is the same bytes: a failure is reproducible.
+    //                        phX's rule: nothing may read RAM it did not write - a real
+    //                        Master's RAM after a run (KC's SHIFT+BREAK) is not zeros
+    //   pressWhen / PRESS_WHEN=KEY@COND   press KEY (a keys() name, or an internal key
+    //                        number) once COND holds (pressWhen() below), e.g. a
+    //                        disclaimer's SPACE@dc_secs
+    //   runUntil / RUN_UNTIL=COND          after the settle, run on until COND holds
+    //                        (runUntil() below), e.g. RUN_UNTIL=row:sw>=2990 - an oracle
+    //                        for something late in a sequence, without its own start code
+    //   prepare(h)           called with the machine made and the disc in, BEFORE the
+    //                        BREAK: hooks that must see the boot itself (the DFS's loads:
+    //                        examples/verify_disc) go on here, with { afterBoot: false }
+    h.boot = async ({ field, settle = 150, fieldBytes = 1, shiftFrames = 50,
+                      junk = process.env.JUNK, pressWhen = process.env.PRESS_WHEN,
+                      runUntil = process.env.RUN_UNTIL, prepare } = {}) => {
         h.s = new MachineSession(h.model, { tube });
         await h.s.initialise();
         await h.s.boot(30);
         h.cpu = h.s._machine.processor;
         h.s.loadDisc(disc);
-        h.s.keyDown(h.keys.SHIFT); h.s.reset(true); await h.s.runFrames(shiftFrames); h.s.keyUp(h.keys.SHIFT);
+        h.junked = null;
+        if (junk !== undefined && junk !== "") {
+            const seed = num(junk, 1);
+            h.junked = { seed, regions: junkFill(h.cpu, seed, {
+                only: (process.env.JUNK_ONLY || "zp,main,andy,hazel,shadow,swr").split(","),
+                hz0: num(process.env.JUNK_HZ0, 0x300), hz1: num(process.env.JUNK_HZ1, 0x1c00) }) };
+            console.error(`${h.name}: JUNK=${seed}: ${h.junked.regions.join(" ")} filled, then a soft BREAK`);
+        }
+        h._press = pressWhen ? (typeof pressWhen === "string" ? parsePress(pressWhen) : pressWhen) : null;
+        if (h._press) h._press.addr = h._press.cond ? h.sym(h._press.cond.sym) : undefined;
+        if (h._press?.cond && h._press.addr === undefined && !h._press.optional)
+            die(`pressWhen: no ${h._press.cond?.sym} in ${symPath} (add ? to make it optional)`);
+        if (h._press?.clear && h._press.addr !== undefined) h.wr(h._press.addr, [0], ramOf(h._press.addr));
+        if (prepare) await prepare(h);
+        h.s.keyDown(h.keys.SHIFT); h.s.reset(h.junked === null); await h.s.runFrames(shiftFrames); h.s.keyUp(h.keys.SHIFT);
+        h.frames = shiftFrames + (await h.pressWhen());
         await h.s.runFrames(settle);
-        h.frames = shiftFrames + settle;
+        h.frames += settle;
         if (field !== undefined) {
             const rdf = () => (fieldBytes === 2 ? h.word(field, "main") : h.byte(field, "main"));
             const f0 = rdf();
@@ -325,7 +448,61 @@ export async function open({ name, disc, symbols, model = "B-DFS1.2", tube = fal
                     "or that is not the counter", { where: h.where() });
         }
         h.booted = true;
+        if (runUntil) h.frames += await h.runUntil(runUntil);
         return h.s;
+    };
+
+    // a symbol's RAM for h.rd/h.wr: main in &3000-&7FFF, nothing to name below; a
+    // condition on a sideways address is refused (which bank would it mean?)
+    const ramOf = (a) => {
+        if (a >= 0x8000 && a < 0xc000) die(`${hex(a)} is in the sideways window: a condition reads RAM below &8000`);
+        return a >= 0x3000 && a < 0x8000 ? "main" : undefined;
+    };
+    const readCond = (c) => {
+        const a = h.need(c.sym);
+        const v = c.size === "b" ? h.byte(a, ramOf(a)) : h.word(a, ramOf(a));
+        return c.size === "sw" && v >= 0x8000 ? v - 0x10000 : v;
+    };
+    const holds = (c, v) => ({ ">=": v >= c.value, ">": v > c.value, "<=": v <= c.value, "<": v < c.value,
+                               "==": v === c.value, "!=": v !== c.value })[c.op];
+    /** Run on, a field (`step`) at a time, until `cond` holds - a parseCond string
+     *  ("row:sw>=2990") or {sym, size, op, value} - within `budget` fields; exit 2 if
+     *  it never does (a clock that never got there is not a result). Returns the
+     *  fields run. phX's SEQ_ROW (its music row), generalised. */
+    h.runUntil = async (cond, { budget = 40000, step = 1 } = {}) => {
+        const c = typeof cond === "string" ? parseCond(cond) : cond;
+        let n = 0;
+        while (!holds(c, readCond(c))) {
+            if (n >= budget) die(`runUntil ${c.sym} ${c.op} ${c.value}: not in ${budget} fields (it is ${readCond(c)})`, { where: h.where() });
+            await h.s.runFrames(step); n += step;
+        }
+        return n;
+    };
+    /** Press the boot's pressWhen key once its condition holds (holding it `hold`
+     *  fields), within `budget` fields. 0 if there is none, or it is optional and the
+     *  build lacks its symbol. Returns the fields run. phX's skipDisclaimer: its !BOOT's
+     *  countdown (DC_SECS set) waited for SPACE. */
+    h.pressWhen = async (spec = h._press) => {
+        if (!spec || (spec.cond && h.sym(spec.cond.sym) === undefined)) return 0;
+        const { key, cond, hold = 3, budget = 600 } = spec;
+        let n = 0;
+        if (cond) while (!holds(cond, readCond(cond))) {
+            if (++n > budget) die(`pressWhen ${key}: ${cond.sym} ${cond.op} ${cond.value} never held in ${budget} fields`);
+            await h.s.runFrames(1);
+        }
+        if (typeof key === "number") { h.keyDownRaw(key); await h.s.runFrames(hold); h.keyUpRaw(key); }
+        else {
+            const k = h.keys[key] ?? key;
+            h.s.keyDown(k); await h.s.runFrames(hold); h.s.keyUp(k);
+        }
+        return n + hold;
+    };
+    /** After a harness's own BREAK (h.s.autoboot, h.s.reset): the boot's pressWhen
+     *  again (call beforeBreak() before the BREAK). Returns the fields run. */
+    h.afterBreak = async () => h.pressWhen();
+    /** Before a harness's own BREAK: clear the pressWhen symbol as boot() does. */
+    h.beforeBreak = () => {
+        if (h._press?.clear && h._press.addr !== undefined) h.wr(h._press.addr, [0], ramOf(h._press.addr));
     };
 
     // ---- hooks: on the instruction, gated on the paging ---------------------------

@@ -1,0 +1,88 @@
+\ ******************************************************************
+\ *	fz_test.6502 - lib/fzdepack.6502 on a real boot: one stream to a
+\ *	buffer, one decoded IN PLACE (the stream at the output's end plus
+\ *	fz.py's in_place_gap), the IRQ masked so the cycles are the decode's
+\ ******************************************************************
+\ *	Not a game. Built and run by lib/test/fz_test.mjs, which writes
+\ *	build/stream_data.6502 and the streams first (make_stream_data.py)
+\ *	and compares FT_OUT1 / FT_OUT2 with fz.py's decompress. From the
+\ *	kit's root:
+\ *
+\ *	  node lib/test/fz_test.mjs [MODEL]
+\ ******************************************************************
+INCLUDE "build/stream_data.6502"
+INCLUDE "../fzdepack.6502"
+
+FT_OUT1 = &4000
+FT_OUT2 = &6000
+FT_SRC2 = FT_OUT2 + FZT2_LEN + FZT2_GAP - FZT2_PACKED   ; the in-place stream's place
+ASSERT FT_OUT1 + FZT_LEN <= FT_OUT2 AND FT_OUT2 + FZT2_LEN + FZT2_GAP <= &7C00
+
+SECTION zeropage, org = &70, guard = &90
+.zxsrc SKIP 2
+.zxdst SKIP 2
+.zxwrk SKIP 2
+.ft_from SKIP 2
+.ft_to SKIP 2
+ENDSECTION
+
+SECTION FzT, org = &1900, guard = &3000, filename = "FZT", exec = ft_main
+.ft_main
+    sei
+    lda #LO(ft_s1) : sta zxsrc
+    lda #HI(ft_s1) : sta zxsrc+1
+    lda #LO(FT_OUT1) : sta zxdst
+    lda #HI(FT_OUT1) : sta zxdst+1
+.ft_t0
+    jsr fz_unpack
+.ft_t1
+    lda zxsrc : sta ft_end1
+    lda zxsrc+1 : sta ft_end1+1
+    lda zxdst : sta ft_end1+2
+    lda zxdst+1 : sta ft_end1+3
+    \ the second stream to the end of its output (+ the gap), then decoded over itself
+    lda #LO(ft_s2) : sta ft_from
+    lda #HI(ft_s2) : sta ft_from+1
+    lda #LO(FT_SRC2) : sta ft_to
+    lda #HI(FT_SRC2) : sta ft_to+1
+    ldx #HI(FZT2_PACKED) + 1
+    ldy #0
+.copy
+    lda (ft_from),y
+    sta (ft_to),y
+    iny
+    bne copy
+    inc ft_from+1
+    inc ft_to+1
+    dex
+    bne copy
+    lda #LO(FT_SRC2) : sta zxsrc
+    lda #HI(FT_SRC2) : sta zxsrc+1
+    lda #LO(FT_OUT2) : sta zxdst
+    lda #HI(FT_OUT2) : sta zxdst+1
+.ft_t2
+    jsr fz_unpack
+.ft_t3
+    lda zxdst : sta ft_end2
+    lda zxdst+1 : sta ft_end2+1
+.ft_done
+    cli
+.ft_idle
+    jmp ft_idle
+
+.fz_unpack
+    FZ_DEPACKER
+    rts
+.fz_end
+
+.ft_end1 EQUW 0, 0              ; zxsrc, zxdst after the first
+.ft_end2 EQUW 0
+.ft_s1 INCBIN "build/fzt.fz"
+.ft_s2 INCBIN "build/fzt2.fz"
+    SKIP 256                    ; (the copy moves whole pages)
+ENDSECTION
+
+
+SECTION Boot, org = &7E00, guard = &7F00, filename = "!BOOT"
+    EQUS "*RUN FZT", 13          ; *EXEC'd (--opt 3)
+ENDSECTION

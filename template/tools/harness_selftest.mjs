@@ -14,13 +14,45 @@
 //              with no HAZEL gate, THROWS (anyBank: true is the way to say any will do)
 //   symAt      a PC in a bank named only from a section the banks map puts there
 //   hang       where(), the trail by label, and the first-bad watch
+// From the phX port, 2026-11:
+//   runUntil   run on until field_count reaches a value (RUN_UNTIL's helper)
+//   parse      parseCond / parsePress / cli, on known strings
+//   --junk     JUNK=seed: three boots, two with one seed and one with another;
+//              the template must boot and run under each, the same seed must leave
+//              the same RAM after the same fields and the other seed other RAM
 //
 //   node tools/harness_selftest.mjs build/game-master.ssd     (or build/game.ssd)
+//   node tools/harness_selftest.mjs build/game.ssd --junk=1234
 //   exit 0 every check held; 1 one did not; 2 could not judge
-import { labelAt, open } from "./harness.mjs";
+import { createHash } from "node:crypto";
 
-const disc = process.argv[2];
-if (!disc) { console.error("usage: node tools/harness_selftest.mjs DISC"); process.exit(2); }
+import { cli, labelAt, open, parseCond, parsePress } from "./harness.mjs";
+
+const { pos, opt } = cli();
+const disc = pos[0];
+if (!disc) { console.error("usage: node tools/harness_selftest.mjs DISC [--junk=SEED]"); process.exit(2); }
+
+if (opt.junk !== undefined) {
+    // each boot in its own harness (open() is cheap; the machines are separate)
+    const seed = +opt.junk || 1;
+    const run = async (s) => {
+        const h = await open({ name: "harness_selftest junk", disc });
+        h.model = h.define("MASTER") ? "Master" : "B-DFS1.2";
+        await h.boot({ field: h.zp("field_count"), junk: String(s) });
+        if ((await h.runTo(h.need("main_loop"), 400_000)) === null) h.die("never reached main_loop", { gaveUp: h.gaveUp });
+        await h.s.runFrames(50);
+        // all of main RAM below the screen, and zero page: what the fill touched
+        const sum = createHash("sha256").update(Buffer.from(h.rd(0, 0x3000))).digest("hex").slice(0, 16);
+        return { seed: s, regions: h.junked?.regions, sum, h };
+    };
+    const a = await run(seed), b = await run(seed), c = await run(seed + 1);
+    const same = a.sum === b.sum, other = a.sum !== c.sum;
+    const wrong = [];
+    if (!same) wrong.push(`seed ${seed} twice: ${a.sum} and ${b.sum}`);
+    if (!other) wrong.push(`seeds ${seed} and ${seed + 1} both ${a.sum}: the fill reached nothing`);
+    a.h.finish({ junk: [a, b, c].map(({ seed, regions, sum }) => ({ seed, regions, sum })), wrong },
+               same && other, { samples: 3 });
+}
 const h = await open({ name: "harness_selftest", disc });
 h.model = h.define("MASTER") ? "Master" : "B-DFS1.2";
 const wrong = [], ok = (what, cond, got) => { if (!cond) wrong.push(`${what}: ${JSON.stringify(got)}`); };
@@ -71,6 +103,17 @@ const banked = [{ name: "in_bank5", raw: "in_bank5", value: 0x8100, sections: ["
 const at = (romsel) => labelAt(banked, 0x8105, { banks: { B4: 4, B5: 5 }, romsel })?.[0].name;
 ok("bank-aware names", at(5) === "in_bank5" && at(4) === "in_bank4" && at(6) === undefined, [at(4), at(5), at(6)]);
 
+// runUntil: on to field_count + 7 (a byte that wraps: the target is taken mod 256)
+const fc0 = h.byte(FIELD), want = (fc0 + 7) & 0xff;
+const ran = await h.runUntil(`field_count==${want}`, { budget: 20 });
+ok("runUntil stops where the symbol reaches the value", h.byte(FIELD) === want && ran >= 6 && ran <= 8, { fc0, want, ran });
+
+// the parsers, on strings whose answers are known
+const pc = parseCond("row:sw>=-2"), pp = parsePress("SPACE@dc_secs?"), pk = parsePress("98@flag:w==&10");
+ok("parseCond", pc.sym === "row" && pc.size === "sw" && pc.op === ">=" && pc.value === -2, pc);
+ok("parsePress", pp.key === "SPACE" && pp.cond.op === "!=" && pp.clear && pp.optional &&
+   pk.key === 98 && pk.cond.value === 16 && !pk.clear, [pp, pk]);
+
 const hang = h.hang();
 ok("hang() names the PC and keeps a trail", !!hang.at && hang.trail.length > 0 && hang.firstBad === null, hang);
-h.finish({ checks: 9, wrong, keyRun: { moved, passes }, where: { at: hang.at, trail: hang.trail.slice(-3) } }, wrong.length === 0, { samples: 9 });
+h.finish({ checks: 12, wrong, keyRun: { moved, passes }, where: { at: hang.at, trail: hang.trail.slice(-3) } }, wrong.length === 0, { samples: 12 });

@@ -115,6 +115,59 @@ class Convert(unittest.TestCase):
         self.assertEqual(st[0][3], 15)
 
 
+class BassVoice(unittest.TestCase):
+    """convert(bass_voice=, drum_max=): the phX port's bass rule, on synthetic rows."""
+
+    def conv(self, rows, **kw):
+        c = Converter(1_500_000, irqs_per_field=1)
+        return c.convert([[r] for r in rows], **kw)
+
+    @staticmethod
+    def drum(g, vol=10, noise=12):
+        g = list(g)
+        g[7] &= ~(1 << 4)                     # noise on channel B, B's tone off
+        g[9], g[6] = vol, noise
+        return g
+
+    def test_off_by_default(self):
+        st, stats = self.conv([regs(a=(300, 15))])
+        self.assertEqual(st, [[400, 0, 0, 15, 0, 15, -1, 15]])
+        self.assertEqual((stats["bass_cut"], stats["drum_cut"]), (0, 0))
+
+    def test_in_range_bass_is_still_periodic_noise(self):
+        # P 300 -> N 400, in the SN's range, but voice 0 is the bass: tone 2 at
+        # round(400 / 15) = 27, noise %011, channel 0 silent
+        st, stats = self.conv([regs(a=(300, 15))], bass_voice=0)
+        self.assertEqual(st, [[0, 15, 0, 15, 27, 15, 3, 0]])
+        self.assertEqual(stats["periodic"], 1)
+
+    def test_other_voices_keep_their_tones(self):
+        st, _ = self.conv([regs(a=(300, 15), b=(100, 12))], bass_voice=1)
+        self.assertEqual(st[0][0:2], [400, 0])       # A plays as a tone
+        self.assertEqual(st[0][4:7], [9, 15, 3])     # B: round(133 / 15) on tone 2
+
+    def test_drum_wins_and_the_bass_rests(self):
+        st, stats = self.conv([self.drum(regs(a=(300, 15)))], bass_voice=0)
+        self.assertEqual(st[0][0:6], [0, 15, 0, 15, 0, 15])   # no octave tone
+        self.assertEqual(st[0][6:], [4 | 0, sn_atten(10)])
+        self.assertEqual((stats["bass_cut"], stats["octave"]), (1, 0))
+
+    def test_drum_max_hands_the_noise_back(self):
+        rows = [self.drum(regs(a=(300, 15)))] * 5 + [regs(a=(300, 15))]
+        st, stats = self.conv(rows, bass_voice=0, drum_max=2)
+        self.assertEqual([f[6] for f in st], [4, 4, 3, 3, 3, 3])
+        self.assertEqual((stats["bass_cut"], stats["drum_cut"]), (2, 3))
+        # a fresh run of noise: the drum wins again for drum_max fields
+        rows2 = rows + [self.drum(regs(a=(300, 15)))]
+        st2, _ = self.conv(rows2, bass_voice=0, drum_max=2)
+        self.assertEqual(st2[-1][6], 4)
+
+    def test_drum_alone_is_never_cut(self):
+        rows = [self.drum(regs())] * 8           # noise, no bass voice sounding
+        st, stats = self.conv(rows, bass_voice=0, drum_max=2)
+        self.assertEqual([f[6] for f in st], [4] * 8)
+        self.assertEqual(stats["drum_cut"], 0)
+
 @unittest.skipUnless((RIP / "sn11.json").exists(), "1942-beeb's rips not present")
 class Against1942(unittest.TestCase):
     """Every command 1942-beeb converted, through the generic converter at 1942's
