@@ -20,8 +20,14 @@ having it here: a CPC or Spectrum source has AYs too, at other clocks.
           drops an octave at a time into range instead (arkos's rule).
   VOLUME  AY 4-bit v -> 5-bit (v << 1) | (v & 1) -> 15 - ((n + 1) >> 1) attenuation
           (arkos make_tables.py). The AY's hardware envelope is not converted; 1942's
-          sound ROM never set a volume register's bit 4 (sound_rip.py's inventory),
-          and a ROM that does needs the envelope stepped per field first.
+          sound ROM never set a volume register's bit 4 (sound_rip.py's inventory).
+          A tune that does may play the envelope as a TIMBRE, not a fade, as
+          phX's do (Factor6, Vortex Tracker II, 2026-11): R13 = 12, the repeating
+          sawtooth, with the envelope period locked to the tone (tone 703, envelope
+          22: 22 x 32 = 704), so it repeats at an audio rate and cannot be stepped
+          per field. Flatten it before calling this: such a channel becomes a plain
+          tone at full volume at its TONE's pitch, or at the envelope's own pitch
+          (period x 16) when its tone is off (phX tools/music_convert.py).
   NOISE   AY 5-bit noise period -> the nearest of the SN's three fixed rates BY
           FREQUENCY; volume from the loudest noise-enabled channel.
   VOICES  up to three tones. One chip's three channels map straight across; two

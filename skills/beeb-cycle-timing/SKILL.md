@@ -13,6 +13,7 @@ deterministic, so one sample is exact for that state.
 **Read this:** `elapsed_cycles` from `read_registers` - correct on every version
 **On jsbeeb-mcp >= 3.4.0:** `cycles_run` is the cycles actually run, and a breakpoint stop reports the registers with `elapsed_cycles`, so the second call goes away
 **Never read this:** `cycles_run` on jsbeeb-mcp <= 3.3.0 - when a breakpoint fires it reports the number *requested*, not run (jsbeeb-mcp#25, fixed in 3.4.0)
+**I/O costs (phX, 2026-11):** a back-to-back `sta &FE01` (CRTC) is **6 cycles**, each write landing on a 1 MHz slot - an even C0 in a 2 MHz mode - so moving the code one cycle moves no write (jsbeeb, 200 of 200 lines); a back-to-back `sta &FE21` (palette) is **4 cycles**, a 2 MHz access, not stretched - **measured on a real Master** (hardware-test disc, test 6) as well as jsbeeb
 
 ## Steps
 
@@ -108,7 +109,15 @@ deterministic, so one sample is exact for that state.
    as a PAIR (same day, same jsbeeb, same run), and print the jsbeeb version beside it: 2.3.0
    against 1.25.0 changed three of nine of 1942's reports.
 
-10. **Record the number with its units and its state** in the layer doc: "6,155 cycles a sprite,
+10. **For a raster-phase claim, count the I/O as well as the instructions.** A cycle-counted line
+   is 128 cycles in a 2 MHz mode; each CRTC write costs 6 and lands on the next 1 MHz slot, a
+   palette write costs 4 wherever it is (above). So a CRTC write can only land on an even C0,
+   which decides where a cut is possible (R8 every 2 characters), and a lead that is off by one
+   cycle can be invisible for the CRTC and one character out for the palette. Record each
+   write's C0 in a harness (`h.onWrite`, `hc`) rather than adding the listing up: phX's probes
+   were scored "R8 at C0 62 in 200 of 200 lines".
+
+11. **Record the number with its units and its state** in the layer doc: "6,155 cycles a sprite,
    restore + draw, stationary, DEV build, 2026-09-03". A frame meter in microseconds is half the
    cycle count - say which. An in-guest bracket on the User VIA T1 is
    `cycles = 2 * ((before - after) AND &FFFF) - 46` (the 46 is the bracket's own cost).

@@ -13,9 +13,17 @@ November 2026:*
   its template, with five decisions taken provisionally by precedent. What it found different -
   a free-running main loop, a 304-line frame, a 6128 bank - is the half of this document that the
   first port could not have written.
+- ***phX*** (Condense, Revision 2018; ported 2026-11-14 to 11-18, to a **Master 128**): the
+  opposite size - a multi-part, multi-load 6128 demo of eighteen parts and a loader card on a
+  two-sided disc, five minutes long, cycle-exact rasters, three tunes - and **its source is
+  public** (No Recess's release, for education only). Sections 13-19 are what it added: the
+  source read and reviewed, a reference that is the picture machine checked against WinAPE, the
+  disc as the specification, the sequence built as a backbone first, colour, RVI and an offline
+  music stream.
 
-*Neither repository is public (the originals are not ours to redistribute). Citations are to
-their paths: `isometrikum/docs/layer-3-display.md`, `square-roots/tools/cpctime.py`. The tools
+*None of the three repositories is public (the originals are not ours to redistribute, nor is
+phX's source). Citations are to their paths: `isometrikum/docs/layer-3-display.md`,
+`square-roots/tools/cpctime.py`, `phx/docs/winape-check.md`. The tools
 are `template/tools/cpc/` (README there), `template/tools/shrinkler.py`, `size_report.py`,
 `grind_bytes.py`, `verify_image.mjs`; the 6502 is `lib/ay2sn.6502` and `lib/unshrinkler.6502`;
 the procedures are the skills `beeb-cpc-reference` and `beeb-crunch`.*
@@ -24,9 +32,11 @@ the procedures are the skills `beeb-cpc-reference` and `beeb-crunch`.*
 
 ## 1. The rules this path adds
 
-**The original is the specification, and the specification is a 64K image at the demo's entry.**
-Unpack it with the original's own depacker running on a Z80 core, never a reimplementation, and
-give that one image to every tool. Nothing is read off a picture that a record can say.
+**The original is the specification, and for a single-file demo the specification is a 64K image
+at the demo's entry.** Unpack it with the original's own depacker running on a Z80 core, never a
+reimplementation, and give that one image to every tool. Nothing is read off a picture that a
+record can say. A demo that loads itself in parts has no such image: its specification is **the
+disc and the machine that reads it** (phX: every tool takes the DSK, section 15).
 
 **There are two CPCs in the loop, and only one of them is the reference.** A *picture* machine
 (`cpcrun.py`: scanline CRTC, Gate Array interrupts, AY, at CPC speed) shows what the demo looks
@@ -92,9 +102,13 @@ from `&F800`'s block into `&0000` and wrote over the interrupt vector at field 1
 `cpc/cpctime.py` charges each instruction `ceil(T/4)` us with the known exceptions (PUSH 4, RST
 4, taken RET cc 4, DJNZ not taken 3, OUT (C) 4, LDI/OUTI 5, the `(IX+d)` forms 6-7) plus 5 us an
 interrupt; `RAW=1` restores raw T. About 3x slower: 7,000 fields in 80 s. **The table is the CPC
-scene's, from memory, and not measured on a CPC** - it is checked only by consistency (the
-original's own cycle-counted delays land where their author put them; the demo runs to its end).
-Mark anything that depends on it PROVISIONAL until a real CPC or WinAPE/ACE confirms it.
+scene's, from memory, and not measured on a CPC** - it is checked by consistency (the original's
+own cycle-counted delays land where their author put them; the demo runs to its end) and, since
+phX, **partly against WinAPE**: phX's reference (this table, a type-0 6845, a Gate Array) matched
+WinAPE's type 0 over 658 captures to a raster line, a byte column or a few pixels in every part -
+OUT timing: a Gate Array write applied half a microsecond early, a line in the logo - except one
+CRTC-model error, the outro's scanline order (section 14). Mark anything that rests on a beam position
+PROVISIONAL until WinAPE (or a real CPC) has seen that part.
 
 ### The reference: the logical machine
 
@@ -105,6 +119,7 @@ run coverage to see what runs between waits. This choice selects the reference:
 |---|---|---|
 | **Field-locked**: one pass of the main loop per field, the interrupts do the music and the CRTC (Isometrikum) | `cpc/cpcref_fieldlocked.py`: the Z80 **4x fast** (LINE = 1,024 T) so no pass overruns; **VSYNC read as an edge** (1 once per field, as the logo's delays see it on hardware); interrupts **queued** and taken only while the CPU sits in the wait loop (`&3616-&361B`); fields from a **fixed 312-line clock**, not the CRTC (the queued writes reach the CRTC late and it would never VSYNC). Records at every "field done" call | One pass a field; overrun is a bug (decision 6) |
 | **Free-running**: the main loop draws as fast as it can and counts fields only while it waits; an interrupt does the "world work" (Square Roots) | `cpc/cpcref_units.py`: CPC timing (`cpctime`); the main loop cut into **units** at commuting boundaries (a span, a wait pass, a square's start, an edge's start, a side's move); the world-work interrupt **held out** of the few non-commuting regions (a span fill, a wait's decrement-to-latch) so it always lands between units; records at the **first unit after** a world work; `world.log` = how many units had started before each world work | A **schedule**: `make_sched.py` turns `world.log` into one byte per world work (units to the next), the port's main loop calls `unit_point` at each unit and runs world work *n* when exactly U(*n*) units have started and the interrupt has made it due |
+| **Cycle-exact raster**: the effects are the beam's position - per-line palette and CRTC writes, ruptures, RVI - and the demo loads itself from disc (phX) | **The picture machine is the reference** (section 14): CPC timing, the 6845 at character resolution **of the CRTC type the demo's own test selects** (phX: type 0, decision 5), the Gate Array, the FDC and the disc (section 15); records per field of the picture and the I/O. Checked against WinAPE as a Layer 1 gate | One CPC field is one BBC field, each part's draw cycle-counted and entered at one beam position; every field that is not 19,968 us decided (section 14) |
 
 Isometrikum's two corrections to its own reference, found the hard way: a late acknowledge must
 not clear the Gate Array's counter (or ~5% of interrupts are lost), and nothing may be taken at
@@ -321,11 +336,18 @@ Unspoken's fork of arkos-player-bbc's `ay2sn`, set back to the CPC's 1 MHz AY:
 - **The bass floor**: below the SN's 122 Hz is AY P >= 512. Those notes go to **software bass**:
   the claiming channel's tone is parked at period 1 (inaudible) and the User VIA's T1,
   free-running, toggles its attenuation at the note's frequency (`bass_irq`); one sticky claim at
-  a time (`bass_pick`/`bass_claim`). Periodic noise is the fallback held in reserve.
+  a time (`bass_pick`/`bass_claim`). Periodic noise is the fallback held in reserve - for a demo
+  whose interrupts have room for a bass timer. **A cycle-exact raster demo takes periodic noise
+  as the default** and converts offline (section 19): a software-bass interrupt would land inside
+  a counted line.
 - `sn_write` holds WE low 18+ cycles; a due half-cycle is serviced before a retune.
 - **Measure the AY use before porting the converter**: over 7,200 fields Isometrikum's tune never
   wrote R11-R13, never set a volume's bit 4, used noise periods 2, 6 or 8 only, and had channel A
   carry the bass (periods 100-1,448). The envelope generator was removed on that evidence.
+  **Which channel is the bass is a property of a section, not of a tune**: measure the lowest
+  channel frame by frame over the whole demo before fixing one. phX's moved twice inside its
+  tunes, and a per-tune rule turned a deliberate glitch into bass and the real bass line into
+  one note (its decision 65, section 19).
 - **Cost**: the VSync IRQ's music 2,337 cycles a field (5.9%); bass 1.95 interrupts a field at
   152 cycles. **Weakness: latency.** The bass interrupt waits behind the fires and the music, so
   toggles land up to +-4,700 cycles late: within 8 cycles of the period 85.5% of the time at Layer
@@ -490,22 +512,272 @@ What went wrong, so the next brief says it:
 
 ---
 
-## 13. Order of work
+## 13. The source, when it exists: read it first, review against it last
+
+The 4K demos had no source. phX's authors published theirs (No Recess: the Z80 per part with
+labels and comments, the converter that made its tables, a build whose DSK is byte for byte the
+release's). It is not ours to redistribute, so it lives **outside the repository** beside the
+original's archive, and is cited by path, never pasted.
+
+**Read it before modelling a part** (phX's rules file says so in those words). Coverage still
+finds what runs; the source says what it was *meant* to do, names the tables, and settles readings
+a disassembly leaves open. **And finish with a source review**: each part's BBC code read against
+the source for what the oracles cannot see - the reference's own errors, the fields between two
+parts' checks, data the oracle shares with the code. phX's review (2026-11-17, after every
+part's oracle passed, with WinAPE's frames beside it) found three defects no oracle had:
+
+- **A fade between two checks** (its `BUGS.md` 9): the CPC fades the static Clown to white over
+  fields 3,938-3,958; the port held the full-colour picture and cut to white. The Clown's oracle
+  ended at field 3,497 and Epsilon's began at 3,971 (`docs/verification.md`, "Timeline coverage").
+- **One row too many** (10): the source's loop draws 127 lines of the logo; the reference, and
+  so the port and its expected picture, showed 128. WinAPE agreed with the source.
+- **Mid-line palette writes half a microsecond early** (11): the reference's Gate Array model, and
+  so every expected picture made from it.
+
+The same reading found the original's own bugs, which then need a decision rather than a
+transcription (phX's Balls: an `rra` after a wrapped `add` shifts the carry into an x
+coordinate), and confirmed the rest one item at a time (every part's duration and row, the
+curve tables byte for byte). The review's first finding came earlier, from the owner: the outro's
+dark lines on a real Master were in the reference too, and the source showed why (decision 63,
+section 14).
+
+---
+
+## 14. A third reference: the cycle-exact raster demo, checked against WinAPE
+
+**When the effects are the beam's position, the picture machine is the reference.** Neither
+logical machine of section 3 applies: the effects are the timing, and a machine that removes it
+removes the demo. phX's `phxrun.py` is a 6128 at CPC timing (`cpctime.py`) with a
+6845 at character resolution, the Gate Array, the uPD765 and the disc (section 15); it boots the
+DSK and records each field's picture, CRTC and I/O. **Pick the CRTC type the demo's own test
+selects**: phX's loader tests the CRTC and takes per-type paths, and the reference answers type
+0, the Hitachi-style part closest to the BBC's (decision 5).
+
+**Check it against a third-party emulator as a Layer 1 gate, automated, before any part rests on
+it** - not "provisional until release". phX's gate (`docs/winape-check.md`):
+
+- `winape_shot.ps1` drives WinAPE 2.0b2 (a 6128, CRTC type 0, no Plus, no PAL filter) through
+  the whole demo from its DSK, a capture every 0.5 s: 658 captures, 0-330 s. WinAPE is a Delphi
+  application: capture its largest visible window, not the process's main window handle.
+- `winape_match.py` finds each capture's field in the reference (run one field at a time from
+  checkpoints) and diffs it pixel by pixel at the CPC's three levels a gun, writing a match table,
+  WinAPE's frame of each field (the frames to check the BBC by) and a three-way sheet per part.
+- **The result**: identical in 161 of 163 captures of the Clown, Epsilon, the cube, the tunnel,
+  Freddy, the Fishes and Condense and, after one fix, 177 of 177 of the outro; the residue was a
+  raster line in the logo, a byte column of the plasma (a Gate Array write half a microsecond
+  apart), single beam-race pixels, the Kefrens bars a line late in WinAPE, and WinAPE's top line
+  black in every part. Between loads the timeline kept step to within 2 fields over a whole act;
+  the loads did not (the Clown's took ~2.0 s longer in WinAPE, Freddy's ~1.0 s and the Fishes'
+  ~2.6 s shorter: two drive models, and neither yet a real drive). The demo ends and restarts where the reference says.
+- **The fix it forced** (decision 63): the outro's rows came out with their scanlines in the
+  order (2, 0, 1) and a dark line through the text; the source says routine VLC*k* shows scanline
+  *k*, WinAPE shows that, and the reference's CRTC model was a line out. The converter now
+  follows the source ("a correction to the original, not a deviation"). **The reference
+  is not an independent oracle**: the BBC copied its mistake into an expected picture that
+  agreed with the port.
+
+**List every reference field that is not 19,968 us, and decide each.** A cycle-exact original
+drops a VSYNC where a part's race is lost, and its part changes run long or short. phX's first
+pass: field 0 (15,360 us), 431-432 (8,432 + 11,486), 837, 882, 927 (19,840: the analyser),
+3,299-3,300 (19,299 + **40,605**: the Clown's first stretch writes R9 a microsecond late and a
+VSYNC is missed), 3,430, 3,976, 6,521, 6,914, 8,441, **8,448** (39,902: a second missed VSYNC, at
+Flipscroll's start), 9,216, 9,231, 9,990, 10,420, 14,865, 15,170 - part changes, all of them.
+Decision 10: **every BBC field is 50 Hz with its VSYNC**, and a 40 ms CPC field is two ordinary
+BBC fields. The two missed VSYNCs are exactly the points to look at in the third-party
+emulator's debugger.
+
+---
+
+## 15. Multi-load demos: the disc is the specification
+
+**Boot the disc, and model the drive.** phX's first FDC model made seeks instant and caught
+every track's first sector; the demo then crashed at field 6,569 - a sector loaded over the music
+unpacker one frame before the first tune retired it. During a load the CPC plays one music frame
+per sector, plus one a field from the interrupt only while the loader waits with interrupts on,
+so **the music's lead over the load is set by how long the first sector after each seek takes**.
+Modelling the 765's step rate (12 ms, AMSDOS's, from memory) made the loader miss sector 1 after
+each seek and wait most of a turn, about ten frames more per track, and the demo ran to its end
+and restarted (`phx/docs/layer-1-reference.md`). The specification of a multi-load demo is the
+DSK **and** the drive that reads it: the format's gaps and ID positions (the zip's HFE image
+had them), the step rate, the overrun deadline.
+
+**Vary the disc, because a real one is not phase 0 at 300 rpm.** Runs at index phase 0, 40 and
+120 ms and at 297 and 301.5 rpm moved the end of the Clown's load by up to 75 fields, and at 120 ms
+and exactly 300 rpm **the demo hung**: every overrun was the first byte of a track's sector 1, lost
+while the music interrupt ran; at 300 rpm a turn is 10.016 fields, so each retry met the interrupt
+in the same place, up to four turns in a row, and the Clown's wait for the music's frame counter to
+*equal* a value was passed. Half a percent off speed breaks the lock. So the reference keeps
+phase 0 and 300 rpm, where nothing locks, and says so; `--index-phase` and `--rpm` are there to
+look further.
+
+**The clock is music time, not CPC fields** (phX decision 33). During a load a CPC field carries
+0 or 2 music frames, and the parts after it wait on the music's frame counter, so the demo's
+timeline is the music's own. The BBC plays one frame a field and keeps the CPC's silent load gaps
+at their lengths (218 and 319 rows): **BBC field = L + row**, L the field the music starts, every
+part on its CPC music row. Extract the AY stream in music time (one row per frame, in order) and
+the CPC's irregular fields vanish: tune 1 ends 12 BBC fields earlier than the CPC's field count,
+and nobody hears the difference.
+
+---
+
+## 16. A demo sequence: the backbone first
+
+A 4K demo is one effect at a time. Eighteen parts in 128K and four disc windows are not: **design
+the backbone before any part is built** (`phx/docs/design-backbone.md`), and build it with
+placeholders.
+
+- **The clock and the timeline**: each part's first and last row, its entry from the part before
+  (seamless, black fields, a static screen), cycle-counted or static.
+- **Memory over time**: every region of the machine, each part's need, residency act by act, and
+  the peaks (phX: the start of the logo, all of act 1 resident; the start of Multi-FX).
+- **The hand-overs**: where the CPC shows no black between two parts, both screens must be in
+  CRTC-visible memory at once, in disjoint places, and the next part's `enter` runs in the
+  vertical blanking of the last field before. **Heavy set-up is a background job** run in the
+  main loop during earlier parts (the CPC's own "unpack the next part in spare time"); the switch
+  field runs the `enter` and the first update, nothing more.
+- **The disc windows** (below), with **placeholder files at each part's estimated packed size**,
+  so the load margins are measured before the parts exist. phX's B4 measured them (jsbeeb 2.10.2,
+  2.21.1 identical; beebjit's drive a little faster): W1 +17 fields (the card simply waits), W2
+  +347, W3 +93 (the tightest hard deadline, as designed), W4 +176.
+- **Parts solo, then merged**: each part built and checked on its own branch by a one-part build
+  (`main.6502` builds one part, `phx.6502` the sequence), then merged into the sequence in demo
+  order, its oracle taking a field offset so it runs on both. Placeholders keep every part's rows,
+  black fields and music, so the whole demo plays from the first day.
+- **WIP part-select keys and a load-margin readout, on the WIP disc only** (decision 37): a jump
+  reloads its window first (110-516 fields a jump), runs the jobs the part depends on, and starts
+  the music at its row. A playtester reaches minute four without watching minutes one to three.
+
+**The disc only behind static screens** (decision 32), as the CPC itself loads. A 1770 FM byte
+arrives every 64 us by NMI, which `SEI` does not mask: a 35-cycle NMI at a phase that drifts
+against the raster, inside every counted line. A sector (16.4 ms) does not fit the 2.7 ms vertical
+blanking. So phX loads in four windows, the CPC's own (the loader card, the Clown's static
+picture, Freddy and the Fishes after their reveals), checks that every NMI and every 1770 command
+fell in a window field (`verify_disc.mjs`), and **warms the drive with a seek about 40 fields
+before each window**, landing its one NMI in the vertical blanking. Two lessons about the loader:
+
+- **Chain it on its own interrupts.** A loader whose next command waits for the main loop or an
+  IRQ loses a revolution whenever an IRQ outlasts the gap before sector 0 (phX B4: a placeholder's
+  5K-cycle draw). phX's issues every next command from the NMI: the seek's INTRQ issues READ
+  ADDRESS, the ID's the first run (the next sector to the end), the run's last byte the second run
+  (sector 0 up to it): one revolution and a sector whatever the track skew, and a turnaround that
+  no IRQ's length can move. A 40-field watchdog restarts a track from its ID.
+- **Put the owner's real Master in the loop from the disc-driver step** (decision 36), with a
+  Gotek and a real drive. A real 1770 raised READ ADDRESS's INTRQ at once after its sixth byte -
+  jsbeeb at least 48 us later - and the first chained loader hung on it (`docs/gotchas.md`).
+
+A two-sided `.dsd` (decision 58: the later windows on side 1, from the cylinder where side 0's
+files end, so the head only moves inward) is laid out by the build.
+
+---
+
+## 17. Colour for a big CPC demo
+
+Section 10's rules hold; eighteen parts add these, each a phX decision taken before the part was
+built:
+
+- **One fixed checker** (decision 8): RTW's pair for each CPC colour, pixel (x, y) taking half
+  (x + y) AND 1, fixed to the screen - even where the CPC artwork is itself dithered on the same
+  phase and shows one half only (the Clown's olive came out 93% green). Alternating each colour
+  against itself restored the hue but was judged too noisy.
+- **The checker travels with moving rows** (9, 12, 27): where a picture moves by rows (the logo,
+  the Clown's stretch, the plasma's logo, Flipscroll's scroller, the outro), each row keeps its
+  stored checker wherever it lands, so it can be out of step with the screen's - one stored copy,
+  not one per phase.
+- **CPC mode-1 parts are BBC MODE 1** (19): 384 pixels kept, each CPC pen a solid BBC colour, the
+  best 4 of the 8 per part (per line where the CPC rasters pens per line). Where the nearest
+  colour by a metric breaks a hue family, **map by hand** (47: lavender to blue, olive to green,
+  not CIE76's magenta and yellow).
+- **Fades are ladders** (15, 64): a CPC fade to black steps each logical colour down white,
+  yellow, cyan, green, magenta, red, blue, black from where it starts, on the CPC's own step
+  fields; a fade to white is the same ladder upwards. Not the CPC's intermediate colours, which
+  the stock BBC does not have.
+
+---
+
+## 18. RVI on the Master
+
+phX's decision 11: **a row that must start mid-character is done by RVI** (vertical rupture
+interlace: one-scanline CRTC frames, each pointed anywhere), not by copying; memory to show beyond
+main RAM comes from shadow RAM, with code and data in ANDY and HAZEL. What the real Masters taught
+(`phx/docs/hwtest.md`, `layer-3-6845.md`):
+
+- **Each R0 write in its one 1 MHz slot** (R0 = 1 at C0 0 or 1): one slot late or early and the
+  line runs on to C0 255. CRTC writes land on 1 MHz boundaries (jsbeeb), so cycle-count the lead,
+  then measure every write's C0 in a harness.
+- **The burnt lines display**: with R1 above a short line's R0 the display stays on, and their
+  characters show as strays. Blank them with a **black left-hand column** in the memory they
+  show (13), simpler than the teletext-bit blank.
+- **Never light the back porch** (41): a burnt line that shows colour after HSync shifts an RGB
+  monitor's black-level clamp. On KC's Sony every colour of the picture went wrong; the CUB was
+  unaffected. Burnt lines show black from HSync's start to the end of the back porch (about 8
+  characters after HSync).
+- **End every frame on the long line** (test L): a 6845 frame ending on an R0 = 1 (2-character)
+  line lost sync on the Sony and bent on the CUB. jsbeeb, differently, never ends a frame there.
+
+Each of these was found by a numbered test on the hardware-test disc (`PORTING.md` section 12),
+and none by an emulator: no emulator models a monitor.
+
+---
+
+## 19. Music offline: the AY stream for a raster demo
+
+Section 9's `ay2sn` runs on the 6502 every field. A cycle-exact demo cannot spare its interrupts,
+so phX converts **offline** (`tools/music_extract.py`, `music_convert.py` on the kit's
+`py/beeb_port_kit/ay2sn.py`, `music_pack.py`) and the 6502 only replays bytes:
+
+- **The stream**: one record a field, a count n then n bytes exactly as the SN takes them (tone
+  latch and data, attenuation, noise control), only what changed against what the chip holds - a
+  tone changed while silent is sent when it is next heard; tone 2 is always sent while it clocks
+  periodic noise. Each tune packed from a fresh chip so it can start alone. The whole demo:
+  14,691 records, 52,128 bytes raw, 15,713 ZX02, never more than 10 writes a field; the tick
+  measured 540 cycles worst, 167 mean.
+- **Periodic-noise bass, always** (decision 4): no software-bass interrupt, so nothing interrupts
+  a counted line. The bass voice is periodic noise clocked by tone 2 at N/15 whatever its pitch;
+  a drum takes the noise for at most its first 4 fields and the bass rests meanwhile (KC's ear:
+  the kit's rule, bass to noise only below the floor, switched timbre too often); other channels'
+  notes below the floor rise an octave at a time.
+- **The envelope as a timbre**: Factor6's tunes write R13 = 12 (the repeating sawtooth) at a tune's
+  start and lock the envelope period to the tone (tone 703, envelope 22: 22 x 32 = 704), so the
+  tone gives the pitch and the envelope only the buzz. Such a channel becomes a square at full
+  volume at its tone's pitch (at the envelope's own, period x 16, if its tone is off). Stepping the
+  envelope once a field cannot work: the sawtooth repeats at the tone's own audio rate.
+- **The bass channel by section** (decision 65): measured as the lowest audible tone per frame
+  over every tune, tune 1's bass moves from A to B at row 4,159 (where A starts a 7-step arpeggio
+  glitch) and tune 3's from B to A at 13,176. `BASS_SECTIONS` in the converter holds the
+  boundaries; each section converts alone with the chip state carried across.
+- **WAVs for the owner's ear**: the AY as it plays (envelope included) and the SN as the BBC will,
+  the whole stream in music time with the gaps silent. The bass and drum rules were settled
+  by KC listening to the two side by side, not by a metric.
+
+---
+
+## 20. Order of work
 
 0. **Layer 0**: the kit's template, the original's archive outside git, `extract_original.py` in
-   the build, the depacked 64K image, the tools in `template/tools/cpc/` adapted to its entry.
+   the build, the depacked 64K image (or, for a multi-load demo, the DSK and a drive model), the
+   tools in `template/tools/cpc/` adapted to its entry; the source, if it exists, outside git
+   beside the archive.
 1. **Layer 1 - the specification**: coverage and `covdis` reading; the field-locked or
    free-running question; `cpcrun` contact sheets; the logical reference with its decision; every
    effect a model scored N of N; the AY's register use measured; `LD A,R` searched for.
+   A cycle-exact demo: the picture machine booting the disc as the reference, the WinAPE gate
+   run on it, every odd-length field listed and decided, the source read part by part.
 2. **Layer 2 - music**: the player on the 6502 against the model's tick state, `ay2sn` at the
    source machine's clock, the SN writes against the model, both models.
 3. **Layer 3 - display**: the fires, the rings sized by replay, the frame length, write windows
    measured, every field's CRTC program checked against the reference.
+   With it, the hardware-test disc (`PORTING.md` section 12) for every knife edge the parts will
+   stand on, on the owner's machines and monitors.
+3b. **A multi-part demo: the backbone** (section 16) - the sequencer, every part a placeholder at
+   its rows, the whole music, the disc windows with placeholder files and their margins, the real
+   Master in the loop from the disc driver; then the parts, each solo and then merged, in demo
+   order.
 4. **Layers 4 onward - the effects**, each against the model's records, with the slack (or the
    late count) printed and floored.
 5. **Colour**: the palette's behaviour measured, the stock re-dither with its own reference, the
    NuLA set, one disc.
-6. **Release**: the suite on both models and sets, b2 and real hardware (neither demo has been
-   seen on either), the WIP published.
+6. **Release**: the suite on both models and sets and both jsbeeb versions, b2 and real hardware
+   (neither 4K demo has been seen on either; phX was on KC's Masters from its first disc), a
+   source review where there is a source (section 13), the WIP published.
 7. **The crunch**, if size matters: the measuring stick, the identical-image rounds, generation,
    then deletions measured one at a time (skill `beeb-crunch`).

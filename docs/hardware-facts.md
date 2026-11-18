@@ -33,6 +33,16 @@ unpublished (the originals are not ours to redistribute), so entries cite their 
 jsbeeb-mcp 4.3.0, models `B-DFS1.2` and `Master`; **neither has been seen on b2, real hardware or
 a real VideoNuLA yet**, and the entries say emulator-only. `docs/cpc-demo-porting.md` is the guide.
 
+A sixth source is **phX** (Condense, CPC 6128, 2018; ported to the **Master 128 only**, November
+2026): a multi-part, multi-load, cycle-exact raster demo whose BBC side drives the 6845 at its knife
+edges (one-scanline frames, RVI, mid-line palette, mode and shadow switches) and loads its
+double-sided disc in four windows behind static screens with its own 1770 driver. It is unpublished (cited by path,
+`phX/docs/layer-3-6845.md`); its measurements are on jsbeeb 2.10.2 (the MCP's pin), jsbeeb main
+2.21.1 and 2.22.1 (see the version note in §11), beebjit, and **KC's two real Master 128s** - the
+original with a Sony RGB CRT and a Cherry Master with a CUB RGB CRT - through a hardware-test disc
+(`phX/docs/hwtest.md`) photographed by KC. Real-Master entries are by eye on a CRT: to a pixel or a
+character, not a cycle.
+
 The rule the whole document exists to serve is **measure, do not recall**. Paradroid's `CLAUDE.md`
 tells the story: an early file, `src/hal_video.asm`, was written from remembered CRTC arithmetic,
 with `TODO: verify in emulator` comments and a half-finished derivation in the middle of it, and it
@@ -187,6 +197,15 @@ the comments in the listing are the specification).
   effect immediately: one landing in the displayed part of a scanline cuts that scanline part-way
   across.
   Measured: Layer 3, jsbeeb. [Paradroid layer-3-scroll.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-3-scroll.md)
+  **On a real Master, R8 = 0 (display on) mid-line comes on part of a character EARLY**: written
+  at C0 24, a strip of character 23 shows, on both of KC's Masters (phX hardware-test card 6, band
+  A). jsbeeb 2.10.2 and 2.21.1 put the edge exactly at the character written (`R8 = &30` at C0 62:
+  the last character shown is 61; `R8 = 0` at C0 24: the first is 24, 200 of 200 lines); jsbeeb
+  main 2.22.1 (#1868) models R8's display enable one character early. The strip's width in pixels
+  is not recorded (phX's second hardware disc, card N, was built to measure it and has no result
+  yet). An R8 write in the blanking is unaffected.
+  Measured: 2026-11-14, jsbeeb and KC's two real Masters. `phX/docs/layer-3-6845.md` (tests 2, 6),
+  `phX/docs/hwtest.md` "Results", `phX/BUGS.md` header.
 - **`R6 = 0` is NOT a blank: it leaks one row.** The row counter is compared at the end of a row,
   so row 0 displays whatever R6 says. Paradroid showed a 640-byte stripe of play buffer for the
   3.7 s of a screen transition, and a top row full of a ZX0 stream at boot. Use R8.
@@ -264,6 +283,98 @@ the comments in the listing are the specification).
   6845's own counters); KC saw the rupture right on b2 2026-10-23; real hardware not yet.
   [strykers-run BUGS.md #15](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md), [decision 67](https://github.com/kieranhj/strykers-run/blob/main/docs/decisions.md)
 
+### The 6845's knife edges on a Master (phX)
+
+Measured by a probe that records every byte the video fetches with the CRTC's counters and every
+CRTC and `&FE21` write with its C0 (`phX/tools/probe_6845.mjs`), jsbeeb 2.10.2 Master, 2026-11-14,
+unless the entry says real; each result from a run where every write of a register landed at the
+same C0 every line. `phX/docs/layer-3-6845.md`.
+
+- **CRTC writes land on 1 MHz boundaries**: every one recorded at an even C0, and moving the code
+  one cycle moved no write (R8 at C0 62 in 200 of 200 lines both ways). **A back-to-back `sta
+  &FE01` costs 6 cycles.** (tests 2, 7)
+- **R1 written mid-line** ahead of the character counter ends the display there (R1 = 80 at C0 62:
+  last character 79). Written to a value the counter has already passed (R1 = 40 at 62), the compare
+  is missed and the line displays on to character 103. (test 3)
+- **One-scanline CRTC frames (R4 = 0, R9 = 0) with R12/R13 per line work for all 268 lines**, the
+  address stepping one cell on 267 of 268 line changes; **R12/R13 written anywhere from C0 96 to 126
+  take effect on the next CRTC line**. (test 1)
+- **Entering one-line frames has to happen in the current frame's LAST line, after C0 = 1** (jsbeeb
+  latches "last line" there). R4/R9 = 0 written one line early: the frame never ends, C9 runs past
+  R9 (8-15 blank), C4 to its 7-bit wrap, and the one-line frames start ~148 lines late. R5 written
+  during the vertical adjust does the same, so the tail around one-line frames has **no adjust**.
+- **On a real Master the last-line latch holds at C0 54**: the next frame's R4 written in the last
+  line at C0 54 is safe on both of KC's Masters (hardware-test card 8; jsbeeb latches at C0 = 1).
+- **C9 16-23 display as RA 0-7; C9 8-15 are blank** on jsbeeb's chip (Evil Influences' RVI shows a
+  C9 of 16 as scanline 0).
+- **jsbeeb's raster row (`video.bitmapY`) steps at HSync** (R2 = 100, width 8: about C0 104), not
+  at C0 = 0: a harness grouping by raster row puts C0 104-127 with the NEXT line's display.
+- **The ULA's teletext bit (`&FE20` = `&F6`) delays display enable by 2 characters** while it is on
+  (jsbeeb).
+- **R0 = 0 freezes the column counter; phX's VSync lock holds R0 = 0 for two lines and then writes
+  R0 = 127**, so the 6845 restarts from a 1 MHz access and its phase against the 1 MHz clock is the
+  same every boot (after funky-fresh's sync). `phX/docs/part-bobs.md`. What R0 = 0 does to DRAM
+  refresh is not measured.
+
+### RVI on the Master (phX)
+
+- **Each R0 write of a burn has one 1 MHz slot.** In jsbeeb, R0 = 1 must land at C0 = 0 (or 1) of
+  the line it shortens; a write one slot early or late, or any R0 written below the current C0,
+  misses the compare and C0 runs on to its 8-bit wrap (values to 244 recorded), costing that line
+  and the next. Writes 6 cycles apart (`sta`/`stx`/`sty &FE01`) each land in their slot. The same
+  slots hold on KC's real Masters: the Clown's burn (R0 = 1 then 127, card 9) and three long-line
+  forms (cards C, D, E) hold every field. jsbeeb also runs Evil Influences' full RVI
+  (R0 = 1 then 95 per line, every line a one-row frame).
+  Measured: 2026-11-14, jsbeeb 2.10.2 and 2.21.1; KC's two Masters. `phX/docs/layer-3-6845.md`.
+- **Burnt lines display their characters 0..R0 while R1 is above R0**: the Clown's 2-character
+  lines each show their character 0, 1-4 us left of the picture (4 stray bytes a burnt unit in
+  jsbeeb). On the real Masters the strays show on the CUB and not on the Sony (below). The cures
+  measured in jsbeeb: a black column in memory (phX's choice), or the teletext-bit blank (costs the
+  unit's first visible line characters 0-3: nothing fits between R0 writes 8 cycles apart).
+- **A burn straight after the long line leaves HSync running through the burnt lines** (they never
+  reach C0 = R2: one HSync per 128 characters) and lights the back porch: see the clamp below.
+  **Keep the back porch black** (phX decision 41), from HSync's start to ~8 characters after it.
+- **A frame may not END on a 2-character (R0 = 1) line**: KC's test (card L) lost sync on the Sony
+  and bent on the CUB; jsbeeb never ends such a frame either (C9 stays 1). End every RVI frame on
+  its long line. Measured: 2026-11-15, real Masters and jsbeeb. `phX/docs/hwtest.md` "Results:
+  tests I-L".
+
+### MA13 (teletext) addressing in a 2 MHz mode (Master)
+
+- **Alternate characters fetch another byte.** MODE 1 with MA13 set (R12/R13 `&2028`, MA11
+  clear) reads the 1K at `&7C00`, RA ignored; the characters of one 1 MHz phase read
+  `&7C00 + (MA AND &3FF)`, the others the same with **MA6 flipped on one scanline and MA6 and MA7
+  flipped on the next** (`XOR &40` / `XOR &C0`; never MA7 alone). Which RA parity takes which was
+  not read. Bits 8-9 never flip.
+  Measured: 2026-11-15, KC's Master (Sony RGB), hardware-test card J, photographs read.
+  `phX/docs/hwtest.md` "Results: tests I-L", `phX/docs/part-bobs.md`. BeebWiki's *Address
+  translation* has the MA6 half (the refresh fetch); the MA7 half is new. **beebjit models MA6
+  only; jsbeeb 2.10.x and b2 neither**; jsbeeb main 2.22.0 (#1859) models the flip: phX's Bobs,
+  re-laid for it, read 640 of 640 there and 0 of 640 on the pin (2.10.2).
+- **The flip follows the 1 MHz clock, not C0**: after phX's VSync lock the even characters flip;
+  one 127-character line swapped them for good (card J's P key). **Every odd-length line since the
+  boot moves the phase**: a part that depends on it keeps every line even. "Mostly" the same at
+  each power-on (KC): to confirm over more power-ups.
+
+### Monitors (what a real RGB CRT shows)
+
+KC's two Masters and monitors, 2026-11-14, hardware-test cards 1-5 and C-H (`phX/docs/hwtest.md`
+"Results"). **No emulator models a monitor's clamp or its visible window**: jsbeeb draws every
+displayed character at full colour wherever it falls.
+
+| | Sony RGB CRT (original Master) | CUB RGB CRT (Cherry Master) |
+|---|---|---|
+| Visible, R2 = 103 | characters 0 to ~92.5; lines 0 to ~264 | characters 0 to ~94.5; lines 0 to 267 |
+| Visible, R2 = 105 | ~1 to ~93.5 | all 96 characters, both edges just on |
+| Black-level clamp | **taken in the back porch just after HSync**: non-black there shifts every colour of the line (white as blue or magenta) | not disturbed by a lit back porch |
+| RVI strays 1-4 us left of the picture | not seen with the picture's colours | seen |
+
+(R1 = 96, 268 lines, R7 putting line 0 32 lines after VSync's start.) The clamp was separated from
+the other explanations by three cards: the burnt lines shown black (right), HSync whole inside a
+112-character line with the porch lit (wrong), the Clown's geometry, lit only from C0 120 (right).
+Neither monitor shows characters 96-99 of an R1 = 100 line at any R2 tried. Design for the
+narrower window and a black back porch.
+
 ---
 
 ## 2. Video ULA and the palette
@@ -294,7 +405,33 @@ the comments in the listing are the specification).
   loop. A pass that takes a cycle extra (an indexed load crossing a page) carries into every
   later write on the line, and the loop is only as stable as its passes are equal. Found by the
   skeptic in Edge's BANK1 review, where moving `ttl_pal` would move the credit bars; Edge's
-  `bank1.asm` comment was corrected (`7363c8b`). Still unmeasured on hardware.
+  `bank1.asm` comment was corrected (`7363c8b`).
+  **Measured on hardware 2026-11-14 (phX), and KC is right: `&FE21` is a 2 MHz access.** On both
+  of KC's real Masters a back-to-back `sta`/`stx &FE21` run changed colour every 4 cycles (stripes
+  on the ticks' spacing, hardware-test card 6 band C), and a palette write landed the same way at
+  an odd (C0 43) and an even (C0 54) character (bands B, B'): not stretched to a 1 MHz cycle.
+  jsbeeb agrees (4 cycles; `lda # : sta` 6). So about 21 independent palette writes fit a
+  128-cycle line, 32 of preloaded values. `phX/docs/hwtest.md` "Results: real Master 128",
+  `phX/docs/layer-3-6845.md`.
+- **A palette (`&FE21`) or ULA control (`&FE20`) write takes effect EARLY on a real Master**, and
+  the two measurements of how early do not yet agree - record both:
+  - **KC's eye (2026-11-14, both Masters)**: about **one MODE 2 pixel (0.25 us, half a character)**
+    before the character it is written in, the same at odd and even C0; `&FE20` the same (card B:
+    the mode change a little left of the tick, as beebjit shows it). jsbeeb 2.10.2 and 2.21.1 put
+    both at the character written, offset 0.
+  - **jsbeeb main 2.22.1 (#1868, from the jsbeeb maintainer's own Master)**: `4 - p` texels (1/16
+    us) into the character BEFORE the one written, p the pixel width - **MODE 2 a whole character,
+    MODE 1 three pixels, MODE 0 five texels**. phX's sine scrollers calibrate to it: their expected
+    pictures shifted 3 MODE 1 pixels give 632 of 632 fields on 2.22.1 (-4, -2, 0: 141, 142, 46).
+  - Unresolved: phX's second hardware disc (card N) was built to settle it and has no recorded
+    result. Either way, **a write meant for the blanking right after the display can recolour the
+    last displayed character**: start such writes a character or two later (phX's logo moved its
+    writes from C0 100 to 102: 0 of 400 fields right on 2.22.1 before, 400 of 400 after), or write
+    an entry that character cannot show.
+  `phX/docs/hwtest.md`, `phX/BUGS.md` header and #1, #2, #7, `phX/CLAUDE.md` Traps.
+- **ACCCON's D (`&FE34` bit 0) mid-line acts AT the character written**, odd or even C0, cleanly,
+  on both real Masters and in jsbeeb (card A) - unlike the palette. It changes which memory the
+  fetch reads, so it is character-aligned. See §4.
 - **Why a palette write glitches pixels, and why all sixteen entries must always be programmed**
   (KC, 2026-09-07, from the ULA's design rather than a measurement): pixels are shifted out one
   bit at a time at the 16 MHz pixel clock, and the resulting bits are masked and looked up in
@@ -315,6 +452,12 @@ the comments in the listing are the specification).
   `addr = base + (y DIV 8)*640 + (x DIV 4)*8 + (y MOD 8)`. **Adjacent 4-pixel columns are 8 bytes
   apart, not 1**; consecutive bytes within a column are consecutive scanlines. This cost a build.
   Measured: Layer 3, jsbeeb. [Paradroid CLAUDE.md](https://github.com/kieranhj/paradroid-beeb/blob/main/CLAUDE.md)
+- **The ULA indexes the 16-entry palette with bits 7, 5, 3, 1 of the byte as it shifts out, and
+  shifts in 1s**, so in MODE 1 a byte's 2nd-4th pixels use other entries than a naive reading
+  gives (all four entries of a colour must be set, as above). phX's MODE 1 Bobs encode their
+  colours on it (cell bytes `&0F`, `&AF`, `&07`, `&2F` with pens on entries 3/7 and 1/15).
+  Measured: 2026-11-15, KC's real Master (hardware-test card K: no wrong pixel) and jsbeeb
+  (`table4bpp`). `phX/docs/hwtest.md` "K".
 - **MODE 2**: 2:1 pixels, two per byte, 640 bytes per character row (`R1 = 80`), 32 bytes per
   character cell; a CRTC unit is 2 px. The right-hand pixel of a byte lives in bits 6, 4, 2, 0
   (the four bits of its logical colour), the left in 7, 5, 3, 1.
@@ -492,6 +635,10 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
   it. Displaying below `&3000` works with D 0 for those lines; b2 showed it right after the fix.
   Its checks had missed it for a day because they timed the writes rather than what the video
   read, and the screenshots happened to be main-screen fields. [strykers-run BUGS.md #15](https://github.com/kieranhj/strykers-run/blob/main/BUGS.md)
+  **And on a real Master (phX, 2026-11-15)**: hardware-test card I sets D = 1 over CRTC addresses
+  `&1800-&1AFF` with main RAM there blue and HAZEL `&C800-&CAFF` green; KC's Master showed the
+  lines **green**: with D set the 6845 reads HAZEL below `&3000`, as jsbeeb and b2 have it. b-em's
+  alternate-frame garbage was b-em's. `phX/docs/hwtest.md` "I", "Results: tests I-L".
 - **ACCCON's X puts shadow under the CPU for all of `&3000-&7FFF`, not just the screen.** A
   renderer that draws into shadow with X set reads shadow's copy of any code or data that lives in
   `&3000-&3FFF`, so that must be mirrored into shadow or kept below `&3000`, and anything the
@@ -511,6 +658,11 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
   bytes with main's copy poked to a pattern, 0 of 3,584 on 80 samples.
   Measured: 2026-10-07, jsbeeb (`tools/verify_panel.mjs`); **real Master 128 2026-10-13** (KC:
   "the panel looks good on real hw"). 1942-beeb (private) decision 141.
+  **To the character, on two real Masters (phX, 2026-11-14)**: D = 1 written mid-line at C0 48
+  and at C0 59 (odd) switches the display at exactly that character, with no glitch character,
+  and D toggled in the blanking every line alternates whole lines cleanly mid-field (hardware-test
+  card A; jsbeeb the same). An odd C0 means `&FE34` is a 2 MHz write. phX's spectrum analyser
+  builds its bars on it. `phX/docs/hwtest.md` "A", `phX/docs/layer-3-6845.md`.
 - **Never read ACCCON back; compose every write.** With X (CPU bank), D (display bank) and Y
   (HAZEL) each owned by a different party - the drawer, the VSync take, the panel fire - one
   writer ORs the parts together (`acc_x OR buf_live OR pan_on`) and is masked across its own
@@ -520,6 +672,18 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
   ORed into every write: 1942's `pan_on` lived on a MOS vector byte, was non-zero at boot, and put
   `game_init`'s state into shadow - every enemy block of every stage came a block early.
   Measured: 2026-09-10 to 10-07, jsbeeb. 1942-beeb (private) decisions 43, 141; `BUGS.md` #47.
+- **The other method: change one bit in place with `tsb`/`trb`** (phX's rule: "only `tsb`/`trb` or
+  read-modify-write - Y must never drop", since its disc layer lives in HAZEL). A `tsb`/`trb` on
+  `&FE34` reads ACCCON back, but as one instruction: an IRQ cannot land between its read and its
+  write, so an interrupt that changes ACCCON and restores it on exit cannot be undone by it. A
+  multi-instruction `lda`/`ora`/`sta` must be masked, as 1942's composer is. The two methods agree
+  on the point that matters: no party may write a stale copy of another party's bit. phX runs
+  this way through the whole demo, played on KC's real Master. `phX/CLAUDE.md` Traps.
+- **Never set ACCCON bits 5-7 (TST, IFJ, IRR).** jsbeeb ignores them, so a stray value there
+  passes every emulator check; what a real Master does with them was not observed (phX's
+  analyser draw once wrote CRTC R0 values into ACCCON). phX's `tools/acccon_watch.mjs` checks every
+  ACCCON write over the whole demo. `phX/CLAUDE.md`
+  Traps (B7 step 0).
 - **A late frame flipped mid-field shears sprites, never a double-buffered scrolling background.**
   Both buffers hold the same level bytes at the same addresses, so a flip part way down the field
   cannot mark the scenery, while every sprite jumps at the cut. Flipping at once instead of
@@ -663,6 +827,13 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
   next port: put real hardware in the loop at the first layer that touches the disc, the CRTC or
   BREAK, not at release** - 1942's first real-hardware play was day 22 of 47.
   Reported: KC, real Master 128, 2026-09-28 to 10-23.
+- **phX took that lesson from its first day**: KC's real Master was in the loop from the disc
+  driver's step (its decision 36) and a hardware-test disc of 21 programs (then a second of four)
+  asked the knife-edge questions before the parts that stand on them were built. What it found that
+  jsbeeb 2.10.2 did not: the palette and R8 writes early (§1, §2), the MA13 flip (§1), the monitors'
+  clamp and windows (§1), the 1770's early READ ADDRESS INTRQ (§6). Cards 1-9 and A-E were run on a
+  second Master (the Cherry, CUB monitor) and agreed on every chip fact.
+  Reported: KC, two real Master 128s, 2026-11-14 to 11-17. `phX/docs/hwtest.md`.
 
 ### Target configurations (paradroid-beeb issue #18)
 
@@ -700,6 +871,13 @@ advancing and `&0D00` reads `&40`.
   15. The Master was silent either way. The fix is `install_irq` writing attenuation 15 to all
   four channels (Edge's `sn_write` sequence); afterwards the release B read 15 on channel 0 and
   played. Measured: 2026-09-11, jsbeeb.
+  **The same bites a boot program that waits for a key**: phX's hardware-test menu, `*RUN` from
+  `!BOOT`, waited in OSRDCH for ever until it did `cli` (jsbeeb Master). `phX/docs/hwtest.md`
+  "Traps found on the way".
+- **On the Master, `&028C` is not the current language ROM**: under a `*RUN` boot it read `&FF`,
+  and restoring ROMSEL from it paged ANDY (bit 7) over the DFS. Save ROMSHAD (`&F4`) instead.
+  Measured: 2026-11-14, jsbeeb Master (MOS 3.20). `phX/docs/hwtest.md` "Traps found on the way".
+  Whether `&028C` holds `&FF` at other moments is not measured.
 - **OSBYTE 126 would not have stopped that beep: at a `*RUN` boot no ESCAPE is pending.** At
   the stub's first instruction, `&FF` (the ESCAPE flag) read `&00` and `&0276` (ESCAPE effects)
   read `&00` on `B-DFS1.2` and `Master` alike. On the B, channel 0 was already sounding at 523
@@ -776,6 +954,10 @@ advancing and `&0D00` reads `&40`.
   paged.** An IRQ that needs a bank must save the ROMSEL shadow (`&F4`), page, and restore both;
   writing the shadow first is what keeps the claim consistent.
   Established: 2026-08-21, jsbeeb (Paradroid's sound tick, ~60-80 cycles of overhead). [Paradroid layer-11e-sound.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-11e-sound.md)
+  **Measured, the paging alone costs 16 cycles**: phX's music tick (save `&F4`, page bank 4 into
+  ROMSEL and `&F4`, restore both) went from a mean of 152 to 168 cycles, worst 524 to 540, 1,299 of
+  1,299 ticks identical. Measured: November 2026, jsbeeb Master (`verify_music.mjs`).
+  `phX/docs/memory-map.md`.
 - **Bank code may call main RAM freely; main RAM may call into a bank only with that bank paged**,
   and a bank routine may not call main-RAM code that pages a different bank and restores somebody
   else's. Both ports broke the second rule within a day of writing it down.
@@ -1055,6 +1237,17 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   `&0258` = 0 keeps it; `brk_arm` then `&0258` = 0 clears it again. The clear also zeroes `&0287`,
   so the intercept must be re-armed by the next boot. The `&8046` reading itself was not
   re-disassembled; the rule is confirmed by behaviour.
+- **phX's form of the intercept, and how it was lost on a real Master.** phX (decision 59) drops
+  `*FX 200,2` altogether: `*FX 247-249` point the intercept at 8 bytes at `&0D20` that clear the
+  System VIA's IER and restart the reset, so the MOS takes every BREAK for a power-on (a soft BREAK
+  needed the MOS's HAZEL workspace `&DE00-&DFFF`, the DFS's, page `&0D` and `&0258` back - measured
+  in jsbeeb by restoring regions from a cold machine). On KC's Master a BREAK then left the DFS
+  unselectable: one of phX's overlays, copied into page 2, overwrote the `JMP` at `&0287` 196
+  fields in, so every later BREAK was soft. **Its SHIFT+BREAK check passed throughout**, because
+  SHIFT+BREAK reboots the disc either way: test a PLAIN BREAK, at many points of the run (phX's
+  `tools/verify_break_plain.mjs`: eight, the banner and `*CAT` after each).
+  Measured: 2026-11-15/16, jsbeeb Master and KC's real Master. `phX/docs/decisions.md` 59,
+  `phX/docs/hwtest.md` "B7".
 
 ### MOS low RAM a game that owns IRQ1V and the NMI may use (Master, MOS 3.20)
 
@@ -1071,6 +1264,11 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
   `lib/test/range_free.mjs` is the instrument, with the game-driving as a module the port supplies.
   Measured: 2026-10-07, jsbeeb Master; 1942-beeb (private) `tools/measure_lowram.mjs`,
   `tools/measure_break.mjs`, decision 141 L2. Not measured on hardware or on MOS 3.5.
+- **phX's use, after `*FX 140` with its own NMI and IRQ, played on KC's real Master**: the zero
+  page all its own but `&A0` (its 1770 NMI's), `&F4` (ROMSHAD, written with ROMSEL always) and
+  `&FC` (the IRQ's saved A) - the MOS's `&E0-&FF` included; and `&0D40-&0D9E` of the NMI page for
+  overlay code (its NMI routine at `&0D00`, the BREAK intercept at `&0D20`). HAZEL stays paged for
+  the whole run, as 1942's. `phX/docs/memory-map.md`, `phX/CLAUDE.md`.
 
 ### Driving the 1770 yourself (Master)
 
@@ -1102,6 +1300,42 @@ whole-track read 506,810 cycles, a one-track seek 12,151**. jsbeeb's Master CMOS
   it, and a harness can emulate it on older versions by adding the delay.
   Measured: 2026-10-10, KC's real Master (`-BgDiag` build). 1942-beeb (private) decision 154,
   `src/bgread.6502`.
+  **jsbeeb 2.10.2 does settle: 30 ms on every command with E**, and it skews each track ~3
+  sectors on the last (phX, MEASURED), so a loader cannot guess where sector 0 is - phX reads an
+  ID after each seek. Its track costs ~12.7 fields on 2.10.2 (the step, a READ ADDRESS with E -
+  36-38 ms to the next ID - and a revolution plus a sector). jsbeeb main 2.22.1 reworked the
+  1770's timings (#1860); what that does to the settle and the skew is not recorded.
+  `phX/CLAUDE.md` Traps, `phX/docs/hwtest.md` "B3".
+- **A real 1770 raises READ ADDRESS's INTRQ almost at once after the sixth ID byte**, and jsbeeb
+  2.10.2 ~96 us later (94.5 us mean over 32 timed after the sixth DRQ). Because the NMI line is
+  DRQ OR INTRQ and the NMI is edge-triggered, an INTRQ that rises while DRQ is still up makes no
+  new edge, and one taken by a byte routine still armed is never acknowledged: no NMI comes again.
+  phX's first published WIP stopped on its loading card that way on KC's Master, Gotek and real
+  floppy alike, while stock jsbeeb loaded it (a jsbeeb patched to raise that INTRQ 4-32 us after
+  the sixth byte reproduced the hang; 48 us and later loaded). **Never wait on READ ADDRESS's INTRQ: in the sixth byte's
+  NMI, disarm the routine and look at BUSY**; if the command is over, read the status and take the
+  next step there. The jsbeeb maintainer's Master, timed by phX's 1770 timing disc for jsbeeb
+  #1850/#1852 (FM, from the last byte's DRQ to INTRQ): **READ ADDRESS 33.0 us, READ SECTOR 168,
+  WRITE SECTOR 360**; jsbeeb main read 33 / 167-168 / 360-361 on it (2026-11-15). MFM is not
+  settled here.
+  Measured: 2026-11-15, KC's real Master (a diagnostic disc's readout), jsbeeb 2.10.2 and 2.21.1.
+  `phX/docs/hwtest.md` "B7" and "F", `phX/docs/done.md`.
+- **Nested NMIs happen, so the NMI routine keeps A on the stack.** A late INTRQ NMI can nest in the
+  byte routine: one that saved A in zero page (`&A0`) had it overwritten, and jsbeeb, with its
+  READ ADDRESS INTRQ forced to 20 us, died at the next part's entry; and a nested NMI taken as a
+  seventh byte stores it past the ID's six (phX puts the byte it lands on back). A chain handler
+  entered straight by `JMP` must push A itself.
+  Measured: 2026-11-15, jsbeeb with the INTRQ forced early (the real-Master symptom being the hang
+  above). `phX/docs/hwtest.md` "B7", `phX/CLAUDE.md` Traps.
+- **A disc loader that runs while a demo plays** (phX, every window byte-exact on jsbeeb 2.10.2
+  and 2.21.1 and loading on KC's Master): a READ ADDRESS after each seek, then the track in two
+  read commands, the second started in the gap before sector 0's ID; each next command issued from
+  the NMI chain, because **an IRQ longer than that gap costs a revolution** (a 5K-cycle draw in a
+  window did); a warm-up seek about 40 fields before each window; a watchdog over every step (40
+  idle fields: seek the track again); reads only behind static screens. A double-sided `.dsd`
+  carries side 1 on from the cylinder where side 0's files end.
+  `phX/CLAUDE.md`, `phX/docs/hwtest.md` "B3", "B4", "B7", `phX/docs/decisions.md` 32, 58,
+  `phX/docs/memory-map.md`.
 - **A non-blocking sector reader costs ~35 cycles a byte in its NMI routine** and lets play run
   on: 1942 reads one sector a 25 Hz tick during play, walking each track with a coprime skip,
   copying via a fixed staging page because the NMI's target must not move under a ROMSEL or
@@ -1264,6 +1498,23 @@ property of the whole IRQ path and drifted ~6 us later than the calibration as t
   the bass nest (CLI after each fire's CRTC writes) is the unbuilt cure.
   Measured: 2026-11-07/08, jsbeeb (`verify_music.mjs`'s toggles line). isometrikum
   `docs/layer-2-music.md`, square-roots `PLAN.md`
+
+### A whole demo on one cadence, and the SN from an AY (phX, Master)
+
+- **One T1 chain, two latches, a 0-14-cycle slide, for a 10-minute demo**: phX's draw is entered
+  at the same beam position (C0 0) every field of 16,302 (the boot's black, every part, the
+  restart), every field 39,936 cycles, VSync once a field; only fields with disc NMIs enter late
+  (0-35 cycles behind the card, 0-67 in all four windows), because an NMI (35 cycles a byte) can
+  delay the IRQ beyond what the slide absorbs - so a part whose draw is line-exact must not run
+  while the disc loads. Measured: 2026-11-15, jsbeeb (`verify_frame.mjs`). `phX/docs/design-backbone.md`
+  "B3 built", "B4 built", §4.4.
+- **AY to SN with no software bass** (phX decision 4: nothing may interrupt a cycle-counted
+  line): the bass is SN periodic noise clocked by tone 2, which plays at **N / 15** - so close AY
+  periods collapse (13 and 14 both give 2) and an arpeggio there goes flat. Which AY channel is
+  the bass changes **within** a tune (decision 65: choose it by section, not by tune). The SN
+  write in the tick is **32 cycles a byte** with the next byte read while WE is low (19 cycles
+  low, data set 4 cycles before WE falls) - jsbeeb; whether a real SN wants WE held longer is not
+  measured. `phX/docs/layer-2-music.md`, `phX/docs/design-backbone.md`.
 
 ---
 
@@ -1527,6 +1778,17 @@ again.*
 - **`frame_count` counts the CRTC's own frames, not 50 Hz ones**, which is why it climbs 14 in
   258k cycles when the CRTC is left free-running in a short shape.
   Measured: 2026-08-31. [Paradroid raster-timing.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/raster-timing.md)
+  **More exactly, it counts C4 = R6 matches and nothing else** (`Video.frameCount`, incremented
+  where the vertical display ends, `video.js`): not VSync, not the frame's end. A field whose
+  display is cut by R8 and never reaches R6 does not count, and a frame that meets R6 twice counts
+  two. **The web front end decays its PAL phosphor by that count** (`web/display.js`, since 2.1.0,
+  blending with "lighten"), so on bbc.xania.org a demo whose frames never reach R6 turns white as
+  every pixel keeps its brightest colour - while every headless harness passes, because
+  `MachineSession` has no display. A real 6845 needs no R6 match. phX's rule: every part meets C4 =
+  R6 exactly once a field inside lines R8 already blanks, and its frame checks fail unless the
+  count steps one a field.
+  Measured: 2026-11-14, jsbeeb 2.10.2 and main 2.21.1. `phX/docs/layer-3-6845.md` "jsbeeb versions:
+  the field count, and the web display's phosphor".
 - **jsbeeb's `B-DFS1.2` model has eight sideways RAM banks**; a Master model has 4-7.
   Measured: 2026-08-29. [Paradroid layer-13-compatibility.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-13-compatibility.md)
 - **`read_sound_state` and the SN76489 write capture are the instrument for sound**: CH0 tone 284 =
@@ -1564,6 +1826,24 @@ again.*
   because the cycle after may be programmed R4 = 0.
   Measured: 2026-11-07, jsbeeb 2.10.2. isometrikum `docs/layer-3-display.md`, `CLAUDE.md` Layer 3
 
+- **jsbeeb versions: the kit's jsbeeb facts are on the pinned 2.10.x unless an entry says
+  otherwise, and jsbeeb main 2.22.x differs on a real Master's behalf.** In November 2026 the
+  jsbeeb maintainer, from his own Master and phX's hardware-test reports, changed three
+  things on main (2.22.1, c97b2c75): **the MA13 flip** (#1859: §1), **palette, `&FE20` and R8
+  writes landing a character early** (#1868: §1, §2) and **the 1770's timings** (#1860: §6). So the
+  following are **pin only** - true of 2.10.x, not of main: R8's edge and a palette write "at the
+  character written" (§1, §2); MA13 fetching one byte per character (§1); READ ADDRESS's INTRQ ~96
+  us after the sixth byte (§6). The 6845's counters, the one-slot RVI writes and the field length
+  agree between 2.10.2 and main 2.21.1 for everything phX does. phX runs its suite on both (the pin,
+  and main through `JSBEEB_SRC` pointed at a checkout's `src`) and answers a real-Master question
+  on main; expected pictures can differ per version (its sine scrollers and Multi-FX carry one set
+  for each). `phX/BUGS.md` header, `phX/CLAUDE.md` "Two jsbeeb".
+- **A real Master's RAM powers up with junk, and the junk survives BREAK** (the entry above, from
+  Paradroid): phX's fix disc behaved differently on each of KC's runs (three after a BREAK, one
+  from cold power-on), so its harnesses take `JUNK=seed` (every RAM junk, a soft BREAK, then the
+  boot) and "nothing may read RAM it did not write" is a rule. `phX/docs/hwtest.md`
+  "B7", `phX/CLAUDE.md` Traps. The cold run's own causes are not established.
+
 ### b-em, b2 and beebjit
 
 **b-em is no longer used (KC, 2026-09-07); the second opinion is b2 or beebjit.** The b-em
@@ -1572,7 +1852,8 @@ observations below are kept as history. To boot a disc: beebjit `beebjit -0 game
 (`-c CONFIG` picks a saved machine configuration). Both from the tools' own help text, 2026-09-07.
 
 - **b-em shows garbage on alternate frames for a displayed area below `&3000` with the shadow D bit
-  set; jsbeeb displays it.** Real hardware untested.
+  set; jsbeeb displays it.** (Until 2026-11 this said "real hardware untested". A real Master reads
+  HAZEL there, as jsbeeb and b2 do: §4, phX card I. b-em is the odd one out.)
   Measured: 2026-09-02, b-em (KC) and jsbeeb. [Edge layer-2-display.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-2-display.md)
 - **b2 shows a misplaced (right-length, wrong-phase) field that jsbeeb does not**; it is the
   instrument for TV resync questions.
@@ -1601,8 +1882,13 @@ Kept separate so they are not mistaken for the rest:
   encoding. [Paradroid layer-11e-sound.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-11e-sound.md)
 - The reverse transition out of a rupture (`UninstallIrq` then a plain frame) costs at most one
   field, unmeasured beyond the one 376-line field recorded. [Paradroid raster-timing.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/raster-timing.md)
-- The Master mid-frame bank switch, the wrap-inside-bank behaviour and the "nothing displayed below
-  `&3000`" rule are emulator results (jsbeeb; b-em for the last) with no real-hardware confirmation. [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
+- The wrap-inside-bank behaviour is an emulator result (jsbeeb) with no real-hardware
+  confirmation. [Edge CLAUDE.md](https://github.com/kieranhj/edge-beeb/blob/master/CLAUDE.md)
+  (This entry also listed the Master's mid-frame bank switch and "nothing displayed below `&3000`";
+  both are now measured on real Masters - 1942's panel and phX's cards A and I, §4.)
+- phX's hardware-test results not yet in: the second disc's cards M (which RA parity takes MA13's
+  extra `XOR &80`), N (R8's early edge to the pixel, odd and even, and the palette's) and F/R (the
+  1770's end-of-command timings on KC's Master) have no recorded real result; nor has MFM timing.
 - The vertical total adjust displaying under `R6 > rows` is a jsbeeb 1.25.0 result on a Master
   (1942 Layer 2b) and on a Model B (`template/examples/vscroll`), both 2026-09-08. Rich
   Talbot-Watkins's demo relies on the same behaviour and runs in jsbeeb too, but nothing has

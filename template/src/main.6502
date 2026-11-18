@@ -515,6 +515,7 @@ MACRO BUILD_STAMP
     BOOT_FLAG MASTER, "MASTER: Master 128 build"       \ legal under RELEASE
     BOOT_FLAG SHIFT, "SHIFT: a relocation test build"  \ the same in both halves of the pair
     BOOT_STAMP_TIME
+    EQUS "COMMIT ", BUILD_COMMIT, 13                   \ build_stamp.py: the WIP link's ?v=
 ENDMACRO
 
 SECTION Info, org = INFO_STAGE, guard = INFO_STAGE + 256, filename = "INFO"

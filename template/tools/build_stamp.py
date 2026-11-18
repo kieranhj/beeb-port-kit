@@ -6,12 +6,13 @@ when its contents change.
   python tools/build_stamp.py BUILD_DIR CONFIG_NAME [NAME=VALUE ...]
 
 writes two files into BUILD_DIR:
-  build_time.6502  one line, BUILD_TIME = "...", which main.6502 INCLUDEs for
-                   the build stamp - INFO and the boot (Baron has no TIME$);
-  CONFIG_NAME      the time and every NAME=VALUE flag (RELEASE=0, MASTER=0),
-                   one per line. The Makefile makes the raw image depend on
-                   this file, so a new stamp or a changed flag reassembles and
-                   nothing else does.
+  build_time.6502  BUILD_TIME = "..." and BUILD_COMMIT = "...", which
+                   main.6502 INCLUDEs for the build stamp - INFO and the boot
+                   (Baron has no TIME$);
+  CONFIG_NAME      the time, the commit and every NAME=VALUE flag (RELEASE=0,
+                   MASTER=0), one per line. The Makefile makes the raw image
+                   depend on this file, so a new stamp or a changed flag
+                   reassembles and nothing else does.
 
 THE TIME IS THE SOURCE'S, NOT THE CLOCK'S, so two machines building the same
 commit produce the same image and its SHA256 can be compared between them
@@ -25,6 +26,13 @@ carried the wall clock). In order:
      so on stderr.
 Always UTC, always English month names (strftime in the C locale, which is
 the locale Python starts in).
+
+THE COMMIT is HEAD's short hash (7 digits), with the same "+" when the tree
+is dirty, or "none" outside a git checkout: the hash a WIP link carries as
+?v=<commit> (phX, 2026-11-17), so INFO says which commit a disc was built
+from. Commit BEFORE building a disc you publish, or it names the commit
+before. (The time is the last commit touching the directory; the commit is
+HEAD, so the two can differ when the last commit touched only other files.)
 
 WRITTEN ONLY WHEN CHANGED. make decides by mtime, so rewriting an unchanged
 file would make every build reassemble - Paradroid's Makefile hit exactly
@@ -81,8 +89,13 @@ def main(argv):
 
     t, suffix = source_time()
     stamp = time.strftime("%d %b %Y %H:%M:%S", time.gmtime(t)) + suffix
-    write_if_changed(build / "build_time.6502", f'BUILD_TIME = "{stamp}"\n')
-    lines = [f"BUILD_TIME={stamp}"] + list(argv[2:])
+    try:                                # the commit: the WIP link's ?v= (phX, 2026-11-17)
+        commit = _git("rev-parse", "--short=7", "HEAD") + suffix
+    except (OSError, subprocess.CalledProcessError):
+        commit = "none"
+    write_if_changed(build / "build_time.6502",
+                     f'BUILD_TIME = "{stamp}"\nBUILD_COMMIT = "{commit}"\n')
+    lines = [f"BUILD_TIME={stamp}", f"BUILD_COMMIT={commit}"] + list(argv[2:])
     if write_if_changed(build / config, "\n".join(lines) + "\n"):
         print(f"  stamp: {stamp} {' '.join(argv[2:])}")
 

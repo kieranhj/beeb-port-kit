@@ -18,7 +18,12 @@ Two **Amstrad CPC demos** followed (Vanity's 4K intros Isometrikum and Square Ro
 Model B with 32K of sideways RAM in November 2026, the second overnight from the first): a packed
 Z80 binary with no source, effects locked to the field, a VideoNuLA set with the CPC's palette, and
 a size crunch to 7,582 bytes. What they added is `docs/cpc-demo-porting.md`, `template/tools/cpc/`,
-two skills and two library files.
+two skills and two library files. A third, **phX** (Condense's 6128 demo, ported to a Master 128 in
+November 2026), was the opposite of a 4K intro: eighteen cycle-exact parts, a two-sided disc
+loaded behind static screens, five minutes of music, and the original's own source published by
+its authors. It added that guide's sections 13-19 (the source review, a WinAPE gate on the
+reference, the disc as the specification, the sequence's backbone), real-Master measurements
+from a hardware-test disc, and two jsbeeb versions in the loop.
 
 **Be clear about what this is.** Everything under `docs/`, `skills/` and `PORTING.md` is written
 to be loaded into an agent's context: dense, exhaustive, and cited, because that is what makes an
@@ -163,7 +168,11 @@ the header when you fork it.
 
 ## Provenance
 
-Every line of new code in the three ports was written by Claude Code, directed and reviewed by
-Kieran Connell; 1942's disc driver derives from scarybeasts' quicdisc, relicensed for it, and its
-title player is his p15k3 (which the kit links to rather than carries). The measurements say what they were taken on and when; nothing here is believed
+Every line of new code in the three ports, and in the CPC demo ports after them (Isometrikum,
+Square Roots, phX), was written by Claude Code, directed and reviewed by Kieran Connell; 1942's
+disc driver derives from scarybeasts' quicdisc, relicensed for it (phX's 1770 loader forks the
+kit's copy), and its title player is his p15k3 (which the kit links to rather than carries);
+`lib/unshrinkler.6502` is Dudek and Fusik's unShrinkler, translated (zlib licence). The CPC
+demos' own code and data, and phX's published source, are their authors' and appear here
+only as facts and short descriptions. The measurements say what they were taken on and when; nothing here is believed
 without one. MIT, see [`LICENSE`](LICENSE).

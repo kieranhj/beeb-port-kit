@@ -171,6 +171,14 @@ port will be asked how small it is (section 11 there: the crunch, 10,623 -> 7,58
 instrument, and the skills `beeb-cpc-reference` and `beeb-crunch` the procedures. Its section 12
 is what building a second port overnight from the first got right and wrong.
 
+**phX** (Condense's 6128 demo, ported to a Master 128 in November 2026) was the other end of the
+scale: eighteen cycle-exact parts loaded from a two-sided disc behind static screens, five minutes
+of music, and the original's own source published by its authors. Its sections there (13-19):
+read the source first and review against it last; the picture machine is the reference, gated
+against WinAPE; the disc and its drive are the specification; a backbone - clock, memory over
+time, hand-overs, disc windows - is built on placeholders before any part; and the colour, RVI
+and offline-music decisions a big demo needs.
+
 ### 2.2 Choose the machine
 
 The baseline is a **BBC Model B with at least 16K of sideways RAM**, not necessarily 64K. Use
@@ -307,6 +315,12 @@ Commit slicing follows the same shape: one mechanism per commit, with the measur
 body ("byte-identical over 40 passes", "0 of 10,240", before-and-after cycles). Doc-sync commits
 are separate and frequent.
 
+Two optional artefacts earned their place in phX: a **dossier per effect** (`docs/part-*.md`:
+what the original does, measured, the options with their pictures, the decision, the oracle),
+and **write-up pages for readers outside the project** - KC asked for one of every CRTC and
+monitor finding, for emulator authors. Neither is needed for a game; a demo of many effects
+wants the first.
+
 ### 3.1 After the layers, work comes as briefs
 
 The layer table carries a port to one playable level. What comes after - the other levels, a boss,
@@ -350,6 +364,15 @@ rules came with it:
   environment variable or a `-D` whose default is the shipped value), and let the owner play them.
   1942's eight-or-sixteen headings question was answered from three test builds in one sitting
   (decision 85).
+
+**Choices taken overnight go in a file of their own until agreed** - the `TAKEN` status, moved
+out of the table when there are many. phX's owner asked, one
+night, for the remaining batches to be built on sensible choices and documented for the morning:
+`docs/decisions-provisional.md` is that index - each row the choice, the decisions it follows,
+the alternatives and where the side-by-side pictures are - and a row moves to `decisions.md` only
+when KC agrees it, citing the row it came from (fifteen of decisions 43-58 do). The main table
+then carries only what the owner has said; the provisional file grew to over a hundred rows,
+which is the argument for keeping them out of it.
 
 Keep the row short and the evidence in the brief. `python -m beeb_port_kit.check_decisions
 docs/decisions.md` (the kit's `py/`) checks the table still renders - a blank line between two rows
@@ -942,7 +965,10 @@ HAZEL - to a Model B with 64K of sideways RAM in any four banks
   **two discs from one commit**, the debug build and the release build (1942: `-wip` and `-rc`),
   because the release differs in kind (no debug keys, the title it ships with), and each disc's
   `INFO` names the commit. "Give me a build" means the local disc; publish only when asked
-  (skill `beeb-publish-wip`).
+  (skill `beeb-publish-wip`). **Commit before building a disc you publish**: the stamp is the
+  last commit's (`tools/build_stamp.py` writes `BUILD_COMMIT`, the short hash with `+` for a dirty
+  tree, beside `BUILD_TIME`), so a disc built before the commit names the commit before it; and
+  put that hash in the link (`?v=<commit>`), so a tester's report says which build it was.
 - **Freeze features at the first release candidate.** After rc1 only fixes go in, and a feature
   restarts the count. 1942's rc1 to v1.0 took nine days and five candidates because three features
   landed inside it, one of them a whole enemy engine between rc4 and rc5. Skill `beeb-release` is
@@ -1001,6 +1027,14 @@ order of importance:
    4.0.0 brought jsbeeb 2.x, which changed the key names and the type harnesses pass to `keyDown`.
    The template's headless harnesses load the jsbeeb **that pin** installed, so they measure on
    the MCP's emulator (`tools/jsbeeb_src.mjs`).
+   **Run a second jsbeeb beside the pin once hardware questions start.** jsbeeb's main branch
+   moves faster than the MCP: phX's pin was 2.10.2, while main (2.22.1) had the jsbeeb
+   maintainer's real-Master fixes - the MA13 address flip (#1859), the 1770's timings (#1860),
+   palette and R8 writes where a Master shows them (#1868). `JSBEEB_SRC=<checkout>/src` points
+   every harness at main; phX's suite runs on both, a real-Master question is answered on main,
+   and an oracle whose expected picture depends on the version keeps **one expected file per
+   version** (the Bobs score 0 of 640 on the pin, which has no MA13 flip, and 640 of 640 on main).
+   `BUGS.md` lists what differs between the two.
 3. **The owner decides, the assistant builds.** Decisions are asked as numbered questions and
    answered before code; the answers go in `decisions.md`. Taste calls (a speed, a colour, an
    auto-fire rate) are played, not calculated, and the doc says whose number it is.
@@ -1019,11 +1053,25 @@ order of importance:
    step rate (`BUGS.md` #85), a 1772's different step rates, garbage on the panel's lines (#87) and
    BREAK leaving RAM uncleared (#92) - on day 22 and after. Any disc access inside play is gated on
    real hardware, because emulator disc timing is not trusted.
+   **Build a hardware-test disc early**, before the effects that stand on the knife edges.
+   phX's (`docs/hwtest.md`, day 1) is one DFS disc of 21 numbered tests behind a MODE 7 menu
+   (a key runs a test, SPACE returns, SHIFT+BREAK if it hangs), each assembled from the real build
+   with a `-D` switch and labelled on screen so a phone photo explains itself; a **checklist for
+   the phone** (one question per test: "the top 8 lines green, blue or something else?"); what
+   jsbeeb shows, for the photos to be compared with; and **results per machine and monitor**
+   (two Masters, a Sony and a CUB RGB monitor), each test's verdict against jsbeeb. It settled
+   the HSync position (two decisions), the palette and shadow switches' timing, the monitors'
+   black-level clamp and what ACCCON D shows below `&3000` - none of which an emulator could.
 8. **Keep the rules file inside its budget** (section 3) and run a documentation pass when it, or
    `PLAN.md`, starts to narrate: skill `beeb-doc-pass`. 1942 needed nine.
 9. **Branches**: one per brief; merged or deleted within a day of the owner's yes. A git worktree
    wants `bin/` copied into it; a `tools/output` junction in one is removed with `rmdir`, never
-   `rm -rf`, which follows it.
+   `rm -rf`, which follows it. **The same holds for every data junction**: phX's worktrees share
+   `work/` and `extracted/` (the reference runs and the original's files, in no repository) as
+   junctions to the main checkout, and `git worktree remove --force` and recursive deletes follow
+   them - a tidy-up deleted part of the main `work/` that way. List the links first (PowerShell
+   `Get-ChildItem -Recurse -Attributes ReparsePoint` filtered on `LinkType`, since OneDrive's
+   placeholders are reparse points too), unlink each without recursion, then delete.
 10. **Unattended jobs work, and fail in known ways.** 1942 built its front end, a RAM hunt and four
     enemy-behaviour decisions overnight. What went wrong: decisions taken provisionally were
     later reversed; a real-hardware gate was bypassed and the branch merged before the owner's
@@ -1094,7 +1142,8 @@ the third:
   the cycles given back for RAM, listed to win back.
 - [Stryker's Run `docs/grind/README.md`](https://github.com/kieranhj/strykers-run/blob/main/docs/grind/README.md): the micro-optimisation grind's
   ledger - every proposal, its skeptics, its gate result.
-- `docs/cpc-demo-porting.md`, standing in for the two CPC demo ports (Isometrikum, Square Roots),
-  whose repositories are not public: the Z80 reference, the field-locked and free-running
-  references, the display rings sized by replay, the crunch, and the overnight second port.
+- `docs/cpc-demo-porting.md`, standing in for the three CPC demo ports (Isometrikum, Square
+  Roots, phX), whose repositories are not public: the Z80 reference, the field-locked and
+  free-running references, the display rings sized by replay, the crunch, the overnight second
+  port, and phX's source review, WinAPE gate, disc-as-specification and backbone.
 - All four `BUGS.md` files, end to end (Stryker's Run's #12, #15 and #17 especially).
