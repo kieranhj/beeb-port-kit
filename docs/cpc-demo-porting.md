@@ -547,7 +547,8 @@ section 14).
 
 **When the effects are the beam's position, the picture machine is the reference.** Neither
 logical machine of section 3 applies: the effects are the timing, and a machine that removes it
-removes the demo. phX's `phxrun.py` is a 6128 at CPC timing (`cpctime.py`) with a
+removes the demo. phX's `phxrun.py` (the kit's `template/tools/cpc/cpcboot.py`, with
+`cpcvideo.py`, `fdc.py`, `disc.py`) is a 6128 at CPC timing (`cpctime.py`) with a
 6845 at character resolution, the Gate Array, the uPD765 and the disc (section 15); it boots the
 DSK and records each field's picture, CRTC and I/O. **Pick the CRTC type the demo's own test
 selects**: phX's loader tests the CRTC and takes per-type paths, and the reference answers type
@@ -722,8 +723,9 @@ and none by an emulator: no emulator models a monitor.
 ## 19. Music offline: the AY stream for a raster demo
 
 Section 9's `ay2sn` runs on the 6502 every field. A cycle-exact demo cannot spare its interrupts,
-so phX converts **offline** (`tools/music_extract.py`, `music_convert.py` on the kit's
-`py/beeb_port_kit/ay2sn.py`, `music_pack.py`) and the 6502 only replays bytes:
+so phX converts **offline** (the kit's `template/tools/music_extract.py`, `music_convert.py` on
+`py/beeb_port_kit/ay2sn.py`, `music_pack.py`, with the tunes and bass sections in a JSON config:
+`music_config_example.json`; skill `beeb-ay-offline`) and the 6502 only replays bytes:
 
 - **The stream**: one record a field, a count n then n bytes exactly as the SN takes them (tone
   latch and data, attenuation, noise control), only what changed against what the chip holds - a

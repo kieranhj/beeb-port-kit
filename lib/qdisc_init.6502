@@ -39,7 +39,9 @@
 \ *	the second sides of physical drives 0 and 1, so 2 selects drive 0
 \ *	side 1: qd_read's side 0 is THAT side and its side 1 the other.
 \ *
-\ *	THE INCLUDER DEFINES nothing beyond qdisc.6502's QD_NMI_A.
+\ *	THE INCLUDER DEFINES nothing. From the phX port (2026-11): the NMI
+\ *	routine keeps A on the stack (PHA / PLA), and qd_init's restore
+\ *	leaves the next read with E (qdisc.6502's header).
 \ *	Clobbers: qd_cfg and qd_init clobber A, X, Y.
 \ *
 \ *	Fork this into your project; keep this header.
@@ -49,30 +51,31 @@
 \ absolute reference to itself is QD_NMI + an offset, so a byte added
 \ above moves them - the ASSERTs say so.
 .qd_nmi_src
-    sta QD_NMI_A                ; +0  the first byte is the arm/disarm switch
-    lda QD_DATA                 ; +2
-    sta &FFFF                   ; +5  its operand, +6/+7, walks the buffer
-    inc QD_NMI_ST               ; +8
-    beq qd_nmi_page             ; +11
-    lda QD_NMI_A                ; +13
-    rti                         ; +15
+    pha                         ; +0  the first byte is the arm/disarm switch; A ON THE STACK
+                                ;     (phX: a nested NMI's second STA zp lost the program's A)
+    lda QD_DATA                 ; +1
+    sta &FFFF                   ; +4  its operand, +5/+6, walks the buffer
+    inc QD_NMI_ST               ; +7
+    beq qd_nmi_page             ; +10
+    pla                         ; +12
+    rti                         ; +13
 .qd_nmi_page
-    inc QD_NMI_ST + 1           ; +16
-    dec QD_NMI_PAGES            ; +19
-    beq qd_nmi_end              ; +22
-    lda QD_NMI_A                ; +24
-    rti                         ; +26
+    inc QD_NMI_ST + 1           ; +14
+    dec QD_NMI_PAGES            ; +17
+    beq qd_nmi_end              ; +20
+    pla                         ; +22
+    rti                         ; +23
 .qd_nmi_end
-    lda #QD_ABORT               ; +27 the count is in: stop the multi-sector read
+    lda #QD_ABORT               ; +24 the count is in: stop the multi-sector read
     sta QD_CMD
     lda #QD_IDLE                ; ...and disarm, so nothing else lands
     sta QD_NMI
-    lda QD_NMI_A
+    pla
     rti
 .qd_nmi_src_end
 ASSERT qd_nmi_src_end - qd_nmi_src <= &31   ; below QD_NMI_PAGES
-ASSERT qd_nmi_page - qd_nmi_src = 16
-ASSERT QD_NMI_ST = QD_NMI + 6 AND QD_ARMED = &85   ; the store's operand (+6/+7) and STA zp
+ASSERT qd_nmi_page - qd_nmi_src = 14
+ASSERT QD_NMI_ST = QD_NMI + 5 AND QD_ARMED = &48   ; the store's operand (+5/+6) and PHA
 
 \ ---- qd_cfg: the drive the game was run from and FDRIVE's step rate,
 \ into qd_cfg_ctl / qd_cfg_rate for qd_init. CALL IT BEFORE *FX 140.
@@ -146,4 +149,6 @@ ASSERT QD_NMI_ST = QD_NMI + 6 AND QD_ARMED = &85   ; the store's operand (+6/+7)
 .qd_rest_op
     lda #QD_RESTORE             ; (patched above: the step rate)
     sta QD_CMD
+    lda #QD_READM               ; the head has moved: the first read settles
+    sta qd_read_op + 1
     jmp qd_settle

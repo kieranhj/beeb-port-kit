@@ -1,0 +1,406 @@
+\ ******************************************************************
+\ *	zx02stream.6502 - a RESUMABLE ZX02 decoder into a ring, a few
+\ *	bytes at a time
+\ ******************************************************************
+\ *	beeb-port-kit, MIT, Kieran Connell 2026. Baron syntax, PLAIN 6502.
+\ *
+\ *	From the phX port (src/stream.6502 and stream_low.6502, 2026-11),
+\ *	where a demo's music stayed PACKED in sideways RAM (each tune packed
+\ *	with zx02 -m 2048) and was decoded into a 2K ring in low RAM, a few
+\ *	bytes from the vblank interrupt and more from the main loop, while
+\ *	the music tick read its records out of the ring. Generalised: the
+\ *	ring's place and size, the mirror, the gap and the units are the
+\ *	includer's; the pack table, the "pack is home" flags, the FZ packs
+\ *	and the music seek of phX's are left to the caller (zs_start a pack
+\ *	when zs_go says the last one ended). 65C02 there, plain 6502 here.
+\ *	Fixed on the way in (by reading, not seen to fail): phX's room
+\ *	measure said 255 for any 256-271 free bytes, so the decoder could
+\ *	write up to 15 bytes into the gap; here the gap comes off 16-bit.
+\ *
+\ *	THE DECODER is zx02depack.6502's ZX02_DEPACKER (dmsc's zx02-optim)
+\ *	bit for bit - the same reads in the same order - turned into a
+\ *	state machine that can stop between any two OUTPUT bytes: a literal
+\ *	run or a match in progress (zs_state, zs_len left), the bit
+\ *	reservoir, the offset, the stream pointer and the ring's write
+\ *	pointer persist; a gamma code or a new offset is decoded whole.
+\ *	THE STREAM must be packed with its offsets limited to the ring:
+\ *	zx02 -m ZS_PAGES * 256 (music_pack.py --tunes prints the sizes at
+\ *	-m 4096/1024/256). A match is copied out of the ring, so the ring
+\ *	holds the window; the decoder never needs the stream's past.
+\ *
+\ *	THE RING: ZS_PAGES pages (a power of two) at ZS_RING (page-aligned),
+\ *	and a mirror of its first ZS_MIRROR bytes just after its end, so a
+\ *	reader can take a record of up to ZS_MIRROR + 1 bytes with (ptr),Y
+\ *	across the wrap. The READER owns a 2-byte pointer at ZS_READ (into
+\ *	the ring); the decoder never writes closer than ZS_GAP bytes behind
+\ *	it (ZS_GAP >= ZS_MIRROR, >= 1), so a record is whole before the
+\ *	reader reads it whenever the decoder is ahead (zs_ahead says by how
+\ *	much). The ring starts empty with both pointers at ZS_RING.
+\ *
+\ *	TWO CALLERS, one decoder: the main loop (zs_main) and an interrupt
+\ *	(zs_irq) may both feed it. zs_main sets zs_busy BEFORE it measures
+\ *	the room (phX MEASURED the other order: an interrupt between the two
+\ *	took the room and the unit wrote over unread records) and zs_irq
+\ *	does nothing while it is set. The reader's pointer is read twice
+\ *	until both reads agree, which is enough when the READER runs in the
+\ *	interrupt (phX: the music tick) and the decoder in the main loop; if
+\ *	the reader is main-loop code and the decoder runs in an interrupt,
+\ *	the reader must update ZS_READ with interrupts off (SEI .. CLI), or
+\ *	the interrupt can see the low byte new and the high byte old.
+\ *	zs_start, zs_reset: from the main loop with zs_busy set (or I set).
+\ *
+\ *	COST, MEASURED (lib/test/zx02stream_test.mjs, jsbeeb 2.10.2, Model B
+\ *	and Master alike, 2026-11-18): 88 cycles a byte decoding a 5,500-
+\ *	byte stream in 32-byte units, 99.6 in 4-byte units (the test's own
+\ *	loop included, ~25 cycles a unit) - against zx02depack.6502's ~54:
+\ *	the price of stopping anywhere. One unit is about N x 80 cycles plus
+\ *	~150 for each gamma / new offset it meets; phX's 4-byte vblank units
+\ *	measured up to ~900. The decode stops between output bytes only:
+\ *	keep units small where the time is tight.
+\ *
+\ *	THE INCLUDER DEFINES, before this file:
+\ *	  ZS_RING    the ring's first byte (page-aligned)
+\ *	  ZS_PAGES   its size in pages: 1, 2, 4 .. 128
+\ *	  ZS_MIRROR  bytes mirrored after it (0 = none; at most 255)
+\ *	  ZS_GAP     how far the decoder stays behind the reader (>= 1)
+\ *	  ZS_READ    the address of the reader's pointer (2 bytes, lo hi)
+\ *	  ZS_IRQ_UNIT the most bytes zs_irq decodes in one call (1-255)
+\ *	  zs_src (2), zs_w (2), zs_m (2): ZERO PAGE the decoder OWNS for as
+\ *	    long as a stream is being decoded - the stream, the ring's write
+\ *	    pointer, a match's source. Not borrowed bytes: the state lives
+\ *	    across calls, and an interrupt runs it (if Baron's allocator
+\ *	    gives them out, give them a lifetime covering both callers).
+\ *	The caller pages the stream's bank (if it is in sideways RAM) for
+\ *	every call that decodes: zs_start, zs_go, zs_main, zs_irq.
+\ *
+\ *	THE ROUTINES (A, X, Y clobbered unless said):
+\ *	  zs_reset   the ring empty: zs_w = ZS_RING, the decoder done
+\ *	  zs_start   zs_src -> a stream: begin it (reads its first gamma);
+\ *	             its output follows on from zs_w (packs in a row)
+\ *	  zs_go      decode up to A bytes (1-255) into the ring; at most
+\ *	             what zs_room said. C set: the stream ENDED (or none
+\ *	             was started) - zs_start the next; C clear: more to do
+\ *	  zs_room    A = the free bytes less ZS_GAP, 0-255 (Z: none)
+\ *	  zs_ahead   A = bytes written and not yet read, 0-255 (255: more)
+\ *	  zs_main    A = the most to decode: one unit, busy-flagged
+\ *	  zs_irq     one unit of ZS_IRQ_UNIT unless zs_main is running
+\ *	  zs_state   ZS_LIT 0 / ZS_MAT 1 in progress, ZS_DONE &FF ended
+\ *
+\ *	Fork this into your project; keep this header.
+\ ******************************************************************
+
+ZS_RING_END = ZS_RING + ZS_PAGES * 256
+ASSERT LO(ZS_RING) = 0
+ASSERT ZS_PAGES = 1 OR ZS_PAGES = 2 OR ZS_PAGES = 4 OR ZS_PAGES = 8 OR ZS_PAGES = 16 OR ZS_PAGES = 32 OR ZS_PAGES = 64 OR ZS_PAGES = 128
+ASSERT ZS_MIRROR >= 0 AND ZS_MIRROR < 256 AND ZS_GAP >= 1 AND ZS_GAP >= ZS_MIRROR AND ZS_GAP < 256
+ASSERT ZS_RING_END + ZS_MIRROR <= &10000
+ASSERT ZS_IRQ_UNIT >= 1 AND ZS_IRQ_UNIT <= 255
+
+ZS_LIT = 0
+ZS_MAT = 1
+ZS_DONE = &FF
+
+.zs_state EQUB ZS_DONE
+.zs_bit   EQUB &80              ; the bit reservoir (sentinel-marked, as zxbit)
+.zs_len   EQUB 0                ; bytes left of the literal run or match (0 = 256)
+.zs_om1   EQUW 0                ; the offset less 1
+.zs_n     EQUB 0                ; the unit's bytes left
+.zs_max   EQUB 0                ; zs_main's unit
+.zs_busy  EQUB 0                ; non-zero while zs_main runs: zs_irq keeps out
+
+\ the ring empty, nothing being decoded
+.zs_reset
+{
+    lda #ZS_DONE
+    sta zs_state
+    lda #LO(ZS_RING)
+    sta zs_w
+    lda #HI(ZS_RING)
+    sta zs_w+1
+    rts
+}
+
+\ begin the stream at zs_src: the depacker's start - an empty reservoir, offset 1, a literal run
+.zs_start
+{
+    lda #&80
+    sta zs_bit
+    lda #0
+    sta zs_om1
+    sta zs_om1+1
+    tay
+    ldx #1
+    jsr zs_gamma
+    stx zs_len
+    lda #ZS_LIT
+    sta zs_state
+    rts
+}
+
+\ decode up to A bytes (A > 0). C set if the stream has ended, else clear
+.zs_go
+{
+    sta zs_n
+    ldy #0                      ; Y = 0 throughout
+    lda zs_state
+    beq lit
+    bpl mat
+    sec                         ; done: nothing more
+    rts
+
+    \\ a match in progress: from zs_m, in the ring
+.mat
+    lda (zs_m),y
+    inc zs_m
+    bne m1
+    inc zs_m+1
+    ldx zs_m+1
+    cpx #HI(ZS_RING_END)
+    bne m1
+    ldx #HI(ZS_RING)
+    stx zs_m+1
+.m1
+    jsr zs_put
+    dec zs_len
+    beq mat_end
+    dec zs_n
+    bne mat
+    lda #ZS_MAT
+    sta zs_state
+    clc
+    rts
+.mat_end                        ; after a copy: 0 literals, 1 a new offset
+    asl zs_bit
+    bcs newofs
+    ldx #1
+    jsr zs_gamma
+    stx zs_len
+    dec zs_n
+    bne lit
+    lda #ZS_LIT
+    sta zs_state
+    clc
+    rts
+
+    \\ literals in progress: from the stream
+.lit
+    lda (zs_src),y
+    inc zs_src
+    bne l1
+    inc zs_src+1
+.l1
+    jsr zs_put
+    dec zs_len
+    beq lit_end
+    dec zs_n
+    bne lit
+    lda #ZS_LIT
+    sta zs_state
+    clc
+    rts
+.lit_end                        ; after literals: 0 a match from the last offset, 1 a new one
+    asl zs_bit
+    bcs newofs
+    ldx #1
+    jsr zs_gamma
+    stx zs_len
+.to_mat
+    jsr zs_from                 ; the match's source: w - offset, in the ring
+    dec zs_n
+    bne mat
+    lda #ZS_MAT
+    sta zs_state
+    clc
+    rts
+.newofs
+    ldx #1
+    jsr zs_gamma                ; the offset's MSB (256, read as 0: the end)
+    beq ended
+    dex
+    txa
+    lsr a                       ; (MSB - 1) DIV 2, C = its bottom bit
+    sta zs_om1+1
+    lda (zs_src),y              ; ((offset - 1) MOD 128) << 1
+    inc zs_src
+    bne n1
+    inc zs_src+1
+.n1
+    ror a                       ; C in at the top, its bit 0 out into C: the length's first bit
+    sta zs_om1
+    ldx #1
+    jsr zs_gamma_skip1
+    inx                         ; the length (0 = 256)
+    stx zs_len
+    jmp to_mat
+.ended
+    lda #ZS_DONE
+    sta zs_state
+    sec
+    rts
+}
+
+\ interlaced Elias gamma, 8-bit, X in (1) and out (A = X, Z if 0 = 256): zx02depack's. Y = 0
+.zs_gamma_bit
+    asl zs_bit
+    rol a
+    tax
+.zs_gamma
+    asl zs_bit
+    bne zs_gamma_skip1
+    lda (zs_src),y              ; the reservoir empty: refill, C = 1 marks the end
+    inc zs_src
+    bne zs_g1
+    inc zs_src+1
+.zs_g1
+    rol a
+    sta zs_bit
+.zs_gamma_skip1
+    txa
+    bcs zs_gamma_bit
+    rts
+
+\ the match's source: zs_m = zs_w - (zs_om1 + 1), wrapped into the ring
+.zs_from
+{
+    clc                         ; (C clear: the extra 1)
+    lda zs_w
+    sbc zs_om1
+    sta zs_m
+    lda zs_w+1
+    sbc zs_om1+1
+    sec                         ; into the ring: ((hi - HI(ZS_RING)) AND (pages - 1)) + HI(ZS_RING)
+    sbc #HI(ZS_RING)
+    and #ZS_PAGES - 1
+    clc
+    adc #HI(ZS_RING)
+    sta zs_m+1
+    rts
+}
+
+\ a byte to the ring (and to the mirror, for the first ZS_MIRROR), the pointer on with the wrap.
+\ Y = 0; X clobbered
+.zs_put
+{
+    sta (zs_w),y
+IF ZS_MIRROR > 0
+    ldx zs_w+1
+    cpx #HI(ZS_RING)
+    bne nm
+    ldx zs_w
+    cpx #ZS_MIRROR
+    bcs nm
+    sta ZS_RING_END,x
+.nm
+ENDIF
+    inc zs_w
+    bne same
+    inc zs_w+1
+    ldx zs_w+1
+    cpx #HI(ZS_RING_END)
+    bne same
+    ldx #HI(ZS_RING)
+    stx zs_w+1
+.same
+    rts
+}
+
+\ A = the ring's free bytes less ZS_GAP, clamped to 0..255 (Z: none). The reader's pointer is
+\ read twice over so a reader between its bytes cannot tear it (see the header)
+.zs_room
+{
+.again
+    ldx ZS_READ+1
+    lda ZS_READ
+    cpx ZS_READ+1
+    bne again
+    clc                         ; (read - w - 1) AND (ring - 1): the free bytes
+    sbc zs_w
+    tay
+    txa
+    sbc zs_w+1
+    and #ZS_PAGES - 1
+    tax
+    tya
+    sec                         ; less the gap, 16-bit
+    sbc #ZS_GAP
+    bcs nb
+    dex
+.nb
+    cpx #0
+    bne big
+    tax                         ; (Z from A)
+    rts
+.big
+    bmi none                    ; below 0 (X = &FF: ZS_PAGES <= 128 keeps a real X positive)
+    lda #&FF
+    rts
+.none
+    lda #0
+    rts
+}
+
+\ A = the bytes written and not yet read, clamped to 0..255
+.zs_ahead
+{
+.again
+    ldx ZS_READ+1
+    lda ZS_READ
+    cpx ZS_READ+1
+    bne again
+    eor #&FF                    ; w - read: w + NOT read + 1
+    sec
+    adc zs_w
+    tay
+    txa
+    eor #&FF
+    adc zs_w+1
+    and #ZS_PAGES - 1
+    bne big
+    tya
+    rts
+.big
+    lda #&FF
+    rts
+}
+
+\ the main loop's unit: up to A bytes, if the ring has room. zs_busy keeps zs_irq out from
+\ BEFORE the room is measured. C as zs_go's (set also if there was no room)
+.zs_main
+{
+    sta zs_max
+    lda #1
+    sta zs_busy
+    jsr zs_room
+    beq full
+    cmp zs_max
+    bcc few
+    lda zs_max
+.few
+    jsr zs_go
+    lda #0                      ; (C kept)
+    sta zs_busy
+    rts
+.full
+    lda #0
+    sta zs_busy
+    sec
+    rts
+}
+
+\ an interrupt's unit: up to ZS_IRQ_UNIT bytes, unless zs_main is running or the ring is full.
+\ Call it with the stream's bank paged; it saves nothing (the caller's handler does)
+.zs_irq
+{
+    lda zs_busy
+    bne out
+    jsr zs_room
+    beq out
+    cmp #ZS_IRQ_UNIT
+    bcc few
+    lda #ZS_IRQ_UNIT
+.few
+    jmp zs_go
+.out
+    sec
+    rts
+}

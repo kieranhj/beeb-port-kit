@@ -27,6 +27,16 @@
 // says so.
 //
 // JSBEEB_SRC still overrides everything, for a checkout or an odd install.
+//
+// TWO JSBEEB (from the phX port, 2026-11). A port that stands on hardware edges runs
+// its suite on the pin AND on jsbeeb's main, a checkout (JSBEEB_SRC=<checkout>/src):
+// main had the jsbeeb maintainer's real-Master fixes long before a release carried
+// them. A checkout's package.json says the LAST RELEASE's number, so main and the
+// release of that number would report the same version; for a checkout the version
+// is therefore "<package version>+<git commit>" ("2.22.1+c97b2c7"), read off its
+// .git without running git. JSBEEB_NAME=main (run_suite.py sets it per version)
+// is appended as a label ("2.22.1+c97b2c7 main"). A JSBEEB_SRC that is not a
+// jsbeeb src/ is refused, not taken on trust.
 
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -91,12 +101,46 @@ function pinnedCache(pin) {
     return null;
 }
 
+/** A git checkout's HEAD commit (7 hex digits), read from its .git, or null. */
+function gitCommit(dir) {
+    try {
+        const git = join(dir, ".git");
+        if (!existsSync(git)) return null;
+        let head = readFileSync(join(git, "HEAD"), "utf8").trim();
+        const ref = /^ref: (.+)$/.exec(head);
+        if (ref) {
+            const f = join(git, ...ref[1].split("/"));
+            if (existsSync(f)) head = readFileSync(f, "utf8").trim();
+            else {
+                const packed = join(git, "packed-refs");
+                const line = existsSync(packed) && readFileSync(packed, "utf8").split(/\r?\n/)
+                    .find((l) => l.endsWith(" " + ref[1]));
+                if (!line) return null;
+                head = line.split(" ")[0];
+            }
+        }
+        return /^[0-9a-f]{40}$/.test(head) ? head.slice(0, 7) : null;
+    } catch {
+        return null;
+    }
+}
+
+const label = (v) => (process.env.JSBEEB_NAME ? `${v} ${process.env.JSBEEB_NAME}` : v);
+
 /** Absolute path to jsbeeb's src/, plus the version found there. */
 export function resolveJsbeebSrc() {
+    const r = resolveRaw();
+    return { ...r, version: label(r.version) };
+}
+
+function resolveRaw() {
     const override = process.env.JSBEEB_SRC;
     if (override) {
         const dir = join(override, "..");
-        return { src: override.split("\\").join("/"), version: versionAt(dir) || "unknown (JSBEEB_SRC)" };
+        if (!existsSync(join(override, "machine-session.js")))
+            throw new Error(`JSBEEB_SRC=${override} has no machine-session.js: it must name a jsbeeb's src/ directory`);
+        const v = versionAt(dir) || "unknown (JSBEEB_SRC)", commit = gitCommit(dir);
+        return { src: override.split("\\").join("/"), version: commit ? `${v}+${commit}` : v, checkout: !!commit };
     }
 
     const pin = pinnedMcp();

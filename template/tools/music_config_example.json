@@ -1,0 +1,20 @@
+{
+ "_about": "music_convert.py / music_pack.py config. MADE-UP values, to show the shape: find your own tunes with music_extract.py --music-time, your bass sections with music_convert.py --report-bass, and your cuts from where your sequence loads. Keys starting _ are ignored.",
+ "ay_clock": 1000000,
+ "sn_clock": 4000000,
+ "field_hz": 50,
+ "env_vol": 15,
+ "tn_noise": false,
+ "drum_max": 4,
+ "tunes": [
+  {"tune": 1, "row": 0, "rows": 3000},
+  {"tune": 2, "row": 3050, "rows": 1800}
+ ],
+ "_bass_sections": "[row, channel 0-2 = A-C, or null for the kit's rule]: from that row on",
+ "bass_sections": [[0, 0], [1700, 1], [3050, null]],
+ "pack": {
+  "_cuts": "tune -> rows (from the tune's start) to cut a chunk at; then any chunk over bank bytes is cut to fit",
+  "cuts": {"1": [1500]},
+  "bank": 16384
+ }
+}

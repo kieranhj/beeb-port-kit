@@ -1275,8 +1275,8 @@ Measured: Paradroid Layers 3, 11e, 13 (2026-08 to 2026-08-31), jsbeeb; Edge Laye
 The driver is `lib/qdisc.6502`, `qdisc_init.6502`, `qdload.6502` and `qdload_init.6502` (after
 scarybeasts' quicdisc; `lib/README.md`). Its test `lib/test/qdisc_test.mjs`, kit 2026-10-25 on
 jsbeeb 2.10.2: 161 reads covering every track of both sides of a patterned double-sided disc, 0
-bytes wrong, 0 sentinels moved with a seek before every read; **35.4 cycles a byte in the NMI, a
-whole-track read 506,810 cycles, a one-track seek 12,151**. jsbeeb's Master CMOS is `FDRIVE 0`
+bytes wrong, 0 sentinels moved with a seek before every read; **35.4 cycles a byte in the NMI (36.4 since the kit's NMI keeps A on the stack, 2026-11-18,
+from phX), a whole-track read 506,810 cycles, a one-track seek 12,151**. jsbeeb's Master CMOS is `FDRIVE 0`
 (byte 11 reads `&25`), so only real hardware exercises the other step rates.
 
 - **A busy 1770 silently ignores a command.** Wait for the status register's busy bit to clear
@@ -1336,7 +1336,7 @@ whole-track read 506,810 cycles, a one-track seek 12,151**. jsbeeb's Master CMOS
   carries side 1 on from the cylinder where side 0's files end.
   `phX/CLAUDE.md`, `phX/docs/hwtest.md` "B3", "B4", "B7", `phX/docs/decisions.md` 32, 58,
   `phX/docs/memory-map.md`.
-- **A non-blocking sector reader costs ~35 cycles a byte in its NMI routine** and lets play run
+- **A non-blocking sector reader costs ~35-36 cycles a byte in its NMI routine** and lets play run
   on: 1942 reads one sector a 25 Hz tick during play, walking each track with a coprime skip,
   copying via a fixed staging page because the NMI's target must not move under a ROMSEL or
   ACCCON write. Keep the motor spinning into a load you know is coming (a same-track seek) and

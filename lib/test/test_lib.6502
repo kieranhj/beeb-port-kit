@@ -24,7 +24,6 @@ DEBUG_ANY     = 0               ; boot_stamp.6502
 VERSION_LINE  = "beeb-port-kit lib test"
 BUILD_TIME    = "07 Sep 2026 00:00:00"   ; boot_stamp.6502: no TIME$ in Baron
 DEBUG_DUMMY   = 1               ; a flag to see one BOOT_FLAG line emitted
-QD_NMI_A      = &A0             ; qdisc.6502: the NMI's saved A
 QD_NCH        = 5               ; qdload.6502: name characters compared
 QD_CAT_STAGE  = &2E00           ; qdload_init.6502: the catalogue's 512 bytes
 NMOS          = 1               ; nmos.6502: the NMOS forms (this section is not cmos)
@@ -46,7 +45,17 @@ ENDSECTION
 \ unshrinkler.6502's 19 bytes and 1.5K of page-aligned workspace
 SECTION zp2, org = &90, guard = &100
 .shr_zp SKIP 19
+.zs_src SKIP 2                  \ zx02stream.6502's three pointers
+.zs_w   SKIP 2
+.zs_m   SKIP 2
+.zs_rd  SKIP 2                  \ (the reader's pointer, ZS_READ)
 ENDSECTION
+ZS_RING       = &3000           \ zx02stream.6502: a 2K ring, mirrored 15, gap 16
+ZS_PAGES      = 8
+ZS_MIRROR     = 15
+ZS_GAP        = 16
+ZS_READ       = zs_rd
+ZS_IRQ_UNIT   = 4
 SHR_DATA      = &3A00
 
 \ ---- the image ------------------------------------------------
@@ -94,6 +103,11 @@ INCLUDE "../ay2sn.6502"           \ the runtime AY -> SN layer at the CPC's 1 MH
 INCLUDE "../unshrinkler.6502"     \ the Shrinkler depacker
 INCLUDE "../nmos.6502"            \ macros only: a few instantiated in test_main
 INCLUDE "../sfx50.6502"           \ with a one-ramp effect in sfx50.py's file's shape
+INCLUDE "../fzdepack.6502"        \ the FZ depacker (macro)
+INCLUDE "../zx02stream.6502"      \ the resumable ZX02 decoder into a ring
+.fz_unpack
+    FZ_DEPACKER
+    rts
 .sfx_request    EQUB 0, 0, 0, 0
 .sfx_effect_t   EQUB 3, &07, &00, 0, &F8, 0, 0
 .sfx_effect_lo  EQUB LO(sfx_effect_t)
@@ -119,6 +133,9 @@ INCLUDE "../sfx50.6502"           \ with a one-ramp effect in sfx50.py's file's 
     jsr sfx_silence
     jsr ay2sn : jsr bass_irq
     jsr unshrinkler
+    jsr fz_unpack
+    jsr zs_reset : jsr zs_start : lda #4 : jsr zs_go
+    jsr zs_room : jsr zs_ahead : lda #8 : jsr zs_main : jsr zs_irq
     STZ_LDA name                \ nmos.6502: three of its macros, NMOS forms here
     INC_A_CLC                   \ (lib/test/nmos_test.py runs every one both ways)
     BRA_JMP test_main_done

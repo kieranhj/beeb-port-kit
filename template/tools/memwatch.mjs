@@ -39,6 +39,29 @@
 // A WATCH PROVES ONLY THE PATHS THE HARNESS TOOK. "No access in N fields" is a statement about
 // those fields: run it under the harnesses that reach the rare paths (death, game over, the
 // front end's every screen, a level's end) before calling an address free.
+//
+// OWNERS: A REGION THAT ONLY CERTAIN CODE MAY WRITE (from the phX port's hole_watch.mjs,
+// 2026-11: its stores lived in the 1-7 rows of a character-row interleave between a fill
+// and a last read, and nothing but the store's own code might write there in that time).
+// With MEMWATCH_OWNERS set, the watch becomes a CHECK: every CPU write to a watched
+// address that passes the filters below is judged, as made by an owner or not, and the
+// process exits 1 if any was not - or if no owner wrote at all (the window never opened,
+// or the region is not where the owner writes: a watch over nothing is not a pass).
+//   MEMWATCH_OWNERS  FROM..TO[@BANK],FROM+N[@BANK],...: the code allowed to write, as PC
+//                    ranges (TO exclusive). FROM/TO a label (with +N) or hex. BANK a
+//                    sideways bank number, andy or hazel; without it, any paging
+//   MEMWATCH_WINDOW  when writes are judged: SYM[:w|:sw]=LO..HI (the symbol's value in
+//                    main RAM, a byte, word or signed word, within LO..HI inclusive -
+//                    phX's music row), or phase=NAME|NAME (MEMWATCH_PHASES' phases).
+//                    Without it, always
+//   MEMWATCH_MOD     N:A-B: only addresses whose (address mod N) is in A..B - 8:1-7 is
+//                    every byte but the first of each character cell, phX's "holes"
+//   MEMWATCH_RAM     main or shadow: in &3000-&7FFF on a Master, only the writes that land
+//                    in that RAM (ACCCON's X, or E with the PC in &C000-&DFFF)
+//   MEMWATCH_NEED_OWN  0 to pass with no owner write (default 1)
+// The judged writes, the owners' count and every foreign writer (PC, label, the window
+// symbol's value) are in the JSON under "owners", and on stderr. The harness's own
+// writeMemory is never judged.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
@@ -64,6 +87,65 @@ const phaseSpec = (process.env.MEMWATCH_PHASES || "").split(",").filter(Boolean)
     return { name, at };
 });
 
+const OWNERS = process.env.MEMWATCH_OWNERS || "";
+const WINDOW = process.env.MEMWATCH_WINDOW || "";
+const MOD = (() => {
+    const t = process.env.MEMWATCH_MOD;
+    if (!t) return null;
+    const m = /^(\d+):(\d+)(?:-(\d+))?$/.exec(t);
+    if (!m) throw new Error(`MEMWATCH_MOD: ${t} is not N:A-B`);
+    return { n: +m[1], a: +m[2], b: +(m[3] ?? m[2]) };
+})();
+const RAM = process.env.MEMWATCH_RAM || "";
+if (RAM && RAM !== "main" && RAM !== "shadow") throw new Error(`MEMWATCH_RAM: ${RAM} is not main or shadow`);
+const NEED_OWN = process.env.MEMWATCH_NEED_OWN !== "0";
+let ownersFailed = false;
+
+/** An address in an owner or window spec: hex, or a label with an optional +N / -N. */
+function addrOf(t, named) {
+    const m = /^(.*?)(?:([+-])(&[0-9a-f]+|0x[0-9a-f]+|\d+))?$/i.exec(t.trim());
+    const off = m[3] === undefined ? 0 : (m[2] === "-" ? -1 : 1) *
+        (/^(&|0x)/i.test(m[3]) ? parseInt(m[3].replace(/^(&|0x)/i, ""), 16) : +m[3]);
+    const base = /^(&|0x)[0-9a-f]+$/i.test(m[1]) ? parseInt(m[1].replace(/^(&|0x)/i, ""), 16) : named.get(m[1]);
+    if (base === undefined) throw new Error(`[memwatch] no ${m[1]} in the symbols`);
+    return base + off;
+}
+/** MEMWATCH_OWNERS as [{lo, hi (exclusive), bank, text}]. */
+function parseOwners(named) {
+    return OWNERS.split(",").filter(Boolean).map((t) => {
+        const [range, bank] = t.split("@");
+        let lo, hi;
+        if (range.includes("..")) { const [a, b] = range.split(".."); lo = addrOf(a, named); hi = addrOf(b, named); }
+        else {
+            const m = /^(.*)\+(&[0-9a-f]+|0x[0-9a-f]+|\d+)$/i.exec(range);
+            if (!m) throw new Error(`MEMWATCH_OWNERS: ${t} is not FROM..TO or FROM+N`);
+            lo = addrOf(m[1], named);
+            hi = lo + (/^(&|0x)/i.test(m[2]) ? parseInt(m[2].replace(/^(&|0x)/i, ""), 16) : +m[2]);
+        }
+        const b = bank === undefined ? null : bank === "andy" || bank === "hazel" ? bank : +bank;
+        return { lo, hi, bank: b, text: t };
+    });
+}
+/** MEMWATCH_WINDOW as a predicate on (cpu, phase). */
+function parseWindow(named) {
+    if (!WINDOW) return () => true;
+    const ph = /^phase=(.+)$/.exec(WINDOW);
+    if (ph) { const set = new Set(ph[1].split("|")); return (cpu, phase) => set.has(phase); }
+    const m = /^([^:=]+)(?::(w|sw|b))?=(-?[^.]+)\.\.(-?.+)$/.exec(WINDOW);
+    if (!m) throw new Error(`MEMWATCH_WINDOW: ${WINDOW} is not SYM[:w|:sw]=LO..HI or phase=NAME|NAME`);
+    const a = addrOf(m[1], named), size = m[2] || "b";
+    const n = (t) => (t.startsWith("-") ? -n(t.slice(1)) : /^(&|0x)/i.test(t) ? parseInt(t.replace(/^(&|0x)/i, ""), 16) : +t);
+    const lo = n(m[3]), hi = n(m[4]);
+    const value = (cpu) => {
+        const r = cpu.ramRomOs;                     // main RAM (a symbol of the window is main's)
+        const v = size === "b" ? r[a] : r[a] | (r[a + 1] << 8);
+        return size === "sw" && v >= 0x8000 ? v - 0x10000 : v;
+    };
+    const f = (cpu) => { const v = value(cpu); return v >= lo && v <= hi; };
+    f.value = value;
+    return f;
+}
+
 const { src } = resolveJsbeebSrc();
 const { MachineSession } = await import(`file:///${src}/machine-session.js`);
 
@@ -71,7 +153,7 @@ const { MachineSession } = await import(`file:///${src}/machine-session.js`);
 function symbols(disc) {
     const regions = { ram: [], hazel: [] }, named = new Map();
     try {
-        const doc = JSON.parse(readFileSync(disc.replace(/\.ssd$/i, ".symbols.json"), "utf8"));
+        const doc = JSON.parse(readFileSync(disc.replace(/\.[sd]sd$/i, ".symbols.json"), "utf8"));
         const secs = Number.isInteger(doc.format) ? doc.assemblies.flatMap((a) => a.sections) : [];
         const bankFor = (i) => {
             for (let s = secs[i], n = 0; s && n < 16; s = typeof s.parent === "number" ? secs[s.parent] : secs.find((x) => x.name === s.parent), n++)
@@ -80,7 +162,7 @@ function symbols(disc) {
         };
         secs.forEach((sec, i) => {
             const bank = bankFor(i);
-            for (const kind of ["labels", "assignments"]) for (const [k, v] of Object.entries(sec[kind] || {})) {
+            for (const kind of ["labels", "assignments", "za_autos"]) for (const [k, v] of Object.entries(sec[kind] || {})) {
                 if (!v || typeof v.value !== "number") continue;
                 const name = k.replace(/^(?:@\d+:\d+\.)+/, "");
                 if (!named.has(name)) named.set(name, v.value);
@@ -145,6 +227,33 @@ MachineSession.prototype.loadDisc = function (path, ...rest) {
         this[name] = function (...a) { harness = true; try { return fn.apply(this, a); } finally { harness = false; } };
     }
     cpu.debugWrite.add((addr) => { if (watched[addr]) count(harness ? "harness-write" : "write", addr, pc); return false; });
+    if (OWNERS) {
+        const owners = parseOwners(syms.named), inWindow = parseWindow(syms.named);
+        const o = m.owners = { spec: OWNERS, window: WINDOW || null, mod: process.env.MEMWATCH_MOD || null,
+                               ram: RAM || null, judged: 0, own: 0, foreign: {}, firstForeign: null };
+        const isOwn = (at) => owners.some(({ lo, hi, bank }) => {
+            if (at < lo || at >= hi) return false;
+            if (bank === null) return true;
+            if (bank === "andy") return !!(cpu.romsel & 0x80) && at < 0x9000;
+            if (bank === "hazel") return !!(cpu.acccon & 8);
+            return (cpu.romsel & 15) === bank && !(cpu.model.isMaster && (cpu.romsel & 0x80) && at < 0x9000);
+        });
+        cpu.debugWrite.add((addr) => {
+            if (!watched[addr] || harness) return false;
+            if (MOD && ((addr % MOD.n) < MOD.a || (addr % MOD.n) > MOD.b)) return false;
+            if (RAM && addr >= 0x3000 && addr < 0x8000 && cpu.model.isMaster) {
+                const shadow = !!(cpu.acccon & 4) || (!!(cpu.acccon & 2) && pc >= 0xc000 && pc < 0xe000);
+                if (shadow !== (RAM === "shadow")) return false;
+            }
+            if (!inWindow(cpu, m.phase)) return false;
+            o.judged++;
+            if (isOwn(pc)) { o.own++; return false; }
+            const k = `${where(cpu, syms, pc)}${inWindow.value ? ` ${WINDOW.split("=")[0]} ${inWindow.value(cpu)}` : ` phase ${m.phase}`}`;
+            o.foreign[k] = (o.foreign[k] || 0) + 1;
+            o.firstForeign ??= { addr: `&${addr.toString(16)}`, at: where(cpu, syms, pc), phase: m.phase };
+            return false;
+        });
+    }
     cpu.debugRead.add((addr) => { if (watched[addr] && addr !== pc && !harness) count("read", addr, pc); return false; });
     // the time each phase ran, by the phase at the start of each run
     for (const name of ["runFrames", "runFor"]) {
@@ -163,7 +272,17 @@ process.on("exit", () => {
     const out = { watched: spec, phases: process.env.MEMWATCH_PHASES || null, machines: machines.map((m) => ({
         disc: m.disc, model: m.model, entered: m.entered,
         fields: Object.fromEntries(Object.entries(m.fields).map(([k, v]) => [k, Math.round(v)])),
+        ...(m.owners ? { owners: m.owners } : {}),
         accesses: Object.fromEntries(Object.entries(m.counts).sort()) })) };
+    for (const m of machines) {
+        if (!m.owners) continue;
+        const o = m.owners, nf = Object.values(o.foreign).reduce((a, b) => a + b, 0);
+        o.pass = nf === 0 && (o.own > 0 || !NEED_OWN);
+        if (!o.pass) ownersFailed = true;
+        console.error(`[memwatch] owners ${m.disc}: ${o.judged} writes judged, ${o.own} by the owners, ${nf} by others` +
+            (o.own === 0 && NEED_OWN ? " - NO OWNER WROTE: did the window open? (MEMWATCH_NEED_OWN=0 if that is right)" : ""));
+        for (const [k, v] of Object.entries(o.foreign).slice(0, 40)) console.error(`  FOREIGN ${k}: ${v}`);
+    }
     try {
         mkdirSync(dirname(OUT), { recursive: true });
         writeFileSync(OUT, JSON.stringify(out, null, 1));
@@ -176,4 +295,10 @@ process.on("exit", () => {
         if (later.length > 80) console.error(`  ... ${later.length - 80} more in the file`);
     }
     console.error(`[memwatch] -> ${OUT}`);
+    // the owners' verdict overrides a harness's exit 0 (process.exit inside an 'exit'
+    // listener exits at once with the new code); a harness's own 1 or 2 stands
+    if (ownersFailed && !process.exitCode) {
+        console.error("[memwatch] OWNERS CHECK FAILED: exit 1");
+        process.exit(1);
+    }
 });
