@@ -352,7 +352,7 @@ SECTION VScroll, org = CODE_ORG, guard = CODE_TOP, filename = "VScroll", exec = 
 .setup_display
 {
     \\ 10K hardware wrap: addressable latch lines 4 and 5 both SET
-    lda #&0f : sta SYS_VIA_DDRB
+    \\ DDRB as the MOS set it (the template's main.6502 says why)
     lda #12  : sta SYS_VIA_ORB
     lda #13  : sta SYS_VIA_ORB
 
