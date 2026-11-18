@@ -594,6 +594,30 @@ times in two days.
 Source: [docs/layer-11f-frontend.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-11f-frontend.md),
 [docs/intro.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/intro.md).
 
+**An empty sideways socket can pass a RAM probe on a real Master, and never in jsbeeb.** A probe
+that writes a byte and calls the bank RAM when its second reading differs from its first is fooled
+by anything that reads differently twice. A Master's data bus is unbuffered, so an empty socket
+reads whatever byte the video read last (Tom Seddon, from the hardware's design, not measured):
+with MODE 7's boot screen up, a space mostly and a letter now and then. jsbeeb's empty socket reads
+0 every time, so no emulated boot shows it.
+Instance: Super Sprint ([super-sprint-beeb](https://github.com/tom-seddon/super-sprint-beeb))'s first `!BOOT` probe followed the beeb-baron skill's recipe (banks 15 down
+to 0, `&8000` EORed with `&FF`, the two readings compared) and tried bank 8 first, a stock
+Master's empty socket (IC27), which the MOS's ROM type table doesn't list. One boot on Tom's
+Master printed "Loading", then characters 128-255, and hung. That fits bank 8 taken for RAM, but
+was never reproduced: 770 jsbeeb boots from power-on, junk in ANDY and the banks (which a Master's
+MOS doesn't clear at power-on: `&A5` seeded there survived) and the disc turned to random places,
+all ran.
+Rule: count a bank as RAM only if it reads back the byte written (as `lib/swram_probe.6502`
+does, a distinct value a bank), probe only banks that can hold RAM (on a Master 0-7: 8 is the
+empty socket, 9-15 the MOS's ROMs, Master Reference Manual F.2-1), and probe with a blank screen,
+so that a floating byte is a known one. MOS 3.20's own start-up test, which OSBYTE 68 reports,
+compares two readings too, but tries banks 4-7 alone (`hardware-facts.md` §5). Super Sprint's
+probe since: banks 7 down to 0, MODE 129's screen cleared, `&FF` EOR the original written and read
+back; in jsbeeb with the RAM in banks 0-3, 1/3/5/7, 4-7 and 0-7 it found the highest four, and with
+too few (2/5/6) it said so; in b2 (Tom), RAM in 0, 1, 2, 4 and 5 with ROM in 6 and 7 ran, and RAM
+in 0-2 alone said so; on Tom's real Master, with its RAM in 4-7 only, it ran.
+Source: [super-sprint-beeb 5404454](https://github.com/tom-seddon/super-sprint-beeb/commit/5404454) (2026-11-09), [super-sprint-beeb upstream-notes.md](https://github.com/tom-seddon/super-sprint-beeb/blob/main/docs/upstream-notes.md).
+
 **An absolute that was never true, and stayed in the rules for a month: "pad an SSD to 200K or
 the emulator will not boot it".**
 Instance: Paradroid's Layer 4 notes record jsbeeb hanging in the DFS FDC poll at `&ACAE` loading
