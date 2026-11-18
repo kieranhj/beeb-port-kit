@@ -499,6 +499,26 @@ Measured: 2026-09-04, jsbeeb (the 10K case independently in Paradroid's Layer 3)
   interrupt's variables below `&3000` and audits the rest: `tools/shadowaudit.mjs` records every
   read in `&3000-&3FFF` with X set and calls it stale where shadow's byte differs from main's.
   Measured: 2026-10-16, jsbeeb 2.5.0. [strykers-run decision 23](https://github.com/kieranhj/strykers-run/blob/main/docs/decisions.md), [docs/step2-layer2.md](https://github.com/kieranhj/strykers-run/blob/main/docs/step2-layer2.md)
+- **With HAZEL paged in (Y set), the E bit does nothing: code run from `&C000-&DFFF` sees what X
+  says.** E is the bit that lets the MOS's VDU code, fetched from `&C000-&DFFF`, reach the shadow
+  screen while the rest of the machine sees main RAM. The Master Reference Manual (F.2-3) gives it
+  no exception for Y, but measured, with Y set E is ignored. The test ran 6 bytes (`LDA &3000 :
+  STA &70 : RTS`) copied to `&DE00` in HAZEL, with main RAM's `&3000` holding `&11` and shadow's
+  `&22`, interrupts off:
+
+  | Y | E | X | `&3000` read from HAZEL |
+  |---|---|---|---|
+  | 1 | 0 | 0 | `&11`, main |
+  | 1 | 1 | 0 | **`&11`, main** |
+  | 1 | 0 | 1 | `&22`, shadow |
+  | 1 | 1 | 1 | `&22`, shadow |
+
+  jsbeeb gives the same, line for line: its `writeAcccon` applies E only while Y is clear. So code
+  a port runs from HAZEL (1942's) reaches `&3000-&7FFF` by X alone, even when a boot in a shadow
+  mode has left E set (`*SHADOW` and a soft BREAK leave ACCCON `&1B`, D and E set: "Target
+  configurations", below).
+  Measured: 2026-11-18, Tom Seddon's real Master 128 and jsbeeb 2.18.0 (`Master`), Super Sprint's
+  `tools/hwtests/etest.bas`. [super-sprint-beeb etest.bas](https://github.com/tom-seddon/super-sprint-beeb/blob/main/tools/hwtests/etest.bas)
 - **The shadow screen is 20K of RAM nobody is looking at while main is displayed**, so with
   D = 0 and X = 1 (CPU sees shadow) it is a free staging area for compressed streams at boot.
   Measured: 2026-09-04, jsbeeb. [Edge layer-9-loader.md](https://github.com/kieranhj/edge-beeb/blob/master/docs/layer-9-loader.md)
