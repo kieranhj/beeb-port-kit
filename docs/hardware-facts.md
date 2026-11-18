@@ -741,6 +741,18 @@ advancing and `&0D00` reads `&40`.
   (4) on its Master, which has a readable copy. The MOS keeps its own copy in ROMSHAD on both, and
   that is the byte an IRQ handler saves and restores anyway.
   Measured: 2026-09-11, jsbeeb, `lib/test/run_test.6502` after `load_bank`.
+- **On a Master, OSBYTE 68 reports a RAM test made at power-on, for banks 4-7 only.** The MOS 3.20
+  DFS ROM (bank 9) runs it at start-up (`&B279`-`&B2CA`): for each bank its table at `&B0F7` marks
+  (4-7), it reads `&8008` through OSRDSC, writes it EOR `&FF` back, reads it again, and calls the
+  bank RAM if the second reading differs from the first, setting the bank's bit in a byte of its
+  workspace, `(&B8)+&EE`, and putting the original back; a bank that then holds a ROM image is
+  also marked at `+&FD`, which OSBYTE 69 reports. OSBYTE 68 is bank 9's service call 7 (`&AC32`)
+  and returns that byte AND `&3F`, so it answers for the last power-on or hard BREAK, not for now,
+  and says nothing of cartridge RAM in banks 0-3. The manual says it "will always return &0F" on a
+  standard machine, the links (LK18, LK19) changing it (D.2-28, F.5-5).
+  Read: 2026-11-18, MOS 3.20's ROMs in jsbeeb 2.18.0, the routine seen running 4 times at
+  power-on; Tom Seddon pointed to it (other MOS versions' addresses differ, the result the same,
+  he thinks). Super Sprint ([super-sprint-beeb](https://github.com/tom-seddon/super-sprint-beeb)). [super-sprint-beeb upstream-notes.md](https://github.com/tom-seddon/super-sprint-beeb/blob/main/docs/upstream-notes.md)
 - **Take the four highest-numbered RAM banks**: the banks that matter to other people sit low, and
   on a machine with exactly 4-7 the answer is unchanged.
   Decided: 2026-08-29 (KC). [Paradroid layer-13-compatibility.md](https://github.com/kieranhj/paradroid-beeb/blob/main/docs/layer-13-compatibility.md)
